@@ -1,0 +1,67 @@
+use "jik/testing" as test
+
+
+func test_dict_01(ts):
+    d1: Dict[int]
+    test::suite_assert(ts, len(d1) == 0, site())
+    d1["foo"] = 12
+    d1["bar"] = 13
+    test::suite_assert(ts, len(d1) == 2, site())
+    test::suite_assert(ts, d1["foo"] is Some, site())
+    test::suite_assert(ts, d1["bar"] is Some, site())
+    test::suite_assert(ts, d1["abar"] is None, site())
+    test::suite_assert(ts, d1["xx"] is None, site())
+    test::suite_assert(ts, d1["yy"] is None, site())
+
+    test::suite_assert(ts, d1["foo"]? == 12, site())
+    test::suite_assert(ts, d1["bar"]? == 13, site())
+
+    found_foo := false
+    found_bar := false
+    for k, v in d1:
+        if k == "foo":
+            found_foo = true
+        elif k == "bar":
+            found_bar = true
+        end
+    end
+
+    test::suite_assert(ts, found_foo, site())
+    test::suite_assert(ts, found_bar, site())
+
+    clear(d1)
+    test::suite_assert(ts, len(d1) == 0, site())
+end
+
+func test_dict_02(ts):
+    d1: Dict[Vec[int]]
+    d1["b"] = [2 of 2]
+    d1["a"] = [10 of 1]
+    test::suite_assert(ts, d1["b"] is Some and d1["b"]?[0] == 2, site())
+    test::suite_assert(ts, d1["b"] is Some and d1["b"]?[1] == 2, site())
+    test::suite_assert(ts, d1["a"] is Some, site())
+    for i = 0, len(d1["a"]?):
+        test::suite_assert(ts, d1["a"]?[i] == 1, site())
+    end
+    clear(d1)
+    test::suite_assert(ts, len(d1) == 0, site())
+    d1["a"] = [1 of 7]
+    test::suite_assert(ts, len(d1) == 1, site())
+    test::suite_assert(ts, d1["a"] is Some and d1["a"]?[0] == 7, site())
+end
+
+func test_dict_03(ts):
+    d3 := {"cmd1": {"opt1": 2, "opt2": 0}, "cmd2": {"opt3": 3, "opt4": 1}}
+    test::suite_assert(ts, len(d3) == 2, site())
+    test::suite_assert(ts, d3["cmd2"]?["opt3"]? == 3, site())
+    test::suite_assert(ts, d3["cmd2"]?["opt4"]? == 1, site())
+    test::suite_assert(ts, d3["cmd1"]?["opt1"]? == 2, site())
+    test::suite_assert(ts, d3["cmd1"]?["opt2"]? == 0, site())
+end
+
+
+func run_tests(ts):
+    test_dict_01(ts)
+    test_dict_02(ts)
+    test_dict_03(ts)
+end

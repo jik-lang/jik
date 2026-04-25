@@ -1,0 +1,7 @@
+// Example: Command-line arguments
+
+func main(args):
+    for i = 0, len(args):
+        println("Value of arg ", i, " is: ", args[i])
+    end
+end

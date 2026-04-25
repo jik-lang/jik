@@ -1,0 +1,72 @@
+use "jik/testing" as test
+
+use "jik/math"
+
+
+func run_tests(ts):
+    eps := 1e-12
+
+    // constants
+    test::suite_assert(ts, math::approx_eq(math::PI * 2.0, 6.283185307179586, 1e-12), site())
+    test::suite_assert(ts, math::approx_eq(math::E, 2.718281828459045, 1e-12), site())
+
+    // abs
+    test::suite_assert(ts, math::approx_eq(math::abs(-1.25), 1.25, eps), site())
+    test::suite_assert(ts, math::approx_eq(math::abs(0.0), 0.0, eps), site())
+
+    // min / max
+    test::suite_assert(ts, math::min(1.0, 2.0) == 1.0, site())
+    test::suite_assert(ts, math::min(-2.0, -3.0) == -3.0, site())
+    test::suite_assert(ts, math::max(1.0, 2.0) == 2.0, site())
+    test::suite_assert(ts, math::max(-2.0, -3.0) == -2.0, site())
+
+    // sqrt
+    test::suite_assert(ts, math::approx_eq(math::sqrt(9.0), 3.0, eps), site())
+    r := math::sqrt(2.0)
+    test::suite_assert(ts, math::approx_eq(r * r, 2.0, 1e-10), site())
+
+    // trig (radians)
+    test::suite_assert(ts, math::approx_eq(math::sin(math::PI / 2.0), 1.0, 1e-10), site())
+    test::suite_assert(ts, math::approx_eq(math::cos(0.0), 1.0, eps), site())
+    test::suite_assert(ts, math::approx_eq(math::cos(math::PI), -1.0, 1e-10), site())
+    test::suite_assert(ts, math::approx_eq(math::tan(0.0), 0.0, eps), site())
+    test::suite_assert(ts, math::approx_eq(math::tan(math::PI / 4.0), 1.0, 1e-10), site())
+
+    // atan2
+    test::suite_assert(ts, math::approx_eq(math::atan2(1.0, 0.0), math::PI / 2.0, 1e-10), site())
+    test::suite_assert(ts, math::approx_eq(math::atan2(0.0, -1.0), math::PI, 1e-10), site())
+
+    // floor
+    test::suite_assert(ts, math::floor(1.9) == 1.0, site())
+    test::suite_assert(ts, math::floor(-1.1) == -2.0, site())
+    test::suite_assert(ts, math::ceil(1.1) == 2.0, site())
+    test::suite_assert(ts, math::ceil(-1.9) == -1.0, site())
+    test::suite_assert(ts, math::round(1.4) == 1.0, site())
+    test::suite_assert(ts, math::round(1.6) == 2.0, site())
+    test::suite_assert(ts, math::round(-1.6) == -2.0, site())
+
+    // pow / log / exp
+    test::suite_assert(ts, math::approx_eq(math::pow(2.0, 3.0), 8.0, eps), site())
+    test::suite_assert(ts, math::approx_eq(math::pow(9.0, 0.5), 3.0, 1e-10), site())
+    test::suite_assert(ts, math::approx_eq(math::log(math::E), 1.0, 1e-10), site())
+    test::suite_assert(ts, math::approx_eq(math::exp(1.0), math::E, 1e-10), site())
+
+    // fmod (C semantics: sign follows numerator)
+    test::suite_assert(ts, math::approx_eq(math::fmod(5.5, 2.0), 1.5, eps), site())
+    test::suite_assert(ts, math::approx_eq(math::fmod(-5.5, 2.0), -1.5, eps), site())
+
+    // is_nan / is_finite / is_inf
+    nan := math::sqrt(-1.0)
+    test::suite_assert(ts, math::is_nan(nan) == 1, site())
+    test::suite_assert(ts, math::is_finite(nan) == 0, site())
+    test::suite_assert(ts, math::is_inf(nan) == 0, site())
+
+    huge := 1.0e308
+    inf := huge * huge
+    test::suite_assert(ts, math::is_nan(inf) == 0, site())
+    test::suite_assert(ts, math::is_finite(inf) == 0, site())
+    test::suite_assert(ts, math::is_inf(inf) == 1, site())
+
+    test::suite_assert(ts, math::is_finite(123.0) == 1, site())
+    test::suite_assert(ts, math::is_inf(123.0) == 0, site())
+end

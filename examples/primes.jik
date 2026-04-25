@@ -1,0 +1,32 @@
+// Example: Sieve of Eratosthenes
+func sieve(n, r):
+    is_prime := [n + 1 of true][r]
+    is_prime[0] = false
+    is_prime[1] = false
+    p := 2
+    while p * p <= n:
+        if is_prime[p]:
+            i := p * p
+            while i <= n:
+                is_prime[i] = false
+                i = i + p
+            end
+
+        end
+
+        p = p + 1
+    end
+    return is_prime
+end
+
+
+func main():
+    n := 100
+    res := sieve(n, _)
+    println("Primes up to ", n, ":")
+    for i = 2, n:
+        if res[i]:
+            print(i, ", ")
+        end
+    end
+end

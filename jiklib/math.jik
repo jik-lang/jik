@@ -1,0 +1,295 @@
+//! Minimal scalar math utilities.
+//!
+//! This module is a thin wrapper over a small subset of C `<math.h>`.
+//! Trigonometric functions use radians.
+//!
+//! Notes:
+//! - Floating-point behavior follows the platform C math library (NaN/Inf propagation).
+//! - `is_nan` / `is_finite` return `int` (0 or 1) to avoid assuming a specific `bool` ABI.
+
+
+// -------------------------------------------------------------
+//      API
+// -------------------------------------------------------------
+
+
+/// @doc const PI
+/// π (pi).
+PI := 3.14159265358979323846264338327950288
+
+/// @doc const E
+/// Euler's number e.
+E := 2.71828182845904523536028747135266250
+
+
+/// Compute the absolute value.
+///
+/// @param1 Value.
+/// @returns Absolute value of `x`.
+func abs(x: double) -> double:
+    if x < 0.0:
+        return -x
+    else:
+        return x
+    end
+end
+
+/// Check whether two values are equal within a tolerance.
+///
+/// Returns true if `abs(a - b) <= eps`.
+///
+/// @param1 First value.
+/// @param2 Second value.
+/// @param3 Non-negative tolerance.
+/// @returns True if values are within tolerance, else false.
+func approx_eq(a: double, b: double, eps: double) -> bool:
+    return abs(a - b) <= eps
+end
+
+/// Return the smaller of two values.
+///
+/// @param1 First value.
+/// @param2 Second value.
+/// @returns The smaller value.
+func min(a: double, b: double) -> double:
+    if a < b:
+        return a
+    end
+    return b
+end
+
+/// Return the larger of two values.
+///
+/// @param1 First value.
+/// @param2 Second value.
+/// @returns The larger value.
+func max(a: double, b: double) -> double:
+    if a > b:
+        return a
+    end
+    return b
+end
+
+
+/// Compute the square root.
+///
+/// @param x Value.
+/// @returns Square root of `x`.
+extern func jik_math_sqrt as
+    sqrt(x: double) -> double
+
+/// Compute the sine of an angle in radians.
+///
+/// @param x Angle in radians.
+/// @returns Sine of `x`.
+extern func jik_math_sin as
+    sin(x: double) -> double
+
+/// Compute the cosine of an angle in radians.
+///
+/// @param x Angle in radians.
+/// @returns Cosine of `x`.
+extern func jik_math_cos as
+    cos(x: double) -> double
+
+/// Compute the tangent of an angle in radians.
+///
+/// @param x Angle in radians.
+/// @returns Tangent of `x`.
+extern func jik_math_tan as
+    tan(x: double) -> double
+
+/// Compute the arctangent of `y/x` using the signs of `y` and `x`.
+///
+/// The result is in radians.
+///
+/// @param y y coordinate.
+/// @param x x coordinate.
+/// @returns Angle in radians.
+extern func jik_math_atan2 as
+    atan2(y: double, x: double) -> double
+
+/// Round down to the next integer value.
+///
+/// @param x Value.
+/// @returns Largest integer value not greater than `x`.
+extern func jik_math_floor as
+    floor(x: double) -> double
+
+/// Round up to the next integer value.
+///
+/// @param x Value.
+/// @returns Smallest integer value not less than `x`.
+extern func jik_math_ceil as
+    ceil(x: double) -> double
+
+/// Round to the nearest integer value.
+///
+/// Halfway cases follow the platform C math library.
+///
+/// @param x Value.
+/// @returns Nearest integer value to `x`.
+extern func jik_math_round as
+    round(x: double) -> double
+
+/// Raise a value to a power.
+///
+/// @param x Base value.
+/// @param y Exponent.
+/// @returns `x` raised to the power `y`.
+extern func jik_math_pow as
+    pow(x: double, y: double) -> double
+
+/// Compute the natural logarithm.
+///
+/// @param x Value.
+/// @returns Natural logarithm of `x`.
+extern func jik_math_log as
+    log(x: double) -> double
+
+/// Compute the natural exponential.
+///
+/// @param x Value.
+/// @returns e raised to the power `x`.
+extern func jik_math_exp as
+    exp(x: double) -> double
+
+/// Compute the floating-point remainder (C `fmod`).
+///
+/// @param x Numerator.
+/// @param y Denominator.
+/// @returns Remainder.
+extern func jik_math_fmod as
+    fmod(x: double, y: double) -> double
+
+/// Test whether the value is NaN.
+///
+/// @param x Value.
+/// @returns 1 if NaN, else 0.
+extern func jik_math_is_nan as
+    is_nan(x: double) -> int
+
+/// Test whether the value is finite.
+///
+/// @param x Value.
+/// @returns 1 if finite (not NaN and not +/-Inf), else 0.
+extern func jik_math_is_finite as
+    is_finite(x: double) -> int
+
+/// Test whether the value is positive or negative infinity.
+///
+/// @param x Value.
+/// @returns 1 if `x` is +/-Inf, else 0.
+extern func jik_math_is_inf as
+    is_inf(x: double) -> int
+
+
+// -------------------------------------------------------------
+//      C Implementation
+// -------------------------------------------------------------
+
+@embed{C_END}
+
+#include <math.h>
+
+double
+jik_math_sqrt(double x)
+{
+    return sqrt(x);
+}
+
+double
+jik_math_sin(double x)
+{
+    return sin(x);
+}
+
+double
+jik_math_cos(double x)
+{
+    return cos(x);
+}
+
+double
+jik_math_tan(double x)
+{
+    return tan(x);
+}
+
+double
+jik_math_atan2(double y, double x)
+{
+    return atan2(y, x);
+}
+
+double
+jik_math_floor(double x)
+{
+    return floor(x);
+}
+
+double
+jik_math_ceil(double x)
+{
+    return ceil(x);
+}
+
+double
+jik_math_round(double x)
+{
+    return round(x);
+}
+
+double
+jik_math_pow(double x, double y)
+{
+    return pow(x, y);
+}
+
+double
+jik_math_log(double x)
+{
+    return log(x);
+}
+
+double
+jik_math_exp(double x)
+{
+    return exp(x);
+}
+
+double
+jik_math_fmod(double x, double y)
+{
+    return fmod(x, y);
+}
+
+int
+jik_math_is_nan(double x)
+{
+    // Portable NaN test: NaN != NaN
+    return (x != x) ? 1 : 0;
+}
+
+int
+jik_math_is_finite(double x)
+{
+    // Finite iff not NaN and (x - x) is 0.0 (Inf - Inf is NaN).
+    if (x != x) {
+        return 0;
+    }
+    double z = x - x;
+    return (z == 0.0) ? 1 : 0;
+}
+
+int
+jik_math_is_inf(double x)
+{
+    if (x != x) {
+        return 0;
+    }
+    double z = x - x;
+    return (z != 0.0) ? 1 : 0;
+}
+
+C_END

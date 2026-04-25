@@ -1,0 +1,27 @@
+use "jik/testing" as test
+
+
+func fib(n):
+    if n < 2:
+        return n
+    end
+    return fib(n - 1) + fib(n - 2)
+end
+
+
+func test_fib(ts):
+    test::suite_assert(ts, fib(0) == 0, site())
+    test::suite_assert(ts, fib(1) == 1, site())
+    test::suite_assert(ts, fib(2) == 1, site())
+    test::suite_assert(ts, fib(3) == 2, site())
+    test::suite_assert(ts, fib(4) == 3, site())
+    test::suite_assert(ts, fib(5) == 5, site())
+    test::suite_assert(ts, fib(6) == 8, site())
+    test::suite_assert(ts, fib(7) == 13, site())
+    test::suite_assert(ts, fib(8) == 21, site())
+end
+
+
+func run_tests(ts):
+    test_fib(ts)
+end

@@ -1,0 +1,112 @@
+use "jik/testing" as test
+
+
+struct BFState:
+    code: String
+    data: Vec[int]
+    dp: int 
+    ip: int 
+    stack: Vec[int]
+end
+
+func bf_reset(state):
+    state.code = ""
+    state.data = [30000 of 0]
+    state.stack = [0 of 0]
+    state.dp = 0
+    state.ip = 0
+end
+
+func bf_run(state):
+    n := len(state.code)
+
+    jumps := [n of 0]
+    stack := [0 of 0]
+    i := 0
+    while i < n :
+        if state.code[i] == '[':
+            push(stack, i)
+        elif state.code[i] == ']':
+            if len(stack) == 0:
+                return false
+            end
+            j := pop(stack)
+            jumps[i] = j
+            jumps[j] = i
+        end
+        i = i + 1
+    end 
+
+    if len(stack) > 0:
+        return false
+    end
+
+    while state.ip < n:
+        if state.code[state.ip] == '>':
+            state.dp = state.dp + 1
+        elif state.code[state.ip] == '<':
+            state.dp = state.dp - 1
+        elif state.code[state.ip] == '+':
+            state.data[state.dp] = state.data[state.dp] + 1
+        elif state.code[state.ip] == '-':
+            state.data[state.dp] = state.data[state.dp] - 1
+        elif state.code[state.ip] == '.':
+            // instead printing chars to output, we simply push to the state stack
+            push(state.stack, state.data[state.dp])
+        elif state.code[state.ip] == '[':
+            if state.data[state.dp] == 0:
+                state.ip = jumps[state.ip]
+            end
+        elif state.code[state.ip] == ']':
+            if state.data[state.dp] != 0:
+                state.ip = jumps[state.ip] 
+            end
+        end
+        
+        state.ip = state.ip + 1
+    end
+    return true
+end
+
+
+func run_tests(ts):
+    // Add two numbers
+    bfs := BFState{
+        code = "++ > +++++ [<+>-] .",
+        data = [30000 of 0],
+        stack = [0 of 0]
+    }
+    res := bf_run(bfs)
+    test::suite_assert(ts, res, site())
+
+    test::suite_assert(ts, bfs.data[0] == 7, site())
+    bf_reset(bfs)
+    test::suite_assert(ts, bfs.data[0] == 0, site())
+
+    // Hello, world!
+    bfs.code = ">++++++++[<+++++++++>-]<.>++++[<+++++++>-]<+.+++++++..+++.>>++++++[<+++++++>-]<++.------------.>++++++[<+++++++++>-]<+.<.+++.------.--------.>>>++++[<++++++++>-]<+."
+    res = bf_run(bfs)
+    test::suite_assert(ts, res, site())
+
+    test::suite_assert(ts, bfs.stack[0] == 72, site())
+    test::suite_assert(ts, bfs.stack[1] == 101, site())
+    test::suite_assert(ts, bfs.stack[2] == 108, site())
+    test::suite_assert(ts, bfs.stack[3] == 108, site())
+    test::suite_assert(ts, bfs.stack[4] == 111, site())
+    test::suite_assert(ts, bfs.stack[5] == 44, site())
+    test::suite_assert(ts, bfs.stack[6] == 32, site())
+    test::suite_assert(ts, bfs.stack[7] == 87, site())
+    test::suite_assert(ts, bfs.stack[8] == 111, site())
+    test::suite_assert(ts, bfs.stack[9] == 114, site())
+    test::suite_assert(ts, bfs.stack[10] == 108, site())
+    test::suite_assert(ts, bfs.stack[11] == 100, site())
+    test::suite_assert(ts, bfs.stack[12] == 33, site())
+
+    // Syntax error
+    bf_reset(bfs)
+    bfs.code = "++ > +++++ [<+>-]] ."
+    res = bf_run(bfs)
+    test::suite_assert(ts, not res, site())
+
+end
+

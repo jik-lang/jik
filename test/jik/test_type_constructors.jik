@@ -1,0 +1,93 @@
+use "jik/testing" as test
+
+
+func test_dict_string(ts):
+    d: Dict[String]
+    d["host"] = "localhost"
+    d["mode"] = "dev"
+
+    test::suite_assert(ts, d["host"] is Some, site())
+    test::suite_assert(ts, d["host"]? == "localhost", site())
+    test::suite_assert(ts, d["mode"]? == "dev", site())
+end
+
+func test_dict_vec_int(ts):
+    d: Dict[Vec[int]]
+    d["nums"] = [1, 2, 3]
+
+    test::suite_assert(ts, d["nums"] is Some, site())
+    test::suite_assert(ts, len(d["nums"]?) == 3, site())
+    test::suite_assert(ts, d["nums"]?[0] == 1, site())
+    test::suite_assert(ts, d["nums"]?[2] == 3, site())
+end
+
+func test_dict_option_string(ts):
+    d: Dict[Option[String]]
+    d["name"] = Some{"jik"}
+
+    empty: Option[String]
+    empty = None
+    d["note"] = empty
+
+    name := d["name"]?
+    note := d["note"]?
+
+    test::suite_assert(ts, d["name"] is Some, site())
+    test::suite_assert(ts, name is Some, site())
+    test::suite_assert(ts, name? == "jik", site())
+    test::suite_assert(ts, d["note"] is Some, site())
+    test::suite_assert(ts, note is None, site())
+end
+
+func test_vec_dict_int(ts):
+    items: Vec[Dict[int]]
+
+    first := {"x": 1, "y": 2}
+    second: Dict[int]
+    second["z"] = 9
+
+    push(items, first)
+    push(items, second)
+
+    test::suite_assert(ts, len(items) == 2, site())
+    test::suite_assert(ts, items[0]["x"] is Some, site())
+    test::suite_assert(ts, items[0]["x"]? == 1, site())
+    test::suite_assert(ts, items[1]["z"]? == 9, site())
+end
+
+func test_option_dict_string(ts):
+    d: Dict[String]
+    d["lang"] = "jik"
+
+    wrapped: Option[Dict[String]]
+    wrapped = Some{d}
+
+    empty: Option[Dict[String]]
+    empty = None
+
+    inner := wrapped?
+
+    test::suite_assert(ts, wrapped is Some, site())
+    test::suite_assert(ts, inner["lang"] is Some, site())
+    test::suite_assert(ts, inner["lang"]? == "jik", site())
+    test::suite_assert(ts, empty is None, site())
+end
+
+func test_nested_dicts(ts):
+    commands: Dict[Dict[int]]
+    commands["copy"] = {"overwrite": 1, "recursive": 0}
+    commands["move"] = {"overwrite": 1, "recursive": 1}
+
+    test::suite_assert(ts, commands["copy"] is Some, site())
+    test::suite_assert(ts, commands["copy"]?["overwrite"]? == 1, site())
+    test::suite_assert(ts, commands["move"]?["recursive"]? == 1, site())
+end
+
+func run_tests(ts):
+    test_dict_string(ts)
+    test_dict_vec_int(ts)
+    test_dict_option_string(ts)
+    test_vec_dict_int(ts)
+    test_option_dict_string(ts)
+    test_nested_dicts(ts)
+end

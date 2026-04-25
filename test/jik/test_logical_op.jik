@@ -1,0 +1,13 @@
+
+use "jik/testing" as test
+
+
+func run_tests(ts):
+    test::suite_assert(ts, not not true, site())
+    test::suite_assert(ts, true, site())
+    test::suite_assert(ts, true and true, site())
+    test::suite_assert(ts, not (true and false), site())
+    test::suite_assert(ts, not (false or false), site())
+    test::suite_assert(ts, not not (false or true), site())
+    test::suite_assert(ts, not ((true or false or true or true) and false), site())
+end

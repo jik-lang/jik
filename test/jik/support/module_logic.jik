@@ -1,0 +1,29 @@
+use "test/jik/support/module_shapes" as shapes
+
+
+func nickname_or_fallback(p: shapes::Person, r: Region) -> String:
+    if p.nickname is Some:
+        return p.nickname?
+    end
+    return shapes::fallback_name(r)
+end
+
+func message_name(msg: shapes::Message, r: Region) -> String:
+    match msg:
+        case shapes::Message.PERSON{p}:
+            return p.name
+        case shapes::Message.TEXT{text}:
+            return text
+        case shapes::Message.NONE{}:
+            return shapes::fallback_name(r)
+    end
+end
+
+func has_tag(p: shapes::Person, expect: String) -> bool:
+    for tag in p.tags:
+        if tag == expect:
+            return true
+        end
+    end
+    return false
+end

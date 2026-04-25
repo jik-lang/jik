@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    env:
+      JIK_CC: clang
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Windows toolchain paths
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "C:\msys64\usr\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Show tool versions
+        shell: pwsh
+        run: |
+          Write-Output "JIK_CC=$env:JIK_CC"
+          clang --version
+          make --version
+
+      - name: Build
+        shell: pwsh
+        run: make
+
+      - name: Test
+        shell: pwsh
+        run: make test

@@ -1,0 +1,25 @@
+use "jik/testing" as test
+use "test/jik/support/globals"
+
+
+x := 3
+y := "foo"
+lst := [2 of 0]
+
+func foo(ts, y):
+    test::suite_assert(ts, y != "foo", site())
+end
+
+func test_globals_01(ts):
+    test::suite_assert(ts, x == 3, site())
+    test::suite_assert(ts, y == "foo", site())
+    foo(ts, "abc")
+    foo(ts, "")
+    test::suite_assert(ts, globals::x == 0, site())
+    test::suite_assert(ts, len(lst) == 2, site())
+end
+
+
+func run_tests(ts):
+    test_globals_01(ts)
+end

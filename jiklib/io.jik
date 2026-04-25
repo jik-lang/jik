@@ -1,0 +1,219 @@
+//! File I/O utilities.
+//!
+//! This module provides a minimal wrapper around basic C stdio file operations.
+//! Supported file modes are currently `"r"` for reading, `"w"` for writing, and `"a"` for appending.
+//! All operations throw on error.
+
+// -------------------------------------------------------------
+//      API
+// -------------------------------------------------------------
+
+/// Opaque file handle.
+extern struct jik_impl_io_File as
+    File
+
+/// Open a file.
+///
+/// Supported modes are `"r"` (read), `"w"` (write), and `"a"` (append).
+///
+/// @param path File path.
+/// @param mode File open mode.
+/// @param region Allocation region for file handle state.
+/// @returns Open file handle.
+extern throws func jik_impl_io_open as
+    open(foreign path: String, foreign mode: String, region: Region) -> File
+
+/// Close an open file.
+///
+/// @param file File handle.
+extern throws func jik_impl_io_close as
+    close(file: File) -> void
+
+/// Read the full contents of a file.
+///
+/// The file must have been opened in read mode.
+///
+/// @param file File handle.
+/// @param region Allocation region for the returned string.
+/// @returns Full file contents.
+extern throws func jik_impl_io_read as
+    read(foreign file: File, region: Region) -> String
+
+/// Write a string to a file.
+///
+/// The file must have been opened in write mode.
+///
+/// @param file File handle.
+/// @param text String to write.
+extern throws func jik_impl_io_write as
+    write(file: File, foreign text: String) -> void
+
+/// Read an entire file by path.
+///
+/// @param path File path.
+/// @param region Allocation region for file handle state and the returned string.
+/// @returns Full file contents.
+throws func read_file(foreign path: String, region: Region) -> String:
+    f := must open(path, "r", region)
+    text := must read(f, region)
+    must close(f)
+    return text
+end
+
+/// Write a string to a file by path, truncating existing contents.
+///
+/// @param path File path.
+/// @param text String to write.
+/// @param region Allocation region for file handle state.
+throws func write_file(foreign path: String, foreign text: String, region: Region) -> void:
+    f := must open(path, "w", region)
+    must write(f, text)
+    must close(f)
+end
+
+/// Remove a file from the filesystem.
+///
+/// @param path File path.
+extern throws func jik_impl_io_remove as
+    remove(path: String) -> void
+
+/// Return whether a filesystem path exists.
+///
+/// @param path File path.
+/// @returns `true` if the path exists, otherwise `false`.
+extern func jik_impl_io_exists as
+    exists(path: String) -> bool
+
+
+// -------------------------------------------------------------
+//      C implementation
+// -------------------------------------------------------------
+
+@embed{C_END}
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/stat.h>
+#endif
+
+typedef struct jik_impl_io_File {
+    FILE *file;
+    bool valid;
+    JikString *mode;
+    JikRegion *region;
+} jik_impl_io_File;
+
+static bool
+jik_impl_io_mode_valid(JikString *mode)
+{
+    return strcmp(mode->data, "r") == 0 || strcmp(mode->data, "w") == 0 ||
+           strcmp(mode->data, "a") == 0;
+}
+
+jik_impl_io_File *
+jik_impl_io_open(JikString *filepath, JikString *mode, JikRegion *a, JikError *e)
+{
+    if (!jik_impl_io_mode_valid(mode)) {
+        jik_error_set(e, 1, "io::open: illegal file open mode");
+        jik_impl_io_File *fh = jik_region_alloc(a, sizeof(jik_impl_io_File));
+        fh->file = NULL;
+        fh->mode = jik_string_new(mode->data, a);
+        fh->valid = false;
+        fh->region = a;
+        return fh;
+    }
+    jik_impl_io_File *fh = jik_region_alloc(a, sizeof(jik_impl_io_File));
+    fh->file = fopen(filepath->data, mode->data);
+    fh->mode = jik_string_new(mode->data, a);
+    fh->valid = (fh->file != NULL);
+    if (!fh->valid) {
+        jik_error_set(e, 1, "io::open: could not open file");
+    }
+    fh->region = a;
+    return fh;
+}
+
+void
+jik_impl_io_close(jik_impl_io_File *fh, JikError *e)
+{
+    if (!fh->valid) {
+        jik_error_set(e, 1, "io::close: cannot close invalid file");
+        return;
+    }
+    fclose(fh->file);
+    fh->valid = false;
+}
+
+JikString *
+jik_impl_io_read(jik_impl_io_File *fh, JikRegion *r, JikError *e)
+{
+    if (!fh->valid) {
+        jik_error_set(e, 1, "io::read: cannot read from invalid file");
+        return jik_string_new("", r);
+    }
+    if (!(fh->mode->data[0] == 'r')) {
+        jik_error_set(e, 1, "io::read: file not opened for reading");
+        return jik_string_new("", r);
+    }
+
+    fseek(fh->file, 0L, SEEK_END);
+    size_t file_size = (size_t)ftell(fh->file);
+    rewind(fh->file);
+
+    char *buffer = jik_region_alloc(r, file_size + 1);
+    size_t bytes = fread(buffer, sizeof(char), file_size, fh->file);
+    buffer[bytes] = '\0';
+
+    return jik_string_new(buffer, r);
+}
+
+void
+jik_impl_io_write(jik_impl_io_File *fh, JikString *s, JikError *e)
+{
+    if (!fh->valid) {
+        jik_error_set(e, 1, "io::write: cannot write to invalid file");
+        return;
+    }
+    if (!(fh->mode->data[0] == 'w' || fh->mode->data[0] == 'a')) {
+        jik_error_set(e, 1, "io::write: file not opened for writing");
+        return;
+    }
+
+    size_t len = strlen(s->data);
+    size_t n   = fwrite(s->data, 1, len, fh->file);
+    if (n != len) {
+        jik_error_set(e, 1, "io::write: failed to write all bytes");
+        return;
+    }
+    // Maybe could be removed, since fclose flushes, but re-think
+    if (fflush(fh->file) != 0) {
+        jik_error_set(e, 1, "io::write: fflush failed");
+        return;
+    }
+}
+
+void
+jik_impl_io_remove(JikString *fn, JikError *e)
+{
+    if (remove(fn->data) != 0) {
+        jik_error_set(e, 1, "io::remove: could not remove file");
+    }
+}
+
+bool
+jik_impl_io_exists(JikString *path)
+{
+    if (!path || !path->data || path->data[0] == '\0') {
+        return false;
+    }
+#ifdef _WIN32
+    return GetFileAttributesA(path->data) != INVALID_FILE_ATTRIBUTES;
+#else
+    struct stat st;
+    return stat(path->data, &st) == 0;
+#endif
+}
+
+
+C_END

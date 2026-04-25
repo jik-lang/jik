@@ -1,0 +1,41 @@
+//! Testing utilities.
+
+use "jik/sys"
+
+/// Test suite state.
+struct TestSuite:
+    failed: int
+    passed: int
+end
+
+
+/// Test suite assertion function.
+///
+/// @param1 Test suite
+/// @param2 Assertion expression, boolean
+/// @param3 Site instance
+func suite_assert(suite: TestSuite, cond: bool, s: Site) -> void:
+    if not cond:
+        print("Test assertion failed in: ",
+                site_file(s, _),
+                ", line: ",
+                site_line(s),
+                "\n    ",
+                site_code(s, _),
+                "\n"
+            )
+        suite.failed = suite.failed + 1
+    else:
+        suite.passed = suite.passed + 1
+    end
+end
+
+/// Print suite summary and exit non-zero if any test failed.
+///
+/// @param suite Test suite
+func suite_finish(suite: TestSuite) -> void:
+    print(suite)
+    if suite.failed > 0:
+        sys::exit(1)
+    end
+end

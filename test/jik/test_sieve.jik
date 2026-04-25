@@ -1,0 +1,44 @@
+use "jik/testing" as test
+
+
+func sieve(n, ts):
+    prime := [n + 1 of true][.ts]
+    p := 2
+    while p * p <= n:
+        if prime[p]:
+            i := p * p
+            while i <= n:
+                prime[i] = false
+                i = i + p
+            end
+
+        end
+
+        p = p + 1
+    end
+    return prime
+end
+
+func test_sieve(ts):
+    res := sieve(100, ts)
+    test::suite_assert(ts, res[0], site())
+    test::suite_assert(ts, res[1], site())
+    test::suite_assert(ts, res[2], site())
+    test::suite_assert(ts, res[3], site())
+    test::suite_assert(ts, not res[4], site())
+    test::suite_assert(ts, res[5], site())
+    test::suite_assert(ts, not res[6], site())
+    test::suite_assert(ts, res[7], site())
+    test::suite_assert(ts, not res[8], site())
+    test::suite_assert(ts, not res[9], site())
+    test::suite_assert(ts, not res[10], site())
+    test::suite_assert(ts, res[29], site())
+    test::suite_assert(ts, res[47], site())
+    test::suite_assert(ts, res[89], site())
+    test::suite_assert(ts, res[97], site())
+end
+
+
+func run_tests(ts):
+    test_sieve(ts)
+end

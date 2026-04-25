@@ -1,0 +1,72 @@
+use "test/jik/support/module_type_base" as base
+use "test/jik/support/module_type_records" as records
+
+
+func make_record(r: Region) -> records::Record:
+    trail := [0 of base::Point{}][r]
+    push(trail, base::Point{x=1, y=2}[r])
+    push(trail, base::Point{x=3, y=4}[r])
+
+    by_name: Dict[base::Point][r]
+    by_name["home"] = base::Point{x=7, y=8}[r]
+    by_name["work"] = base::Point{x=9, y=10}[r]
+
+    point := base::Point{x=13, y=14}[r]
+    backup_point := base::Point{x=5, y=6}[r]
+    payload_point := base::Point{x=11, y=12}[r]
+    backup := Some{backup_point}[r]
+    payload := base::Payload.POINT{payload_point}[r]
+
+    return records::Record{
+        point=point,
+        backup=backup,
+        trail=trail,
+        by_name=by_name,
+        payload=payload
+    }[r]
+end
+
+func make_view(kind: int, r: Region) -> records::RecordView:
+    if kind == 0:
+        return records::RecordView.RECORD{make_record(r)}[r]
+    elif kind == 1:
+        pts := [0 of base::Point{}][r]
+        push(pts, base::Point{x=2, y=3}[r])
+        push(pts, base::Point{x=4, y=5}[r])
+        return records::RecordView.POINTS{pts}[r]
+    elif kind == 2:
+        d: Dict[base::Point][r]
+        d["entry"] = base::Point{x=6, y=7}[r]
+        return records::RecordView.INDEX{d}[r]
+    elif kind == 3:
+        pt := base::Point{x=8, y=9}[r]
+        return records::RecordView.MAYBE_POINT{Some{pt}[r]}[r]
+    else:
+        text := "ok"[r]
+        return records::RecordView.PAYLOAD{base::Payload.LABEL{text}[r]}[r]
+    end
+end
+
+func payload_score(payload: base::Payload) -> int:
+    match payload:
+        case base::Payload.POINT{pt}:
+            return pt.x + pt.y
+        case base::Payload.LABEL{text}:
+            return len(text)
+    end
+end
+
+func view_score(view: records::RecordView) -> int:
+    match view:
+        case records::RecordView.RECORD{rec}:
+            return rec.point.x + rec.point.y
+        case records::RecordView.POINTS{pts}:
+            return pts[0].x + pts[1].y
+        case records::RecordView.INDEX{d}:
+            return d["entry"]?.x + d["entry"]?.y
+        case records::RecordView.MAYBE_POINT{pt}:
+            return pt?.x + pt?.y
+        case records::RecordView.PAYLOAD{payload}:
+            return payload_score(payload)
+    end
+end

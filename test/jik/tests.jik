@@ -1,0 +1,73 @@
+use "jik/testing" as test
+
+use "test/jik/test_fib"
+use "test/jik/test_tree"
+use "test/jik/test_linked_list"
+use "test/jik/test_vec"
+use "test/jik/test_bf"
+use "test/jik/test_logical_op"
+use "test/jik/test_operators"
+use "test/jik/test_globals"
+use "test/jik/test_sieve"
+use "test/jik/test_cond"
+use "test/jik/test_enum"
+use "test/jik/test_dict"
+use "test/jik/test_variant"
+use "test/jik/test_jiklib_io"
+use "test/jik/test_jiklib_string"
+use "test/jik/test_jiklib_strbuf"
+use "test/jik/test_jiklib_rand"
+use "test/jik/test_jiklib_math"
+use "test/jik/test_jiklib_char"
+use "test/jik/test_jiklib_sys"
+use "test/jik/test_error"
+use "test/jik/test_forth"
+use "test/jik/test_dijkstra"
+use "test/jik/test_option"
+use "test/jik/test_module_interop"
+use "test/jik/test_module_type_interop"
+use "test/jik/test_type_constructors"
+use "test/jik/test_compile_fail_semantic"
+use "test/jik/test_compile_fail_operators"
+use "test/jik/test_compile_fail_regions"
+use "test/jik/test_compile_fail_modules"
+
+
+func main():
+    ts := test::TestSuite{}
+    
+    test_fib::run_tests(ts)
+    test_tree::run_tests(ts)
+    test_linked_list::run_tests(ts)
+    test_vec::run_tests(ts)
+    test_bf::run_tests(ts)
+    test_logical_op::run_tests(ts)
+    test_operators::run_tests(ts)
+    test_globals::run_tests(ts)
+    test_sieve::run_tests(ts)
+    test_cond::run_tests(ts)
+    test_enum::run_tests(ts)
+    test_dict::run_tests(ts)
+    test_variant::run_tests(ts)
+    test_jiklib_io::run_tests(ts)
+    test_jiklib_string::run_tests(ts)
+    test_jiklib_strbuf::run_tests(ts)
+    test_jiklib_rand::run_tests(ts)
+    test_jiklib_math::run_tests(ts)
+    test_jiklib_char::run_tests(ts)
+    test_jiklib_sys::run_tests(ts)
+    test_error::run_tests(ts)
+    test_forth::run_tests(ts)
+    test_dijkstra::run_tests(ts)
+    test_option::run_tests(ts)
+    test_module_interop::run_tests(ts)
+    test_module_type_interop::run_tests(ts)
+    test_type_constructors::run_tests(ts)
+    test_compile_fail_semantic::run_tests(ts)
+    test_compile_fail_operators::run_tests(ts)
+    test_compile_fail_regions::run_tests(ts)
+    test_compile_fail_modules::run_tests(ts)
+    
+    test::suite_finish(ts)
+
+end

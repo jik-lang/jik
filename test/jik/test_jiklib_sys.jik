@@ -1,0 +1,19 @@
+use "jik/testing" as test
+use "jik/sys"
+
+
+func test_sys_basic(ts):
+    wd := sys::cwd(_)
+    test::suite_assert(ts, len(wd) > 0, site())
+
+    env_path := sys::getenv("PATH", _)
+    test::suite_assert(ts, env_path is Some, site())
+
+    missing := sys::getenv("JIK_TEST_MISSING_ENV_6C8D2A24", _)
+    test::suite_assert(ts, missing is None, site())
+end
+
+
+func run_tests(ts):
+    test_sys_basic(ts)
+end

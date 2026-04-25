@@ -1,0 +1,36 @@
+use "jik/testing" as test
+
+use "jik/strbuf"
+
+
+func run_tests(ts):
+    sb := strbuf::new("", _)
+    test::suite_assert(ts, strbuf::len(sb) == 0, site())
+    strbuf::append(sb, "foo")
+    test::suite_assert(ts, strbuf::len(sb) == 3, site())
+    
+    s1 := strbuf::to_string(sb, _)
+    test::suite_assert(ts, len(s1) == 3, site())
+    test::suite_assert(ts, s1[0] == 'f', site())
+    test::suite_assert(ts, s1[1] == 'o', site())
+    test::suite_assert(ts, s1[2] == 'o', site())
+
+    strbuf::append_char(sb, '1')
+    strbuf::append_char(sb, '2')
+    strbuf::append_char(sb, '3')
+    test::suite_assert(ts, strbuf::len(sb) == 6, site())
+    test::suite_assert(ts, strbuf::pop(sb) == '3', site())
+    test::suite_assert(ts, strbuf::pop(sb) == '2', site())
+    test::suite_assert(ts, strbuf::pop(sb) == '1', site())
+    test::suite_assert(ts, strbuf::len(sb) == 3, site())
+
+    strbuf::clear(sb)
+    test::suite_assert(ts, strbuf::len(sb) == 0, site())
+
+    strbuf::append(sb, "abc")
+    sb2 := strbuf::new("abc", _)
+    s2 := strbuf::to_string(sb, _)
+    s3 := strbuf::to_string(sb2, _)
+    test::suite_assert(ts, s2 == s3, site())
+
+end

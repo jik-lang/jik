@@ -1,0 +1,4 @@
+use "test/jik/input/modules/import_cycle_no_leaves/a"
+
+func pong():
+end

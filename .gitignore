@@ -1,0 +1,15 @@
+*.o
+*.exe
+*.pdb
+/scratch/
+*.vsix
+src/_old_src
+obj
+.vscode
+cookbooks/
+release/
+artifacts/
+bench/
+todo/
+site/
+/mkdocs.yml

@@ -1,0 +1,77 @@
+use "jik/io"
+use "jik/std"
+use "jik/string"
+use "jik/sys"
+use "jik/testing" as test
+
+func compiler_command(r: Region):
+    p := sys::platform(r)
+    if p == "windows":
+        return "jik"[r]
+    elif p == "linux":
+        return "./jik"[r]
+    else:
+        std::panic("unsupported platform")
+    end
+end
+
+func write_string_to_file(foreign path: String, foreign s: String):
+    f := must io::open(path, "w", _)
+    must io::write(f, s)
+    must io::close(f)
+end
+
+func remove_if_exists(foreign path: String):
+    try io::remove(path):
+    except:
+    end
+end
+
+func compile_fail_cmd(foreign src_path: String, foreign out_path: String, r):
+    return concat(compiler_command(r), " tran ", src_path, " > ", out_path, " 2>&1", r)
+end
+
+func assert_compile_fail_file(ts, foreign src_path: String, foreign expected: String):
+    out_path := "test/jik/input/cf_temp.out"
+    remove_if_exists(out_path)
+
+    status := sys::system(compile_fail_cmd(src_path, out_path, _))
+    test::suite_assert(ts, status != 0, site())
+
+    f := must io::open(out_path, "r", _)
+    out := must io::read(f, _)
+    must io::close(f)
+    test::suite_assert(ts, string::find(out, expected) != -1, site())
+
+    remove_if_exists(out_path)
+end
+
+func assert_compile_fail_source(ts, foreign prog: String, foreign expected: String):
+    src_path := "test/jik/input/cf_temp.jik"
+    out_path := "test/jik/input/cf_temp.out"
+    remove_if_exists(src_path)
+    remove_if_exists(out_path)
+    write_string_to_file(src_path, prog)
+
+    status := sys::system(compile_fail_cmd(src_path, out_path, _))
+    test::suite_assert(ts, status != 0, site())
+
+    f := must io::open(out_path, "r", _)
+    out := must io::read(f, _)
+    must io::close(f)
+    test::suite_assert(ts, string::find(out, expected) != -1, site())
+
+    remove_if_exists(src_path)
+    remove_if_exists(out_path)
+end
+
+func assert_compile_fails_source(ts, foreign prog: String):
+    src_path := "test/jik/input/temp.jik"
+    out_path := "test/jik/input/cf_temp.out"
+    remove_if_exists(src_path)
+    remove_if_exists(out_path)
+    write_string_to_file(src_path, prog)
+    test::suite_assert(ts, sys::system(compile_fail_cmd(src_path, out_path, _)) != 0, site())
+    remove_if_exists(src_path)
+    remove_if_exists(out_path)
+end

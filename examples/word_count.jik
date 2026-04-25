@@ -1,0 +1,57 @@
+// Example: Count lines, words, and bytes in a text file.
+
+use "jik/io"
+use "jik/char"
+
+
+struct Counts:
+    lines: int
+    words: int
+    bytes: int
+end
+
+
+func count_text(s: String, r: Region) -> Counts:
+    lines := 0
+    words := 0
+    bytes := len(s)
+
+    in_word := false
+
+    for i = 0, len(s):
+        c := s[i]
+
+        if c == '\n':
+            lines = lines + 1
+        end
+
+        if char::isspace(c):
+            in_word = false
+        elif not in_word:
+            words = words + 1
+            in_word = true
+        end
+    end
+
+    return Counts{
+        lines = lines,
+        words = words,
+        bytes = bytes
+    }[r]
+end
+
+
+func main(args):
+    if len(args) < 2:
+        println("usage: word_count <file>")
+    else:
+        path := args[1]
+        text := must io::read_file(path, _)
+        counts := count_text(text, _)
+
+        println("file:  ", path)
+        println("lines: ", counts.lines)
+        println("words: ", counts.words)
+        println("bytes: ", counts.bytes)
+    end
+end

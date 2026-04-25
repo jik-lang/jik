@@ -1,0 +1,20 @@
+func sum(xs):
+    total := 0
+    for i = 0, len(xs):
+        total = total + xs[i]
+    end
+    return total
+end
+
+func max(xs):
+    if len(xs) == 0:
+        return 0
+    end
+    best := xs[0]
+    for i = 1, len(xs):
+        if xs[i] > best:
+            best = xs[i]
+        end
+    end
+    return best
+end

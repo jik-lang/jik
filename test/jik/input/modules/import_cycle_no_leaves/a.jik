@@ -1,0 +1,5 @@
+use "test/jik/input/modules/import_cycle_no_leaves/b"
+
+func ping():
+    b::pong()
+end

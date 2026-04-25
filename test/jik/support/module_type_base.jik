@@ -1,0 +1,9 @@
+struct Point:
+    x: int
+    y: int
+end
+
+variant Payload:
+    POINT: Point
+    LABEL: String
+end

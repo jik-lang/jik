@@ -1,0 +1,105 @@
+use "jik/testing" as test
+
+struct Person:
+    name: String
+    nickname: Option[String]
+    nickname_history: Vec[Option[String]]
+end
+
+
+func test_option_basic(ts):
+    a := Some{3}
+    test::suite_assert(ts, a is Some, site())
+    test::suite_assert(ts, not (a is None), site())
+    test::suite_assert(ts, a? == 3, site())
+    test::suite_assert(ts, unwrap(a) == 3, site())
+end
+
+func test_option_none(ts):
+    a: Option[int]
+    a = None
+    test::suite_assert(ts, a is None, site())
+
+    b: Option[String]
+    b = None
+    test::suite_assert(ts, b is None, site())
+end
+
+func test_option_dict(ts):
+    d: Dict[int]
+    d["x"] = 11
+    item := d["x"]
+    missing := d["y"]
+
+    test::suite_assert(ts, item is Some, site())
+    test::suite_assert(ts, item? == 11, site())
+    test::suite_assert(ts, missing is None, site())
+end
+
+func make_option(r: Region):
+    return Some{3}[r]
+end
+
+func test_option_region(ts):
+    x := make_option(_)
+    test::suite_assert(ts, x is Some, site())
+    test::suite_assert(ts, x? == 3, site())
+end
+
+func test_option_vec(ts):
+    items: Vec[Option[int]]
+    push(items, Some{2})
+
+    missing: Option[int]
+    missing = None
+    push(items, missing)
+    push(items, Some{9})
+
+    test::suite_assert(ts, len(items) == 3, site())
+    test::suite_assert(ts, items[0] is Some, site())
+    test::suite_assert(ts, items[0]? == 2, site())
+    test::suite_assert(ts, items[1] is None, site())
+    test::suite_assert(ts, items[2] is Some, site())
+    test::suite_assert(ts, items[2]? == 9, site())
+
+    items = [Some{2}, Some{3}, None]
+    test::suite_assert(ts, len(items) == 3, site())
+    test::suite_assert(ts, items[0] is Some, site())
+    test::suite_assert(ts, items[0]? == 2, site())
+    test::suite_assert(ts, items[1] is Some, site())
+    test::suite_assert(ts, items[1]? == 3, site())
+    test::suite_assert(ts, items[2] is None, site())
+end
+
+func test_option_struct(ts):
+    p := Person{name = "foo"}
+    test::suite_assert(ts, p.nickname is None, site())
+    test::suite_assert(ts, len(p.nickname_history) == 0, site())
+
+    p.nickname = Some{"bar"}
+    test::suite_assert(ts, p.nickname is Some, site())
+    test::suite_assert(ts, p.nickname? == "bar", site())
+
+    push(p.nickname_history, p.nickname)
+
+    old_name: Option[String]
+    old_name = None
+    push(p.nickname_history, old_name)
+    push(p.nickname_history, Some{"baz"})
+
+    test::suite_assert(ts, len(p.nickname_history) == 3, site())
+    test::suite_assert(ts, p.nickname_history[0] is Some, site())
+    test::suite_assert(ts, p.nickname_history[0]? == "bar", site())
+    test::suite_assert(ts, p.nickname_history[1] is None, site())
+    test::suite_assert(ts, p.nickname_history[2] is Some, site())
+    test::suite_assert(ts, p.nickname_history[2]? == "baz", site())
+end
+
+func run_tests(ts):
+    test_option_basic(ts)
+    test_option_none(ts)
+    test_option_dict(ts)
+    test_option_region(ts)
+    test_option_vec(ts)
+    test_option_struct(ts)
+end

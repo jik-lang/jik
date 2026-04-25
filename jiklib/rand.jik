@@ -1,0 +1,168 @@
+//! Pseudo-random number generation.
+
+// -------------------------------------------------------------
+//      API
+// -------------------------------------------------------------
+
+/// Opaque random number generator state.
+extern struct jik_Rng as
+    Rng
+
+// Deterministic seed. Allocates RNG state in region r.
+/// Create a new RNG with a deterministic seed.
+///
+/// @param seed Seed value.
+/// @param region Allocation region for RNG state.
+/// @returns A new RNG.
+extern func jik_rand_new as
+    new(seed: int, region: Region) -> Rng
+
+// Time-based seed. Allocates RNG state in region r.
+/// Create a new RNG seeded from the current time.
+///
+/// @param region Allocation region for RNG state.
+/// @returns A new RNG.
+extern func jik_rand_new_time as
+    new_time(region: Region) -> Rng
+
+// Uniform non-negative int in [0, 2^31 - 1].
+/// Generate a non-negative random integer.
+///
+/// @param rng RNG.
+/// @returns Uniform int in [0, 2^31 - 1].
+extern func jik_rand_next_int as
+    next_int(rng: Rng) -> int
+
+// Uniform double in [0.0, 1.0).
+/// Generate a random floating-point number.
+///
+/// @param rng RNG.
+/// @returns Uniform double in [0.0, 1.0).
+extern func jik_rand_next_double as
+    next_double(rng: Rng) -> double
+
+// Uniform int in [lo, hi). Error if hi <= lo.
+/// Generate a random integer in a half-open interval.
+///
+/// @param rng RNG.
+/// @param lo Lower bound (inclusive).
+/// @param hi Upper bound (exclusive).
+/// @returns Uniform int in [lo, hi).
+extern throws func jik_rand_range_int as
+    range_int(rng: Rng, lo: int, hi: int) -> int
+
+
+// -------------------------------------------------------------
+//      C Implementation
+// -------------------------------------------------------------
+
+@embed{C_END}
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <time.h>
+
+typedef struct jik_Rng {
+    uint64_t s0;
+    uint64_t s1;
+} jik_Rng;
+
+static uint64_t
+jik_rand_splitmix64(uint64_t *x)
+{
+    uint64_t z = (*x += 0x9E3779B97F4A7C15ULL);
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    return z ^ (z >> 31);
+}
+
+static uint64_t
+jik_rand_next_u64_raw(jik_Rng *rng)
+{
+    // xorshift128+ (fast PRNG; not cryptographically secure)
+    uint64_t s1 = rng->s0;
+    uint64_t s0 = rng->s1;
+    rng->s0 = s0;
+    s1 ^= s1 << 23;
+    s1 ^= s1 >> 17;
+    s1 ^= s0;
+    s1 ^= s0 >> 26;
+    rng->s1 = s1;
+    return rng->s0 + rng->s1;
+}
+
+static uint32_t
+jik_rand_next_u32_raw(jik_Rng *rng)
+{
+    return (uint32_t)jik_rand_next_u64_raw(rng);
+}
+
+jik_Rng *
+jik_rand_new(int32_t seed, JikRegion *a)
+{
+    jik_Rng *rng = (jik_Rng *)jik_region_alloc(a, sizeof(jik_Rng));
+
+    // Expand int32 seed to 128-bit state via splitmix64.
+    // Use uint64_t to avoid UB on shifts/mixes.
+    uint64_t x = (uint64_t)(uint32_t)seed;
+    rng->s0 = jik_rand_splitmix64(&x);
+    rng->s1 = jik_rand_splitmix64(&x);
+
+    // Disallow all-zero state
+    if (rng->s0 == 0 && rng->s1 == 0) {
+        rng->s1 = 0x9E3779B97F4A7C15ULL;
+    }
+    return rng;
+}
+
+jik_Rng *
+jik_rand_new_time(JikRegion *a)
+{
+    // Basic time seed (not security-grade). Mix in an address for extra variability.
+    uint64_t t = (uint64_t)time(NULL);
+    uint64_t mix = (uint64_t)(uintptr_t)&a;
+    uint64_t seed64 = t ^ (mix + 0x9E3779B97F4A7C15ULL + (t << 6) + (t >> 2));
+    int32_t seed32 = (int32_t)(seed64 & 0x7fffffffULL);
+    return jik_rand_new(seed32, a);
+}
+
+int32_t
+jik_rand_next_int(jik_Rng *rng)
+{
+    // 31-bit non-negative result
+    uint32_t x = jik_rand_next_u32_raw(rng);
+    return (int32_t)(x & 0x7fffffffU);
+}
+
+double
+jik_rand_next_double(jik_Rng *rng)
+{
+    // Generate a uniform double in [0,1) using 53 random bits (IEEE-754 mantissa).
+    uint64_t x = jik_rand_next_u64_raw(rng);
+    uint64_t mant = x >> 11;                 // top 53 bits
+    return (double)mant * (1.0 / 9007199254740992.0); // 2^53
+}
+
+int32_t
+jik_rand_range_int(jik_Rng *rng, int32_t lo, int32_t hi, JikError *e)
+{
+    if (hi <= lo) {
+        jik_error_set(e, 1, "rand::range_int: expected hi > lo");
+        return lo;
+    }
+
+    // span fits in uint32 because lo/hi are int32, and hi>lo.
+    uint32_t span = (uint32_t)((uint32_t)hi - (uint32_t)lo);
+
+    // Rejection sampling to avoid modulo bias.
+    uint32_t limit = (uint32_t)(0xFFFFFFFFu - (0xFFFFFFFFu % span));
+
+    uint32_t r;
+    do {
+        r = jik_rand_next_u32_raw(rng);
+    } while (r >= limit);
+
+    return (int32_t)(lo + (int32_t)(r % span));
+}
+
+C_END

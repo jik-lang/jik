@@ -1,0 +1,589 @@
+{
+  "char": {
+    "module": "char",
+    "doc": "Wrapper library for functions operating on characters.",
+    "symbols": [
+      {
+        "name": "isdigit",
+        "kind": "function",
+        "signature": "isdigit(ch: char) -> bool",
+        "doc": "Wrapper around isdigit.",
+        "throws": false
+      },
+      {
+        "name": "isalpha",
+        "kind": "function",
+        "signature": "isalpha(ch: char) -> bool",
+        "doc": "Wrapper around isalpha.",
+        "throws": false
+      },
+      {
+        "name": "isalnum",
+        "kind": "function",
+        "signature": "isalnum(ch: char) -> bool",
+        "doc": "Wrapper around isalnum.",
+        "throws": false
+      },
+      {
+        "name": "isspace",
+        "kind": "function",
+        "signature": "isspace(ch: char) -> bool",
+        "doc": "Wrapper around isspace.",
+        "throws": false
+      },
+      {
+        "name": "isupper",
+        "kind": "function",
+        "signature": "isupper(ch: char) -> bool",
+        "doc": "Wrapper around isupper.",
+        "throws": false
+      },
+      {
+        "name": "islower",
+        "kind": "function",
+        "signature": "islower(ch: char) -> bool",
+        "doc": "Wrapper around islower.",
+        "throws": false
+      },
+      {
+        "name": "isxdigit",
+        "kind": "function",
+        "signature": "isxdigit(ch: char) -> bool",
+        "doc": "Wrapper around isxdigit.",
+        "throws": false
+      },
+      {
+        "name": "toupper",
+        "kind": "function",
+        "signature": "toupper(ch: char) -> char",
+        "doc": "Wrapper around toupper.",
+        "throws": false
+      },
+      {
+        "name": "tolower",
+        "kind": "function",
+        "signature": "tolower(ch: char) -> char",
+        "doc": "Wrapper around tolower.",
+        "throws": false
+      }
+    ]
+  },
+  "io": {
+    "module": "io",
+    "doc": "File I/O utilities.\n\nThis module provides a minimal wrapper around basic C stdio file operations.\nSupported file modes are currently `\"r\"` for reading, `\"w\"` for writing, and `\"a\"` for appending.\nAll operations throw on error.",
+    "symbols": [
+      {
+        "name": "File",
+        "kind": "struct",
+        "signature": "File",
+        "doc": "Opaque file handle."
+      },
+      {
+        "name": "open",
+        "kind": "function",
+        "signature": "open(path: String, mode: String, region: Region) -> File",
+        "doc": "Open a file.\n\nSupported modes are `\"r\"` (read), `\"w\"` (write), and `\"a\"` (append).",
+        "throws": true
+      },
+      {
+        "name": "close",
+        "kind": "function",
+        "signature": "close(file: File) -> void",
+        "doc": "Close an open file.",
+        "throws": true
+      },
+      {
+        "name": "read",
+        "kind": "function",
+        "signature": "read(file: File, region: Region) -> String",
+        "doc": "Read the full contents of a file.\n\nThe file must have been opened in read mode.",
+        "throws": true
+      },
+      {
+        "name": "write",
+        "kind": "function",
+        "signature": "write(file: File, text: String) -> void",
+        "doc": "Write a string to a file.\n\nThe file must have been opened in write mode.",
+        "throws": true
+      },
+      {
+        "name": "read_file",
+        "kind": "function",
+        "signature": "read_file(path: String, region: Region) -> String",
+        "doc": "Read an entire file by path.",
+        "throws": true
+      },
+      {
+        "name": "write_file",
+        "kind": "function",
+        "signature": "write_file(path: String, text: String, region: Region) -> void",
+        "doc": "Write a string to a file by path, truncating existing contents.",
+        "throws": true
+      },
+      {
+        "name": "remove",
+        "kind": "function",
+        "signature": "remove(path: String) -> void",
+        "doc": "Remove a file from the filesystem.",
+        "throws": true
+      }
+    ]
+  },
+  "math": {
+    "module": "math",
+    "doc": "Minimal scalar math utilities.\n\nThis module is a thin wrapper over a small subset of C `<math.h>`.\nTrigonometric functions use radians.\n\nNotes:\n- Floating-point behavior follows the platform C math library (NaN/Inf propagation).\n- `is_nan` / `is_finite` return `int` (0 or 1) to avoid assuming a specific `bool` ABI.",
+    "symbols": [
+      {
+        "name": "PI",
+        "kind": "constant",
+        "signature": "PI",
+        "doc": "π (pi)."
+      },
+      {
+        "name": "E",
+        "kind": "constant",
+        "signature": "E",
+        "doc": "Euler's number e."
+      },
+      {
+        "name": "abs",
+        "kind": "function",
+        "signature": "abs(x: double) -> double",
+        "doc": "Compute the absolute value.",
+        "throws": false
+      },
+      {
+        "name": "approx_eq",
+        "kind": "function",
+        "signature": "approx_eq(a: double, b: double, eps: double) -> bool",
+        "doc": "Check whether two values are equal within a tolerance.\n\nReturns true if `abs(a - b) <= eps`.",
+        "throws": false
+      },
+      {
+        "name": "min",
+        "kind": "function",
+        "signature": "min(a: double, b: double) -> double",
+        "doc": "Return the smaller of two values.",
+        "throws": false
+      },
+      {
+        "name": "max",
+        "kind": "function",
+        "signature": "max(a: double, b: double) -> double",
+        "doc": "Return the larger of two values.",
+        "throws": false
+      },
+      {
+        "name": "sqrt",
+        "kind": "function",
+        "signature": "sqrt(x: double) -> double",
+        "doc": "Compute the square root.",
+        "throws": false
+      },
+      {
+        "name": "sin",
+        "kind": "function",
+        "signature": "sin(x: double) -> double",
+        "doc": "Compute the sine of an angle in radians.",
+        "throws": false
+      },
+      {
+        "name": "cos",
+        "kind": "function",
+        "signature": "cos(x: double) -> double",
+        "doc": "Compute the cosine of an angle in radians.",
+        "throws": false
+      },
+      {
+        "name": "tan",
+        "kind": "function",
+        "signature": "tan(x: double) -> double",
+        "doc": "Compute the tangent of an angle in radians.",
+        "throws": false
+      },
+      {
+        "name": "atan2",
+        "kind": "function",
+        "signature": "atan2(y: double, x: double) -> double",
+        "doc": "Compute the arctangent of `y/x` using the signs of `y` and `x`.\n\nThe result is in radians.",
+        "throws": false
+      },
+      {
+        "name": "floor",
+        "kind": "function",
+        "signature": "floor(x: double) -> double",
+        "doc": "Round down to the next integer value.",
+        "throws": false
+      },
+      {
+        "name": "ceil",
+        "kind": "function",
+        "signature": "ceil(x: double) -> double",
+        "doc": "Round up to the next integer value.",
+        "throws": false
+      },
+      {
+        "name": "round",
+        "kind": "function",
+        "signature": "round(x: double) -> double",
+        "doc": "Round to the nearest integer value.\n\nHalfway cases follow the platform C math library.",
+        "throws": false
+      },
+      {
+        "name": "pow",
+        "kind": "function",
+        "signature": "pow(x: double, y: double) -> double",
+        "doc": "Raise a value to a power.",
+        "throws": false
+      },
+      {
+        "name": "log",
+        "kind": "function",
+        "signature": "log(x: double) -> double",
+        "doc": "Compute the natural logarithm.",
+        "throws": false
+      },
+      {
+        "name": "exp",
+        "kind": "function",
+        "signature": "exp(x: double) -> double",
+        "doc": "Compute the natural exponential.",
+        "throws": false
+      },
+      {
+        "name": "fmod",
+        "kind": "function",
+        "signature": "fmod(x: double, y: double) -> double",
+        "doc": "Compute the floating-point remainder (C `fmod`).",
+        "throws": false
+      },
+      {
+        "name": "is_nan",
+        "kind": "function",
+        "signature": "is_nan(x: double) -> int",
+        "doc": "Test whether the value is NaN.",
+        "throws": false
+      },
+      {
+        "name": "is_finite",
+        "kind": "function",
+        "signature": "is_finite(x: double) -> int",
+        "doc": "Test whether the value is finite.",
+        "throws": false
+      },
+      {
+        "name": "is_inf",
+        "kind": "function",
+        "signature": "is_inf(x: double) -> int",
+        "doc": "Test whether the value is positive or negative infinity.",
+        "throws": false
+      }
+    ]
+  },
+  "rand": {
+    "module": "rand",
+    "doc": "Pseudo-random number generation.",
+    "symbols": [
+      {
+        "name": "Rng",
+        "kind": "struct",
+        "signature": "Rng",
+        "doc": "Opaque random number generator state."
+      },
+      {
+        "name": "new",
+        "kind": "function",
+        "signature": "new(seed: int, region: Region) -> Rng",
+        "doc": "Create a new RNG with a deterministic seed.",
+        "throws": false
+      },
+      {
+        "name": "new_time",
+        "kind": "function",
+        "signature": "new_time(region: Region) -> Rng",
+        "doc": "Create a new RNG seeded from the current time.",
+        "throws": false
+      },
+      {
+        "name": "next_int",
+        "kind": "function",
+        "signature": "next_int(rng: Rng) -> int",
+        "doc": "Generate a non-negative random integer.",
+        "throws": false
+      },
+      {
+        "name": "next_double",
+        "kind": "function",
+        "signature": "next_double(rng: Rng) -> double",
+        "doc": "Generate a random floating-point number.",
+        "throws": false
+      },
+      {
+        "name": "range_int",
+        "kind": "function",
+        "signature": "range_int(rng: Rng, lo: int, hi: int) -> int",
+        "doc": "Generate a random integer in a half-open interval.",
+        "throws": true
+      }
+    ]
+  },
+  "std": {
+    "module": "std",
+    "doc": "Standard utility functions.",
+    "symbols": [
+      {
+        "name": "panic",
+        "kind": "function",
+        "signature": "panic(msg: String) -> void",
+        "doc": "Terminate the program with an error message.",
+        "throws": false
+      },
+      {
+        "name": "input",
+        "kind": "function",
+        "signature": "input(region: Region) -> String",
+        "doc": "Read a line of input from standard input.",
+        "throws": false
+      }
+    ]
+  },
+  "strbuf": {
+    "module": "strbuf",
+    "doc": "Growable string buffer.\n\n`StrBuf` stores a NUL-terminated byte buffer in an region. Growth allocates a\nnew buffer in the same region and copies existing content.\n\nNotes:\n- This is a byte buffer; it does not enforce UTF-8 boundaries.\n- All allocations are performed in the provided `Region`.",
+    "symbols": [
+      {
+        "name": "StrBuf",
+        "kind": "struct",
+        "signature": "StrBuf",
+        "doc": "Opaque string buffer allocated in a `Region`."
+      },
+      {
+        "name": "new",
+        "kind": "function",
+        "signature": "new(text: String, region: Region) -> StrBuf",
+        "doc": "Create a new buffer from initial content.",
+        "throws": false
+      },
+      {
+        "name": "append",
+        "kind": "function",
+        "signature": "append(buf: StrBuf, text: String) -> void",
+        "doc": "Append a string to the end of the buffer.",
+        "throws": false
+      },
+      {
+        "name": "append_char",
+        "kind": "function",
+        "signature": "append_char(buf: StrBuf, ch: char) -> void",
+        "doc": "Append a single character to the end of the buffer.",
+        "throws": false
+      },
+      {
+        "name": "pop",
+        "kind": "function",
+        "signature": "pop(buf: StrBuf) -> char",
+        "doc": "Pop a character from the end of the buffer.",
+        "throws": false
+      },
+      {
+        "name": "len",
+        "kind": "function",
+        "signature": "len(buf: StrBuf) -> int",
+        "doc": "Get the length of the buffer (in characters).",
+        "throws": false
+      },
+      {
+        "name": "clear",
+        "kind": "function",
+        "signature": "clear(buf: StrBuf) -> void",
+        "doc": "Clears the buffer.\n\nDoes not deallocate or free anything, just resets the buffer pointer.",
+        "throws": false
+      },
+      {
+        "name": "print",
+        "kind": "function",
+        "signature": "print(buf: StrBuf) -> void",
+        "doc": "Prints the buffer.",
+        "throws": false
+      },
+      {
+        "name": "to_string",
+        "kind": "function",
+        "signature": "to_string(buf: StrBuf, region: Region) -> String",
+        "doc": "Converts the buffer contents to a String.",
+        "throws": false
+      }
+    ]
+  },
+  "string": {
+    "module": "string",
+    "doc": "String utilities.",
+    "symbols": [
+      {
+        "name": "slice",
+        "kind": "function",
+        "signature": "slice(s: String, from: int, to: int, region: Region) -> String",
+        "doc": "Return a substring of `s` from index `start` (inclusive) to `end` (exclusive).",
+        "throws": true
+      },
+      {
+        "name": "to_int",
+        "kind": "function",
+        "signature": "to_int(s: String) -> int",
+        "doc": "Convert a string to an integer.",
+        "throws": true
+      },
+      {
+        "name": "to_double",
+        "kind": "function",
+        "signature": "to_double(s: String) -> double",
+        "doc": "Convert a string to a double.",
+        "throws": true
+      },
+      {
+        "name": "concat",
+        "kind": "function",
+        "signature": "concat(left: String, right: String, region: Region) -> String",
+        "doc": "Concatenate two strings.",
+        "throws": false
+      },
+      {
+        "name": "replace",
+        "kind": "function",
+        "signature": "replace(s: String, needle: String, repl: String, region: Region) -> String",
+        "doc": "Replace all occurrences of `needle` in `s` with `repl`.\n\nIf `needle` is empty, the function returns a copy of `s`.",
+        "throws": false
+      },
+      {
+        "name": "starts_with",
+        "kind": "function",
+        "signature": "starts_with(s: String, prefix: String) -> bool",
+        "doc": "Return whether `s` starts with `prefix`.",
+        "throws": false
+      },
+      {
+        "name": "ends_with",
+        "kind": "function",
+        "signature": "ends_with(s: String, suffix: String) -> bool",
+        "doc": "Return whether `s` ends with `suffix`.",
+        "throws": false
+      },
+      {
+        "name": "trim",
+        "kind": "function",
+        "signature": "trim(s: String, region: Region) -> String",
+        "doc": "Return a copy of `s` with leading and trailing whitespace removed.\n\nWhitespace is classified using `char::isspace`.",
+        "throws": false
+      },
+      {
+        "name": "find",
+        "kind": "function",
+        "signature": "find(s: String, needle: String) -> int",
+        "doc": "Find the first occurrence of `needle` in `s`.\n\nReturns the start index of the first match, or `-1` if no match exists.",
+        "throws": false
+      },
+      {
+        "name": "split",
+        "kind": "function",
+        "signature": "split(s: String, delim: String, r: Region) -> Vec[String]",
+        "doc": "Split a string by a delimiter.",
+        "throws": false
+      },
+      {
+        "name": "join",
+        "kind": "function",
+        "signature": "join(parts: Vec[String], delim: String, r: Region) -> String",
+        "doc": "Join strings from `parts` with `delim` inserted between adjacent elements.\n\nIf `parts` is empty, the function returns an empty string.",
+        "throws": false
+      }
+    ]
+  },
+  "sys": {
+    "module": "sys",
+    "doc": "System utilities.",
+    "symbols": [
+      {
+        "name": "exit",
+        "kind": "function",
+        "signature": "exit(code: int) -> void",
+        "doc": "Terminate the process with a status code.",
+        "throws": false
+      },
+      {
+        "name": "system",
+        "kind": "function",
+        "signature": "system(cmd: String) -> int",
+        "doc": "Execute a command using the host system shell.",
+        "throws": false
+      },
+      {
+        "name": "hasenv_raw",
+        "kind": "function",
+        "signature": "hasenv_raw(name: String) -> bool",
+        "doc": "Check whether an environment variable exists.",
+        "throws": false
+      },
+      {
+        "name": "getenv_raw",
+        "kind": "function",
+        "signature": "getenv_raw(name: String, region: Region) -> String",
+        "doc": "Get a present environment variable value.",
+        "throws": false
+      },
+      {
+        "name": "getenv",
+        "kind": "function",
+        "signature": "getenv(name: String, region: Region) -> Option[String]",
+        "doc": "Get an environment variable value.",
+        "throws": false
+      },
+      {
+        "name": "cwd",
+        "kind": "function",
+        "signature": "cwd(region: Region) -> String",
+        "doc": "Return the current working directory.",
+        "throws": false
+      },
+      {
+        "name": "sleep",
+        "kind": "function",
+        "signature": "sleep(ms: int) -> void",
+        "doc": "Sleep for a number of milliseconds (approximate).",
+        "throws": false
+      },
+      {
+        "name": "platform",
+        "kind": "function",
+        "signature": "platform(region: Region) -> String",
+        "doc": "Return a short platform identifier string.",
+        "throws": false
+      }
+    ]
+  },
+  "testing": {
+    "module": "testing",
+    "doc": "Testing utilities.",
+    "symbols": [
+      {
+        "name": "TestSuite",
+        "kind": "struct",
+        "signature": "TestSuite",
+        "doc": "Test suite state."
+      },
+      {
+        "name": "suite_assert",
+        "kind": "function",
+        "signature": "suite_assert(suite: TestSuite, cond: bool, s: Site) -> void",
+        "doc": "Test suite assertion function.",
+        "throws": false
+      },
+      {
+        "name": "suite_finish",
+        "kind": "function",
+        "signature": "suite_finish(suite: TestSuite) -> void",
+        "doc": "Print suite summary and exit non-zero if any test failed.",
+        "throws": false
+      }
+    ]
+  }
+}

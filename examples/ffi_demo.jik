@@ -1,0 +1,20 @@
+// Example: Foreign function interface (C interop)
+
+@embed{C_END}
+
+int32_t
+impl_adder(int32_t x, int32_t y)
+{
+    return x + y;
+}
+
+C_END
+
+extern func impl_adder as adder(x: int, y: int) -> int
+extern func toupper as toupper(ch: char) -> char
+
+func main():
+    println("adder(0, 1) = ", adder(0, 1))
+    println("adder(5, -3) = ", adder(5, -3))
+    println(toupper('a'))
+end

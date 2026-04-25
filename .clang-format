@@ -1,0 +1,23 @@
+BasedOnStyle: LLVM
+UseTab: Never
+IndentWidth: 4
+ColumnLimit: 100
+AlwaysBreakAfterReturnType: All
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignConsecutiveMacros: true
+AlignEscapedNewlines: Right
+AlignOperands: true
+AlignTrailingComments: true
+AllowAllParametersOfDeclarationOnNextLine: false
+BinPackParameters: false
+BinPackArguments: false
+DerivePointerAlignment: false
+PointerAlignment: Right
+AlwaysBreakAfterDefinitionReturnType: All
+BreakBeforeBraces: Custom
+
+BraceWrapping:
+  AfterFunction: true
+  BeforeElse: true

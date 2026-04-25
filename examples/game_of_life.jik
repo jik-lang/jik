@@ -1,0 +1,129 @@
+// Example: Conway's Game of Life in the terminal.
+
+// Note (terminal rendering):
+// This program uses ANSI escape sequences (cursor home / hide cursor) to redraw in-place and avoid
+// calling `cls`/`clear`. This works in most Unix-like terminals and in ANSI-capable Windows terminals
+// (e.g., Windows Terminal). If your terminal prints the escape codes literally, it does not support
+// ANSI sequences.
+
+use "jik/sys" as sys
+use "jik/rand" as rand
+use "jik/string" as string
+
+
+W := 80
+H := 40
+STEPS := 400
+DELAY_MS := 60
+DENSITY_PERCENT := 15    // initial probability of life: 0 - 100
+
+
+func clear_screen():
+    p := sys::platform(_)
+    if p == "windows":
+        sys::system("cls")
+    else:
+        sys::system("clear")
+    end
+end
+
+
+func wrap(i: int, max: int) -> int:
+    if i < 0:
+        return i + max
+    elif i >= max:
+        return i - max
+    else:
+        return i
+    end
+end
+
+
+func count_neighbors(g: Vec[Vec[bool]], x: int, y: int, w: int, h: int) -> int:
+    c := 0
+    for dy = -1, 2:
+        for dx = -1, 2:
+            if dx == 0 and dy == 0:
+                continue
+            end
+
+            nx := wrap(x + dx, w)
+            ny := wrap(y + dy, h)
+
+            if g[ny][nx]:
+                c += 1
+            end
+        end
+    end
+    return c
+end
+
+
+func render(g: Vec[Vec[bool]], step: int, w: int, h: int):
+    print("\x1b[HGame of Life (step ", step, ")\n")
+    
+    for y = 0, h:
+        row := g[y]
+        line := ""
+        for x = 0, w:
+            if row[x]:
+                line = string::concat(line, "#", _)
+            else:
+                line = string::concat(line, ".", _)
+            end
+        end
+        print(line, "\n")
+    end   
+    
+    print("\x1b[?25h")
+end
+
+
+func randomize(g: Vec[Vec[bool]], rng: rand::Rng, w: int, h: int):
+    for y = 0, h:
+        for x = 0, w:
+            r := rand::next_int(rng) % 100
+            g[y][x] = (r < DENSITY_PERCENT)
+        end
+    end
+end
+
+
+func step_life(curr: Vec[Vec[bool]], next: Vec[Vec[bool]], w: int, h: int):
+    for y = 0, h:
+        for x = 0, w:
+            n := count_neighbors(curr, x, y, w, h)
+            alive := curr[y][x]
+
+            if alive:
+                next[y][x] = (n == 2) or (n == 3)
+            else:
+                next[y][x] = (n == 3)
+            end
+        end
+    end
+end
+
+
+func main():
+    clear_screen()
+    rng := rand::new_time(_)
+
+    curr := [H of [W of false]]
+    next := [H of [W of false]]
+
+    randomize(curr, rng, W, H)
+
+    step := 0
+    while step < STEPS:
+        render(curr, step, W, H)
+        step_life(curr, next, W, H)
+
+        tmp := curr
+        curr = next
+        next = tmp
+
+        sys::sleep(DELAY_MS)
+        step += 1
+    end
+end

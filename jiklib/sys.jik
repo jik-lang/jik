@@ -1,0 +1,170 @@
+//! System utilities.
+
+// -------------------------------------------------------------
+//      API
+// -------------------------------------------------------------
+
+/// Terminate the process with a status code.
+///
+/// @param code Exit status.
+extern func jik_impl_sys_exit as
+    exit(code: int) -> void
+
+/// Execute a command using the host system shell.
+///
+/// @param cmd Command string.
+/// @returns Command exit code (platform-dependent).
+extern func jik_impl_sys_system as
+    system(cmd: String) -> int
+
+/// Check whether an environment variable exists.
+///
+/// @param name Environment variable name.
+/// @returns `true` if present, otherwise `false`.
+extern func jik_impl_sys_hasenv as
+    hasenv_raw(name: String) -> bool
+
+/// Get a present environment variable value.
+///
+/// @param name Environment variable name.
+/// @param region Allocation region for the returned string.
+/// @returns Value string, or empty string if missing.
+extern func jik_impl_sys_getenv_raw as
+    getenv_raw(name: String, region: Region) -> String
+
+/// Get an environment variable value.
+///
+/// @param name Environment variable name.
+/// @returns Value as `Some[String]`, or `None` if missing.
+func getenv(name: String, region: Region) -> Option[String]:
+    if not hasenv_raw(name):
+        return None[region]
+    end
+    return Some{getenv_raw(name, region)}[region]
+end
+
+/// Return the current working directory.
+///
+/// @param region Allocation region for the returned string.
+/// @returns Current working directory as string, or empty string on failure.
+extern func jik_impl_sys_cwd as
+    cwd(region: Region) -> String
+
+/// Sleep for a number of milliseconds (approximate).
+///
+/// @param ms Milliseconds.
+extern func jik_impl_sys_sleep as
+    sleep(ms: int) -> void
+
+/// Return a short platform identifier string.
+///
+/// @param region Allocation region for the returned string.
+/// @returns Platform name as string
+extern func jik_impl_sys_platform as
+    platform(region: Region) -> String
+
+
+// -------------------------------------------------------------
+//      C Implementation
+// -------------------------------------------------------------
+
+@embed{C_END}
+
+#ifdef _WIN32
+#include <windows.h>
+#include <direct.h>
+#else
+#include <time.h>
+#include <unistd.h>
+#endif
+
+void
+jik_impl_sys_exit(int code)
+{
+    exit(code);
+}
+
+
+int
+jik_impl_sys_system(JikString *s)
+{
+    return system(s ? s->data : "");
+}
+
+bool
+jik_impl_sys_hasenv(JikString *name)
+{
+    const char *val = getenv(name ? name->data : "");
+    return val != NULL;
+}
+
+JikString *
+jik_impl_sys_getenv_raw(JikString *name, JikRegion *r)
+{
+    const char *val = getenv(name ? name->data : "");
+    if (!val) {
+        return jik_string_new("", r);
+    }
+    return jik_string_new((char *)val, r);
+}
+
+JikString *
+jik_impl_sys_cwd(JikRegion *r)
+{
+#ifdef _WIN32
+    DWORD n = GetCurrentDirectoryA(0, NULL);
+    if (n == 0) {
+        return jik_string_new("", r);
+    }
+    char *buf = jik_region_alloc(r, (size_t)n);
+    if (GetCurrentDirectoryA(n, buf) == 0) {
+        return jik_string_new("", r);
+    }
+    return jik_string_new(buf, r);
+#else
+    long n = pathconf(".", _PC_PATH_MAX);
+    if (n <= 0) {
+        n = 4096;
+    }
+    char *buf = jik_region_alloc(r, (size_t)n);
+    if (!getcwd(buf, (size_t)n)) {
+        return jik_string_new("", r);
+    }
+    return jik_string_new(buf, r);
+#endif
+}
+
+void
+jik_impl_sys_sleep(int ms)
+{
+    if (ms <= 0) {
+        return;
+    }
+#ifdef _WIN32
+    Sleep(ms);
+#else
+    struct timespec ts;
+    ts.tv_sec = ms / 1000;
+    ts.tv_nsec = (long)(ms % 1000) * 1000000L;
+    nanosleep(&ts, NULL);
+#endif
+}
+
+JikString *
+jik_impl_sys_platform(JikRegion *a)
+{
+#if defined(_WIN32) || defined(_WIN64)
+    return jik_string_new("windows", a);
+#elif defined(__APPLE__) && defined(__MACH__)
+    return jik_string_new("macos", a);
+#elif defined(__linux__)
+    return jik_string_new("linux", a);
+#elif defined(__FreeBSD__)
+    return jik_string_new("freebsd", a);
+#else
+    return jik_string_new("unknown", a);
+#endif
+}
+
+
+C_END

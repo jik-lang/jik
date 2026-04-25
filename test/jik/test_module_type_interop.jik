@@ -1,0 +1,67 @@
+use "jik/testing" as test
+
+use "test/jik/support/module_type_base" as base
+use "test/jik/support/module_type_records" as records
+use "test/jik/support/module_type_logic" as logic
+
+
+func test_cross_module_struct_fields(ts):
+    rec := logic::make_record(_)
+
+    test::suite_assert(ts, rec.point.x == 13, site())
+    test::suite_assert(ts, rec.point.y == 14, site())
+    test::suite_assert(ts, rec.backup is Some, site())
+    test::suite_assert(ts, rec.backup?.x == 5, site())
+    test::suite_assert(ts, rec.backup?.y == 6, site())
+    test::suite_assert(ts, len(rec.trail) == 2, site())
+    test::suite_assert(ts, rec.trail[0].x == 1, site())
+    test::suite_assert(ts, rec.trail[1].y == 4, site())
+    test::suite_assert(ts, rec.by_name["home"] is Some, site())
+    test::suite_assert(ts, rec.by_name["home"]?.x == 7, site())
+    test::suite_assert(ts, rec.by_name["work"]?.y == 10, site())
+    test::suite_assert(ts, logic::payload_score(rec.payload) == 23, site())
+end
+
+func test_cross_module_variant_payloads(ts):
+    rec_view := logic::make_view(0, _)
+    pts_view := logic::make_view(1, _)
+    idx_view := logic::make_view(2, _)
+    maybe_view := logic::make_view(3, _)
+    payload_view := logic::make_view(4, _)
+
+    test::suite_assert(ts, rec_view is records::RecordView.RECORD, site())
+    test::suite_assert(ts, pts_view is records::RecordView.POINTS, site())
+    test::suite_assert(ts, idx_view is records::RecordView.INDEX, site())
+    test::suite_assert(ts, maybe_view is records::RecordView.MAYBE_POINT, site())
+    test::suite_assert(ts, payload_view is records::RecordView.PAYLOAD, site())
+
+    test::suite_assert(ts, logic::view_score(rec_view) == 27, site())
+    test::suite_assert(ts, logic::view_score(pts_view) == 7, site())
+    test::suite_assert(ts, logic::view_score(idx_view) == 13, site())
+    test::suite_assert(ts, logic::view_score(maybe_view) == 17, site())
+    test::suite_assert(ts, logic::view_score(payload_view) == 2, site())
+end
+
+func test_cross_module_type_construction(ts):
+    label := base::Payload.LABEL{"done"}
+    point := base::Point{x=21, y=34}
+    rec := records::Record{
+        point=point,
+        backup=None,
+        trail=[point],
+        by_name={"main": point},
+        payload=label
+    }
+
+    test::suite_assert(ts, rec.payload is base::Payload.LABEL, site())
+    test::suite_assert(ts, rec.payload[base::Payload.LABEL] == "done", site())
+    test::suite_assert(ts, rec.backup is None, site())
+    test::suite_assert(ts, rec.trail[0].y == 34, site())
+    test::suite_assert(ts, rec.by_name["main"]?.x == 21, site())
+end
+
+func run_tests(ts):
+    test_cross_module_struct_fields(ts)
+    test_cross_module_variant_payloads(ts)
+    test_cross_module_type_construction(ts)
+end

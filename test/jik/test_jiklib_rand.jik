@@ -1,0 +1,72 @@
+use "jik/testing" as test
+use "jik/rand"
+
+
+func test_determinism_int(ts):
+    r1 := rand::new(12345, _)
+    r2 := rand::new(12345, _)
+
+    failed := false
+    for i = 0, 1000:
+        if rand::next_int(r1) != rand::next_int(r2):
+            failed = true
+            break
+        end
+    end
+    return failed
+end
+
+
+func test_determinism_double(s):
+    r1 := rand::new(-7, _)
+    r2 := rand::new(-7, _)
+
+    failed := false
+    for i = 0, 1000:
+        if rand::next_double(r1) != rand::next_double(r2):
+            failed = true
+            break
+        end
+    end
+    return failed
+end
+
+
+func test_next_double_range(s):
+    r := rand::new(1, _)
+    failed := false
+    for i = 0, 10000:
+        x := rand::next_double(r)
+        if x < 0.0 or x >= 1.0:
+            failed = true
+            break
+        end
+    end
+    return failed
+end
+
+
+func test_range_int_bounds(s):
+    r := rand::new(999, _)
+
+    lo := -10
+    hi := 17
+
+    failed := false
+    for i = 0, 50000:
+        try x := rand::range_int(r, lo, hi):
+        except:
+            failed = true
+            break
+        end
+    end
+    return failed
+end
+
+
+func run_tests(ts):    
+    test::suite_assert(ts, not test_determinism_int(ts), site())
+    test::suite_assert(ts, not test_determinism_double(ts), site())
+    test::suite_assert(ts, not test_next_double_range(ts), site())
+    test::suite_assert(ts, not test_range_int_bounds(ts), site())
+end

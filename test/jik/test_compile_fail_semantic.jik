@@ -1,0 +1,144 @@
+use "jik/testing" as test
+use "test/jik/utils"
+
+func test_compile_fail_01(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    x: int
+end
+
+func main():
+    a := Foo
+end
+""",
+        "struct name cannot be used as a value")
+end
+
+func test_compile_fail_02(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Fruit:
+    ANANAS
+    BANANA
+end
+
+func main():
+    a := Fruit
+end
+""",
+        "enum name cannot be used as a value")
+end
+
+func test_compile_fail_03(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    INT: int
+end
+
+func main():
+    a := Value
+end
+""",
+        "variant name cannot be used as a value")
+end
+
+func test_compile_fail_04(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    INT: int
+end
+
+func main():
+    a := Value.INT
+end
+""",
+        "variant tag cannot be used as a value")
+end
+
+func test_compile_fail_05(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    items: Vec[Foo]
+end
+
+func main():
+end
+""",
+        "illegal recursive struct definition")
+end
+
+func test_compile_fail_06(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    INT: int
+    TEXT: String
+end
+
+func main():
+    v := Value.INT{1}
+    match v:
+        case Value.INT{x}:
+            print(x)
+    end
+end
+""",
+        "match doesn't exhaust all variant tags")
+end
+
+func test_compile_fail_07(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func jik_bad():
+end
+
+func main():
+end
+""",
+        "uses reserved prefix")
+end
+
+func test_compile_fail_08(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    jik_x := 1
+end
+""",
+        "uses reserved prefix")
+end
+
+func test_compile_fail_09(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    jik_field: int
+end
+
+func main():
+end
+""",
+        "uses reserved prefix")
+end
+
+func run_tests(ts):
+    test_compile_fail_01(ts)
+    test_compile_fail_02(ts)
+    test_compile_fail_03(ts)
+    test_compile_fail_04(ts)
+    test_compile_fail_05(ts)
+    test_compile_fail_06(ts)
+    test_compile_fail_07(ts)
+    test_compile_fail_08(ts)
+    test_compile_fail_09(ts)
+end
+
+func main():
+    ts := test::TestSuite{}
+    run_tests(ts)
+    print(ts)
+end

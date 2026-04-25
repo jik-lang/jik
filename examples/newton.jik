@@ -1,0 +1,74 @@
+use "jik/math" as math
+
+
+struct NewtonResult:
+    root: double
+    steps: int
+    converged: bool
+    xs: Vec[double]
+end
+
+
+func f(x: double) -> double:
+    // We want f(x) = 0  <=>  cos(x) - x = 0  <=>  cos(x) = x
+    return math::cos(x) - x
+end
+
+
+func df(x: double) -> double:
+    // f'(x) = -sin(x) - 1
+    return -math::sin(x) - 1.0
+end
+
+
+func newton_cos_minus_x(x0: double, tol: double, max_steps: int, r: Region) -> NewtonResult:
+    xs := [0 of 0.0][r]
+    x := x0
+    push(xs, x)
+
+    converged := false
+    step := 0
+    while step < max_steps:
+        fx := f(x)
+        if math::abs(fx) <= tol:
+            converged = true
+            break
+        end
+
+        dfx := df(x)
+        if math::abs(dfx) <= 1e-14:
+            // Derivative too small: would amplify error or divide by ~0.
+            break
+        end
+
+        x = x - fx / dfx
+        push(xs, x)
+        step = step + 1
+    end
+
+    return NewtonResult{
+        root = x,
+        steps = len(xs) - 1,
+        converged = converged,
+        xs = xs
+    }[r]
+end
+
+
+func main():
+    res := newton_cos_minus_x(1.0, 1e-12, 40, _)
+
+    print("converged: ", res.converged, "\n")
+    print("steps:     ", res.steps, "\n")
+    print("root:      ", res.root, "\n")
+    print("f(root):   ", f(res.root), "\n")
+    print("\n")
+    print("iteration history:", "\n")
+
+    i := 0
+    while i < len(res.xs):
+        x := res.xs[i]
+        print("  ", i, ": x = ", x, ", f(x) = ", f(x), "\n")
+        i = i + 1
+    end
+end

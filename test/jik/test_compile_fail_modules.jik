@@ -1,0 +1,25 @@
+use "jik/testing" as test
+use "test/jik/utils"
+
+func test_compile_fail_modules_01(ts):
+    utils::assert_compile_fail_file(ts,
+        "test/jik/input/modules/import_cycle_no_leaves/main.jik",
+        "module import cycle detected")
+end
+
+func test_compile_fail_modules_02(ts):
+    utils::assert_compile_fail_file(ts,
+        "test/jik/input/modules/import_cycle_with_leaf/main.jik",
+        "module import cycle detected")
+end
+
+func run_tests(ts):
+    test_compile_fail_modules_01(ts)
+    test_compile_fail_modules_02(ts)
+end
+
+func main():
+    ts := test::TestSuite{}
+    run_tests(ts)
+    print(ts)
+end

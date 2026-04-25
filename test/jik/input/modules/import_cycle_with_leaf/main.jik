@@ -1,0 +1,6 @@
+use "test/jik/input/modules/import_cycle_with_leaf/a"
+use "test/jik/input/modules/import_cycle_with_leaf/c"
+
+func main():
+    c::ok()
+end

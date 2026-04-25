@@ -1,0 +1,381 @@
+//! String utilities.
+//!
+//! `String` stores UTF-8 bytes, but the operations in this module are byte-based.
+//! Lengths, indices, and slices refer to byte offsets, not Unicode characters.
+
+use "jik/char" as char
+use "jik/strbuf"
+
+// -------------------------------------------------------------
+//      API
+// -------------------------------------------------------------
+
+/// Return a substring of `s` from index `start` (inclusive) to `end` (exclusive).
+///
+/// @param s Source string.
+/// @param from Start byte index (inclusive).
+/// @param to End byte index (exclusive).
+/// @param region Allocation region for the result.
+/// @returns A newly allocated substring.
+extern throws func jik_impl_string_slice as
+    slice(foreign s: String, from: int, to: int, region: Region) -> String
+
+/// Convert a string to an integer.
+///
+/// @param s Input string.
+/// @returns Parsed integer value.
+extern throws func jik_impl_string_to_int as
+    to_int(s: String) -> int
+
+/// Convert a string to a double.
+///
+/// @param s Input string.
+/// @returns Parsed double value.
+extern throws func jik_impl_string_to_double as
+    to_double(s: String) -> double
+
+/// Concatenate two strings.
+///
+/// @param left Left string.
+/// @param right Right string.
+/// @param region Allocation region for the result.
+/// @returns Concatenated string.
+extern func jik_impl_string_concat as
+    concat(foreign left: String, foreign right: String, region: Region) -> String
+
+/// Replace all occurrences of `needle` in `s` with `repl`.
+///
+/// If `needle` is empty, the function returns a copy of `s`.
+///
+/// @param s Source string.
+/// @param needle Substring to replace.
+/// @param repl Replacement substring.
+/// @param region Allocation region for the result.
+/// @returns A newly allocated string with all matches replaced.
+extern func jik_impl_string_replace as
+    replace(foreign s: String, foreign needle: String, foreign repl: String, region: Region) -> String
+
+/// Return whether `s` starts with `prefix`.
+///
+/// @param s Source string.
+/// @param prefix Prefix to check.
+/// @returns `true` if `s` starts with `prefix`, otherwise `false`.
+func starts_with(foreign s: String, foreign prefix: String) -> bool:
+    ns := len(s)
+    np := len(prefix)
+    if np > ns:
+        return false
+    end
+
+    i := 0
+    while i < np:
+        if s[i] != prefix[i]:
+            return false
+        end
+        i += 1
+    end
+    return true
+end
+
+/// Return whether `s` ends with `suffix`.
+///
+/// @param s Source string.
+/// @param suffix Suffix to check.
+/// @returns `true` if `s` ends with `suffix`, otherwise `false`.
+func ends_with(foreign s: String, foreign suffix: String) -> bool:
+    ns := len(s)
+    nf := len(suffix)
+    if nf > ns:
+        return false
+    end
+
+    start := ns - nf
+    i := 0
+    while i < nf:
+        if s[start + i] != suffix[i]:
+            return false
+        end
+        i += 1
+    end
+    return true
+end
+
+/// Return a copy of `s` with leading and trailing whitespace removed.
+///
+/// Whitespace is classified using `char::isspace`.
+///
+/// @param s Source string.
+/// @param region Allocation region for the result.
+/// @returns Trimmed string.
+func trim(foreign s: String, region: Region) -> String:
+    n := len(s)
+    start := 0
+    while start < n and char::isspace(s[start]):
+        start += 1
+    end
+
+    if start == n:
+        return must slice(s, 0, 0, region)
+    end
+
+    stop := n - 1
+    while stop >= start and char::isspace(s[stop]):
+        stop -= 1
+    end
+    return must slice(s, start, stop + 1, region)
+end
+
+/// Find the first occurrence of `needle` in `s`.
+///
+/// Returns the start byte index of the first match, or `-1` if no match exists.
+///
+/// @param s Source string.
+/// @param needle Substring to search for.
+/// @returns First match byte index or `-1`.
+func find(foreign s: String, foreign needle: String) -> int:
+    ns := len(s)
+    nn := len(needle)
+    if nn == 0:
+        return 0
+    end
+    if nn > ns:
+        return -1
+    end
+
+    i := 0
+    while i + nn <= ns:
+        matched := true
+        j := 0
+        while j < nn:
+            if s[i + j] != needle[j]:
+                matched = false
+                break
+            end
+            j = j + 1
+        end
+        if matched:
+            return i
+        end
+        i = i + 1
+    end
+    return -1
+end
+
+/// Split a string by a delimiter.
+///
+/// @param1 Input string.
+/// @param2 Delimiter string.
+/// @param3 Allocation region for output tokens and slices.
+/// @returns A vector of tokens.
+func split(foreign s: String, foreign delim: String, r: Region) -> Vec[String]:
+    ns := len(s)
+    nd := len(delim)
+    toks := [0 of ""][r]
+    if nd == 0:
+        push(toks, must slice(s, 0, ns, r))
+        return toks
+    end
+
+    start := 0
+    i := 0    
+    while i < ns:
+        if i + nd <= ns and s[i] == delim[0]:
+            matched := true
+            k := 1
+            while k < nd:
+                if s[i + k] != delim[k]:
+                    matched = false
+                    break
+                end
+                k = k + 1
+            end
+
+            if matched:
+                push(toks, must slice(s, start, i, r))
+                i = i + nd
+                start = i
+                continue
+            end
+        end
+        i = i + 1
+    end
+    push(toks, must slice(s, start, ns, r))
+    return toks
+end
+
+/// Join strings from `parts` with `delim` inserted between adjacent elements.
+///
+/// If `parts` is empty, the function returns an empty string.
+///
+/// @param1 Input string parts.
+/// @param2 Delimiter string.
+/// @param3 Allocation region for the result.
+/// @returns A newly allocated joined string.
+func join(foreign parts: Vec[String], foreign delim: String, r: Region) -> String:
+    sb := strbuf::new("", r)
+    first := true
+
+    for part in parts:
+        if first:
+            first = false
+        else:
+            strbuf::append(sb, delim)
+        end
+        strbuf::append(sb, part)
+    end
+
+    return strbuf::to_string(sb, r)
+end
+
+
+// -------------------------------------------------------------
+//      C Implementation
+// -------------------------------------------------------------
+
+@embed{C_END}
+
+JikString *
+jik_impl_string_slice(JikString *s, size_t lower, size_t upper, JikRegion *a, JikError *e)
+{
+    if (lower > upper || upper > s->size) {
+        jik_error_set(e, 1, "string::slice: invalid slice bounds");
+        return jik_string_new("", a);
+    }
+    size_t n = upper - lower;
+    char *from = jik_region_alloc(a, n + 1);
+    from[n] = '\0';
+    memcpy(from, s->data + lower, n);    
+    JikString *res = jik_string_new(from, a);
+    return res;
+}
+
+int
+jik_impl_string_to_int(JikString *s, JikError *e)
+{
+    char *str = s->data;
+    char *endptr;
+    long value;
+
+    while (isspace((unsigned char)*str)) {
+        str++;
+    }
+
+    value = strtol(str, &endptr, 10);
+
+    if (str == endptr) {
+        jik_error_set(e, 1, "string::to_int: no digits");
+        return 0;
+    }
+
+    // Check for extra characters after number (ignoring trailing whitespace)
+    while (isspace((unsigned char)*endptr)) {
+        endptr++;
+    }
+    if (*endptr != '\0') {
+        jik_error_set(e, 1, "string::to_int: non-digit characters found");
+        return 0;
+    }
+
+    // TODO: Check for overflow/underflow
+    return (int)value;
+}
+
+double
+jik_impl_string_to_double(JikString *s, JikError *e)
+{
+    char   *str = s->data;
+    char   *endptr;
+    double  value;
+
+    while (isspace((unsigned char)*str)) {
+        str++;
+    }
+
+    errno = 0;
+    value = strtod(str, &endptr);
+
+    if (str == endptr) {
+        jik_error_set(e, 1, "string::to_double: no digits");
+        return 0.0;
+    }
+
+    while (isspace((unsigned char)*endptr)) {
+        endptr++;
+    }
+    if (*endptr != '\0') {
+        jik_error_set(e, 1, "string::to_double: invalid trailing characters");
+        return 0.0;
+    }
+
+    if (errno == ERANGE) {
+        jik_error_set(e, 1, "string::to_double: value out of range");
+        return 0.0;
+    }
+
+    return value;
+}
+
+JikString *
+jik_impl_string_concat(JikString *s1, JikString *s2, JikRegion *a)
+{
+    size_t req_size = s1->size + s2->size;
+    char *from = jik_region_alloc(a, req_size + 1);
+    memcpy(from,       s1->data, s1->size);
+    memcpy(from + s1->size,  s2->data, s2->size);
+    from[req_size] = '\0';
+    return jik_string_new(from, a);
+}
+
+JikString *
+jik_impl_string_replace(JikString *s, JikString *needle, JikString *repl, JikRegion *a)
+{
+    if (needle->size == 0) {
+        return jik_string_new(s->data, a);
+    }
+
+    size_t matches = 0;
+    for (size_t i = 0; i + needle->size <= s->size;) {
+        if (memcmp(s->data + i, needle->data, needle->size) == 0) {
+            matches++;
+            i += needle->size;
+        }
+        else {
+            i++;
+        }
+    }
+
+    if (matches == 0) {
+        return jik_string_new(s->data, a);
+    }
+
+    size_t out_size = s->size;
+    if (repl->size >= needle->size) {
+        out_size += matches * (repl->size - needle->size);
+    }
+    else {
+        out_size -= matches * (needle->size - repl->size);
+    }
+    char *from = jik_region_alloc(a, out_size + 1);
+
+    size_t src_i = 0;
+    size_t dst_i = 0;
+    while (src_i < s->size) {
+        if (src_i + needle->size <= s->size &&
+            memcmp(s->data + src_i, needle->data, needle->size) == 0) {
+            memcpy(from + dst_i, repl->data, repl->size);
+            dst_i += repl->size;
+            src_i += needle->size;
+        }
+        else {
+            from[dst_i] = s->data[src_i];
+            dst_i++;
+            src_i++;
+        }
+    }
+
+    from[out_size] = '\0';
+    return jik_string_new(from, a);
+}
+
+
+C_END

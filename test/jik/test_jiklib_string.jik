@@ -1,0 +1,210 @@
+use "jik/testing" as test
+use "jik/string"
+
+
+func test_string(ts):
+    s1 := "foobarbaz"
+    test::suite_assert(ts, len(s1) == 9, site())
+    test::suite_assert(ts, s1 == "foobarbaz", site())
+    s2 := must string::slice(s1, 1, 5, _)
+    test::suite_assert(ts, len(s2) == 4, site())
+    test::suite_assert(ts, s2 == "ooba", site())
+    s3 := must string::slice(s1, 0, 0, _)
+    test::suite_assert(ts, len(s3) == 0, site())
+    test::suite_assert(ts, s3 == "", site())
+    s4 := must string::slice(s1, 0, len(s1), _)
+    test::suite_assert(ts, s4 == s1, site())
+end
+
+
+func test_string_split(ts):
+    s := "foo bar baz"
+    res := string::split(s, "", _)
+    test::suite_assert(ts, len(res) == 1, site())
+    test::suite_assert(ts, res[0] == "foo bar baz", site())
+
+    res = string::split(s, " ", _)
+    test::suite_assert(ts, len(res) == 3, site())
+    test::suite_assert(ts, res[0] == "foo", site())
+    test::suite_assert(ts, res[1] == "bar", site())
+    test::suite_assert(ts, res[2] == "baz", site())
+
+    res = string::split(s, "foo b", _)
+    test::suite_assert(ts, len(res) == 2, site())
+    test::suite_assert(ts, res[0] == "", site())
+    test::suite_assert(ts, res[1] == "ar baz", site())
+
+    res = string::split(s, "x", _)
+    test::suite_assert(ts, len(res) == 1, site())
+
+    res = string::split(",foo,bar,", ",", _)
+    test::suite_assert(ts, len(res) == 4, site())
+    test::suite_assert(ts, res[0] == "", site())
+    test::suite_assert(ts, res[1] == "foo", site())
+    test::suite_assert(ts, res[2] == "bar", site())
+    test::suite_assert(ts, res[3] == "", site())
+
+    res = string::split("aaaa", "aa", _)
+    test::suite_assert(ts, len(res) == 3, site())
+    test::suite_assert(ts, res[0] == "", site())
+    test::suite_assert(ts, res[1] == "", site())
+    test::suite_assert(ts, res[2] == "", site())
+end
+
+func test_string_join(ts):
+    parts := [0 of ""]
+    test::suite_assert(ts, string::join(parts, ", ", _) == "", site())
+
+    push(parts, "foo")
+    test::suite_assert(ts, string::join(parts, ", ", _) == "foo", site())
+
+    push(parts, "bar")
+    push(parts, "baz")
+    test::suite_assert(ts, string::join(parts, ", ", _) == "foo, bar, baz", site())
+    test::suite_assert(ts, string::join(parts, "", _) == "foobarbaz", site())
+    test::suite_assert(ts, string::join(parts, "::", _) == "foo::bar::baz", site())
+
+    parts2 := ["", "x", ""]
+    test::suite_assert(ts, string::join(parts2, ",", _) == ",x,", site())
+end
+
+func test_string_find(ts):
+    s := "foo bar baz"
+    test::suite_assert(ts, string::find(s, "foo") == 0, site())
+    test::suite_assert(ts, string::find(s, "bar") == 4, site())
+    test::suite_assert(ts, string::find(s, "baz") == 8, site())
+    test::suite_assert(ts, string::find(s, "o b") == 2, site())
+    test::suite_assert(ts, string::find(s, "") == 0, site())
+    test::suite_assert(ts, string::find(s, "xxx") == -1, site())
+    test::suite_assert(ts, string::find(s, "foo bar baz!") == -1, site())
+end
+
+func test_string_starts_with(ts):
+    s := "foo bar baz"
+    test::suite_assert(ts, string::starts_with(s, "") == true, site())
+    test::suite_assert(ts, string::starts_with(s, "foo") == true, site())
+    test::suite_assert(ts, string::starts_with(s, "foo bar baz") == true, site())
+    test::suite_assert(ts, string::starts_with(s, "foo ") == true, site())
+    test::suite_assert(ts, string::starts_with(s, "bar") == false, site())
+    test::suite_assert(ts, string::starts_with(s, "foo bar baz!") == false, site())
+end
+
+func test_string_ends_with(ts):
+    s := "foo bar baz"
+    test::suite_assert(ts, string::ends_with(s, "") == true, site())
+    test::suite_assert(ts, string::ends_with(s, "baz") == true, site())
+    test::suite_assert(ts, string::ends_with(s, "foo bar baz") == true, site())
+    test::suite_assert(ts, string::ends_with(s, " baz") == true, site())
+    test::suite_assert(ts, string::ends_with(s, "foo") == false, site())
+    test::suite_assert(ts, string::ends_with(s, "xfoo bar baz") == false, site())
+end
+
+func test_builtin_concat(ts):
+    name := "foo"
+    s := concat("hello", ", ", name, "!", _)
+    test::suite_assert(ts, s == "hello, foo!", site())
+    test::suite_assert(ts, len(s) == 11, site())
+end
+
+func test_builtin_concat_foreign(ts):
+    res := _concat_with_foreign("pre", "fix", _)
+    test::suite_assert(ts, res == "prefix", site())
+end
+
+func _concat_with_foreign(foreign left: String, right: String, r: Region) -> String:
+    return concat(left, right, r)
+end
+
+func test_string_trim(ts):
+    test::suite_assert(ts, string::trim("", _) == "", site())
+    test::suite_assert(ts, string::trim("abc", _) == "abc", site())
+    test::suite_assert(ts, string::trim("  abc", _) == "abc", site())
+    test::suite_assert(ts, string::trim("abc  ", _) == "abc", site())
+    test::suite_assert(ts, string::trim("  abc  ", _) == "abc", site())
+    test::suite_assert(ts, string::trim("\t abc\n", _) == "abc", site())
+    test::suite_assert(ts, string::trim(" \n\t ", _) == "", site())
+end
+
+func test_string_replace(ts):
+    test::suite_assert(ts, string::replace("", "x", "y", _) == "", site())
+    test::suite_assert(ts, string::replace("abc", "x", "y", _) == "abc", site())
+    test::suite_assert(ts, string::replace("abc", "", "y", _) == "abc", site())
+    test::suite_assert(ts, string::replace("abc", "b", "X", _) == "aXc", site())
+    test::suite_assert(ts, string::replace("abcabc", "ab", "X", _) == "XcXc", site())
+    test::suite_assert(ts, string::replace("aaaa", "aa", "b", _) == "bb", site())
+    test::suite_assert(ts, string::replace("foo", "foo", "bar", _) == "bar", site())
+    test::suite_assert(ts, string::replace("foobarfoo", "foo", "", _) == "bar", site())
+    test::suite_assert(ts, string::replace("aba", "a", "xyz", _) == "xyzbxyz", site())
+end
+
+func _ok_str_to_double(ts, s: String, expect: double):
+    try r := string::to_double(s):
+        test::suite_assert(ts, r == expect, site())
+    except:
+        test::suite_assert(ts, false, site())
+    end    
+end
+
+func _fail_str_to_double(ts, s: String):
+    try r := string::to_double(s):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end    
+end
+
+func test_string_to_double(ts):
+    _ok_str_to_double(ts, "123", 123.0)
+    _ok_str_to_double(ts, " 123 ", 123.0)
+    _ok_str_to_double(ts, "-2.3e-4", -2.3e-4)
+    _ok_str_to_double(ts, "0.012", 0.012)
+    _ok_str_to_double(ts, "-0", -0.0)
+    _ok_str_to_double(ts, "0.004e34", 0.004e34)
+    _fail_str_to_double(ts, "")
+    _fail_str_to_double(ts, "  ")
+    _fail_str_to_double(ts, "abc def")
+    _fail_str_to_double(ts, "\n\nfoo")
+    _fail_str_to_double(ts, "3.2ab")
+end
+
+func _ok_str_to_int(ts, s: String, expect: int):
+    try r := string::to_int(s):
+        test::suite_assert(ts, r == expect, site())
+    except:
+        test::suite_assert(ts, false, site())
+    end
+end
+
+func _fail_str_to_int(ts, s: String):
+    try r := string::to_int(s):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+end
+
+func test_string_to_int(ts):
+    _ok_str_to_int(ts, "0", 0)
+    _ok_str_to_int(ts, "123", 123)
+    _ok_str_to_int(ts, "  -42\t", -42)
+    _fail_str_to_int(ts, "")
+    _fail_str_to_int(ts, "  ")
+    _fail_str_to_int(ts, "12.3")
+    _fail_str_to_int(ts, "1x")
+end
+
+
+func run_tests(ts):
+    test_string(ts)
+    test_string_split(ts)
+    test_string_join(ts)
+    test_string_find(ts)
+    test_string_starts_with(ts)
+    test_string_ends_with(ts)
+    test_builtin_concat(ts)
+    test_builtin_concat_foreign(ts)
+    test_string_trim(ts)
+    test_string_replace(ts)
+    test_string_to_int(ts)
+    test_string_to_double(ts)
+end

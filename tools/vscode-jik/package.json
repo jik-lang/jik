@@ -1,0 +1,73 @@
+{
+  "name": "jik-language-tools",
+  "displayName": "Jik Language Tools",
+  "description": "Syntax highlighting and stdlib-aware completions for the Jik language.",
+  "version": "0.1.0-alpha.0",
+  "publisher": "Radovan Horvat",
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "jik",
+    "language",
+    "syntax",
+    "completion"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onLanguage:jik"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "jik",
+        "aliases": [
+          "Jik",
+          "jik"
+        ],
+        "extensions": [
+          ".jik"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "jik",
+        "scopeName": "source.jik",
+        "path": "./syntaxes/jik.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Jik Language Tools",
+      "properties": {
+        "jik.stdlibPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional path to a `jiklib` directory. When set, completions are indexed from that directory instead of the bundled stdlib snapshot."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "generate-index": "node ./scripts/generate-stdlib-index.js",
+    "package": "vsce package"
+  },
+  "files": [
+    "extension.js",
+    "language-configuration.json",
+    "syntaxes/**",
+    "scripts/**",
+    "data/**",
+    "README.md",
+    "LICENSE",
+    "build.bat"
+  ]
+}

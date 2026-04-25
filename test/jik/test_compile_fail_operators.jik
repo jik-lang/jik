@@ -1,0 +1,50 @@
+use "jik/testing" as test
+use "test/jik/utils"
+
+
+func test_compile_fail_01(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    x := not 1
+end
+""",
+        "unsupported type for unop")
+end
+
+func test_compile_fail_02(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    x := 1 and true
+end
+""",
+        "unsupported type for binop")
+end
+
+func test_compile_fail_03(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    x := 1 + true
+end
+""",
+        "unsupported type for binop")
+end
+
+func test_compile_fail_04(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    x := 1 if true else "hello"
+end
+""",
+        "ternary branches have incompatible types")
+end
+
+func run_tests(ts):
+    test_compile_fail_01(ts)
+    test_compile_fail_02(ts)
+    test_compile_fail_03(ts)
+    test_compile_fail_04(ts)
+end

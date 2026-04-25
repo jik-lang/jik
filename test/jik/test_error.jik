@@ -1,0 +1,73 @@
+use "jik/testing" as test
+
+struct RecVecNode:
+    nexts: Vec[Option[RecVecNode]]
+end
+
+struct RecDictNode:
+    nexts: Dict[Option[RecDictNode]]
+end
+
+
+throws func div_safe(x, y):
+    if y == 0:
+        fail("division by 0")
+    end
+    return x / y
+end
+
+throws func div_safe_code(x, y):
+    if y == 0:
+        fail("division by 0", 14)
+    end
+    return x / y
+end
+
+
+func test_error(ts):
+    try x := div_safe(3, 0):   
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+        test::suite_assert(ts, error_msg(_) == "division by 0", site())
+        test::suite_assert(ts, error_msg() == "division by 0", site())
+        test::suite_assert(ts, error_code() == 1, site())
+    end
+
+    try x := div_safe_code(3, 0):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+        test::suite_assert(ts, error_msg(_) == "division by 0", site())
+        test::suite_assert(ts, error_code() == 14, site())
+    end
+
+    x := must div_safe(3, 1)
+    test::suite_assert(ts, x == 3, site())
+
+    x = must div_safe_code(3, 1)
+    test::suite_assert(ts, x == 3, site())
+
+end
+
+func test_recursive_container_types(ts):
+    a := RecVecNode{}
+    b := RecDictNode{}
+
+    push(a.nexts, None)
+    push(a.nexts, Some{RecVecNode{}})
+    test::suite_assert(ts, len(a.nexts) == 2, site())
+    b.nexts["a1"] = Some{RecDictNode{}}
+    b.nexts["a2"] = None
+    test::suite_assert(ts, len(b.nexts) == 2, site())
+    r1 := b.nexts["a1"]
+    test::suite_assert(ts, r1 is Some, site())
+    r1 = b.nexts["a2"]
+    test::suite_assert(ts, r1 is Some, site())
+end
+
+
+func run_tests(ts):
+    test_error(ts)
+    test_recursive_container_types(ts)
+end

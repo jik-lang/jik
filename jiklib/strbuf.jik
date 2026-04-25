@@ -1,0 +1,190 @@
+//! Growable string buffer.
+//!
+//! `StrBuf` stores a NUL-terminated byte buffer in an region. Growth allocates a
+//! new buffer in the same region and copies existing content.
+//!
+//! Notes:
+//! - This is a byte buffer; it does not enforce UTF-8 boundaries.
+//! - All allocations are performed in the provided `Region`.
+
+
+// -------------------------------------------------------------
+//      API
+// -------------------------------------------------------------
+
+
+/// Opaque string buffer allocated in a `Region`.
+extern struct jik_StrBuf as
+    StrBuf
+
+/// Create a new buffer from initial content.
+///
+/// @param text Initial content.
+/// @param region Allocation region.
+/// @returns A new `StrBuf`.
+extern func jik_strbuf_new as
+    new(foreign text: String, region: Region) -> StrBuf
+
+/// Append a string to the end of the buffer.
+///
+/// @param buf Buffer.
+/// @param text String to append.
+extern func jik_strbuf_append as
+    append(buf: StrBuf, foreign text: String) -> void
+
+/// Append a single byte to the end of the buffer.
+///
+/// @param buf Buffer.
+/// @param ch Byte to append.
+extern func jik_strbuf_append_char as
+    append_char(buf: StrBuf, ch: char) -> void
+
+/// Pop a single byte from the end of the buffer.
+///
+/// @param buf Buffer.
+/// @returns A byte from the end of the buffer.
+extern func jik_strbuf_pop as
+    pop(buf: StrBuf) -> char
+
+/// Get the length of the buffer in bytes.
+///
+/// @param buf Buffer.
+/// @returns The number of bytes in the buffer.
+extern func jik_strbuf_len as
+    len(buf: StrBuf) -> int
+
+/// Clears the buffer.
+///
+/// Does not deallocate or free anything, just resets the buffer pointer.
+/// @param buf Buffer.
+extern func jik_strbuf_clear as
+    clear(buf: StrBuf) -> void
+
+/// Prints the buffer.
+///
+/// @param buf Buffer.
+extern func jik_strbuf_print as
+    print(buf: StrBuf) -> void
+
+/// Converts the buffer contents to a String.
+///
+/// @param buf Buffer.
+/// @param region Region to allocate the String.
+/// @returns Contents of the buffer as a String.
+extern func jik_strbuf_to_string as
+    to_string(foreign buf: StrBuf, region: Region) -> String
+
+
+// -------------------------------------------------------------
+//      C Implementation
+// -------------------------------------------------------------
+
+@embed{C_END}
+
+typedef struct jik_StrBuf {
+    char *data;
+    size_t size;
+    size_t capacity;
+    JikRegion *region;
+} jik_StrBuf;
+
+jik_StrBuf *
+jik_strbuf_new(JikString *from, JikRegion *a)
+{
+    jik_StrBuf *sb = jik_region_alloc(a, sizeof(jik_StrBuf));
+    size_t n = from->size;
+    sb->data = jik_region_alloc(a, n + 1);
+    memcpy(sb->data, from->data, n);
+    sb->data[n] = '\0';
+    sb->size = n;
+    sb->capacity = n;
+    sb->region = a;
+    return sb;
+}
+
+void
+jik_strbuf_append(jik_StrBuf *sb, JikString *s)
+{
+    size_t n = s->size;
+    if (n == 0) {
+        return;
+    }
+    size_t req = sb->size + n + 1;
+    if (req > sb->capacity + 1) {
+        size_t new_cap = sb->capacity ? sb->capacity : 16;
+        while (new_cap + 1 < req) {
+            new_cap *= 2;
+        }
+
+        char *new_data = jik_region_alloc(sb->region, new_cap + 1);
+        if (sb->data && sb->size) {
+            memcpy(new_data, sb->data, sb->size);
+        }
+        sb->data = new_data;
+        sb->capacity = new_cap;
+    }
+    memcpy(sb->data + sb->size, s->data, n);
+    sb->size += n;
+    sb->data[sb->size] = '\0';
+}
+
+void
+jik_strbuf_append_char(jik_StrBuf *sb, char ch)
+{
+    size_t req = sb->size + 1 + 1;
+    if (req > sb->capacity + 1) {
+        size_t new_cap = sb->capacity ? sb->capacity : 16;
+        while (new_cap + 1 < req) {
+            new_cap *= 2;
+        }
+        char *new_data = jik_region_alloc(sb->region, new_cap + 1);
+        if (sb->data && sb->size) {
+            memcpy(new_data, sb->data, sb->size);
+        }
+        sb->data = new_data;
+        sb->capacity = new_cap;
+    }
+
+    sb->data[sb->size++] = ch;
+    sb->data[sb->size]   = '\0';
+}
+
+char
+jik_strbuf_pop(jik_StrBuf *sb)
+{
+    if (sb->size == 0) {
+        return '\0';
+    }
+    char ch = sb->data[sb->size - 1];
+    sb->size--;
+    sb->data[sb->size] = '\0';
+    return ch;
+}
+
+void
+jik_strbuf_print(jik_StrBuf *sb)
+{
+    printf("%s", sb->data);
+}
+
+int
+jik_strbuf_len(jik_StrBuf *sb)
+{
+    return sb->size;
+}
+
+void
+jik_strbuf_clear(jik_StrBuf *sb)
+{
+    sb->size = 0;
+    sb->data[0] = '\0';
+}
+
+JikString *
+jik_strbuf_to_string(jik_StrBuf *sb, JikRegion *a)
+{
+    return jik_string_new(sb->data, a);
+}
+
+
+C_END

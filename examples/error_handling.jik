@@ -1,0 +1,30 @@
+// Example: throwing functions, try/except, and must
+
+throws func parse_count(s):
+    if s == "many":
+        fail("expected digits, got 'many'")
+    end
+    if s == "bad-code":
+        fail("custom parse failure", 17)
+    end
+    return 42
+end
+
+func show_parse(s):
+    try value := parse_count(s):
+        println("parsed ", s, " as ", value)
+    except:
+        println("failed to parse ", s)
+        println("  msg:  ", error_msg())
+        println("  code: ", error_code())
+    end
+end
+
+func main():
+    show_parse("ok")
+    show_parse("many")
+    show_parse("bad-code")
+
+    value := must parse_count("ok")
+    println("must succeeded with value ", value)
+end

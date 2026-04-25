@@ -1,0 +1,77 @@
+use "jik/testing" as test
+
+
+func tester01(x):
+    if x == 0:
+        return 0
+    elif x == 1:
+        return 1
+    elif x == 2:
+        return 2
+    else:
+        return 9
+    end
+end
+
+func tester02(x):
+    if x < 10:
+        if x == 2:
+            return 20
+        else:
+            return 30
+        end
+    elif x > 15:
+        return 1
+    elif x == 13:
+        return 13
+    else:
+        if x == 10:
+            return 45
+        elif x == 11:
+            return 55
+        else:
+            return 65
+        end
+    end
+end
+
+func tester03(foo):
+    return 2 if foo == 3 else 12
+end
+
+func tester04(flag, r: Region) -> Option[int]:
+    return None[r] if flag else Some{7}[r]
+end
+
+func tester05(flag, r: Region):
+    return "yes"[r] if flag else "no"[r]
+end
+
+
+func run_tests(ts):
+    test::suite_assert(ts, tester01(0) == 0, site())
+    test::suite_assert(ts, tester01(1) == 1, site())
+    test::suite_assert(ts, tester01(2) == 2, site())
+    test::suite_assert(ts, tester01(3) == 9, site())
+    test::suite_assert(ts, tester01(13) == 9, site())
+
+    test::suite_assert(ts, tester02(7) == 30, site())
+    test::suite_assert(ts, tester02(1) == 30, site())
+    test::suite_assert(ts, tester02(2) == 20, site())
+    test::suite_assert(ts, tester02(16) == 1, site())
+    test::suite_assert(ts, tester02(13) == 13, site())
+    test::suite_assert(ts, tester02(200) == 1, site())
+    test::suite_assert(ts, tester02(10) == 45, site())
+    test::suite_assert(ts, tester02(11) == 55, site())
+    test::suite_assert(ts, tester02(12) == 65, site())
+
+    test::suite_assert(ts, tester03(3) == 2, site())
+    test::suite_assert(ts, tester03(4) == 12, site())
+
+    test::suite_assert(ts, tester04(true, _) is None, site())
+    test::suite_assert(ts, tester04(false, _) is Some, site())
+    test::suite_assert(ts, tester04(false, _)? == 7, site())
+
+    test::suite_assert(ts, tester05(true, _) == "yes", site())
+    test::suite_assert(ts, tester05(false, _) == "no", site())
+end

@@ -1,0 +1,136 @@
+use "jik/testing" as test
+
+
+struct Node:
+    text: String
+    next: Option[Node]
+end
+
+
+struct List:
+    head: Option[Node]
+    size: int
+end
+
+
+func append(lst, val):
+    if lst.head is None:
+        lst.head = Some{Node{text=val}}
+        lst.size = lst.size + 1
+        return
+    end
+    current := lst.head?
+    while current.next is Some:
+        current = current.next?
+    end
+    current.next = Some{Node{text=val}}
+    lst.size = lst.size + 1
+end
+
+
+func pop(lst):
+    if lst.size == 0:
+        return None[.lst]
+    end
+
+    if lst.size == 1:
+        val := lst.head?.text
+        empty_head: Option[Node][.lst]
+        empty_head = None[.lst]
+        lst.head = empty_head
+        lst.size = 0
+        return Some{val}[.lst]
+    end
+
+    current := lst.head?
+    i := 0
+    while i < lst.size - 2:
+        current = current.next?
+        i = i + 1
+    end
+
+    val := current.next?.text
+    empty_next: Option[Node][.current]
+    empty_next = None[.current]
+    current.next = empty_next
+    lst.size = lst.size - 1
+    return Some{val}[.lst]
+end
+
+
+func get(lst, idx):
+    if idx >= lst.size:
+        return None[.lst]
+    end
+    current := lst.head?
+    i := 0
+    while i < idx:
+        current = current.next?
+        i = i + 1
+    end
+    return Some{current.text}[.lst]
+end
+
+
+func set(lst, idx, val):
+    if idx >= lst.size:
+        return false
+    end
+    current := lst.head?
+
+    i := 0
+    while i < idx:
+        current = current.next?
+        i = i + 1
+    end
+
+    current.text = val
+    return true
+end
+
+
+func test_list(ts):
+    lst := List{}
+    test::suite_assert(ts, lst.size == 0, site())
+    append(lst, "abc")
+    append(lst, "def")
+    test::suite_assert(ts, lst.size == 2, site())
+    res := pop(lst)
+    test::suite_assert(ts, res is Some, site())
+    test::suite_assert(ts, res? == "def", site())
+
+    res = pop(lst)
+    test::suite_assert(ts, res is Some, site())
+    test::suite_assert(ts, res? == "abc", site())
+    test::suite_assert(ts, lst.size == 0, site())
+
+    res = get(lst, 0)
+    test::suite_assert(ts, res is None, site())
+    r := set(lst, 0, "fa")
+    test::suite_assert(ts, r == false, site())
+
+    append(lst, "foo")
+    append(lst, "bar")
+    append(lst, "baz")
+    test::suite_assert(ts, lst.size == 3, site())
+    res = get(lst, 0)
+    test::suite_assert(ts, res is Some, site())
+    test::suite_assert(ts, res? == "foo", site())
+    res = get(lst, 1)
+    test::suite_assert(ts, res is Some, site())
+    test::suite_assert(ts, res? == "bar", site())
+    res = get(lst, 2)
+    test::suite_assert(ts, res is Some, site())
+    test::suite_assert(ts, res? == "baz", site())
+
+    r = set(lst, 2, "?")
+    test::suite_assert(ts, r, site())
+    res = get(lst, 2)
+    test::suite_assert(ts, res is Some, site())
+    test::suite_assert(ts, res? == "?", site())
+
+end
+
+func run_tests(ts):
+    test_list(ts)
+end

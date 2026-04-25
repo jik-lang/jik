@@ -1,0 +1,33 @@
+// Example: Fibonacci, recursive and iterative
+
+func fib(n):
+    if n < 2:
+        return n
+    end
+    return fib(n - 1) + fib(n - 2)
+end
+
+
+func fib_iter(n, r):
+    // Allocate result in region "r"
+    res := [n of 0][r]
+    if n < 2:
+        return res
+    end
+    res[0] = 0
+    res[1] = 1
+    for i = 2, n:
+        res[i] = res[i - 1] + res[i - 2]
+    end
+    return res
+end
+
+
+func main():
+    for i = 0, 10:
+        print("fib (", i, ") = ", fib(i), "\n")
+    end
+
+    nums := fib_iter(10, _)
+    print("fib_iter: ", nums)
+end

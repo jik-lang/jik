@@ -1,0 +1,112 @@
+use "jik/testing" as test
+use "jik/std"
+use "jik/string"
+use "jik/char"
+
+
+struct ForthMachine:
+    stack: Vec[int]
+    words: Dict[Vec[String]]    
+end
+
+struct Result:
+    failed: bool
+    msg: String
+end
+
+
+func fm_reset(fm):
+    fm.stack = [0 of 0]
+    clear(fm.words)
+end
+
+
+func eval_tokens(fm, tokens):
+    n := len(tokens)
+    ip := 0
+    compile_mode := false
+    word := [0 of ""][.fm]
+    word_name := ""[.fm]
+    while ip < n:
+        tok := tokens[ip]
+        if compile_mode and tok == ";":
+            compile_mode = false
+            fm.words[word_name] = word
+            ip = ip + 1
+            continue
+        elif compile_mode and tok == ":":
+            return Result{failed=true, msg="Cannot re-enter compile mode"}[.fm]
+        elif compile_mode:
+            push(word, tok)
+            ip = ip + 1
+            continue            
+        elif tok == "":
+            ip = ip + 1
+            continue
+        elif tok == "\n":
+            ip = ip + 1
+            continue
+        elif char::isdigit(tok[0]):
+            res := must string::to_int(tok)
+            push(fm.stack, res)          
+        elif tok == ".":
+            print(fm.stack)
+        elif tok == "?":
+            print(fm.words)
+        elif tok == "+":
+            rhs := pop(fm.stack)
+            lhs := pop(fm.stack)
+            push(fm.stack, lhs + rhs)
+        elif tok == "*":
+            rhs := pop(fm.stack)
+            lhs := pop(fm.stack)
+            push(fm.stack, lhs * rhs)
+        elif tok == "dup":
+            push(fm.stack, fm.stack[len(fm.stack) - 1])
+        elif tok == "drop":
+            pop(fm.stack)
+        elif tok == ":":
+            compile_mode = true
+            word = [0 of ""][.fm]
+            ip = ip + 1
+            word_name = tokens[ip]
+            if word_name == ":":
+                return Result{failed=true, msg="Cannot re-enter compile mode"}[.fm]
+            end
+        else:
+            w := fm.words[tok]
+            if w is None:
+                return Result{failed=true, msg="Unknown word"}[.fm]
+            else:
+                res := eval_tokens(fm, w?)
+                if res.failed:
+                    return res
+                end
+                
+            end
+        end        
+        ip = ip + 1
+    end
+    return Result{}[.fm]
+end
+
+
+func run(fm, code):
+    tokens := string::split(code, " ", .fm)
+    return eval_tokens(fm, tokens)
+end
+
+
+func run_tests(ts):
+    fm := ForthMachine{}
+    res := run(fm, "1 2 + 4 *")
+    test::suite_assert(ts, not res.failed, site())
+    test::suite_assert(ts, fm.stack[0] == 12, site())
+
+    fm_reset(fm)
+    
+    res = run(fm, ": sq dup * ; 3 sq sq")
+    test::suite_assert(ts, not res.failed, site())
+    test::suite_assert(ts, fm.stack[0] == 81, site())
+
+end

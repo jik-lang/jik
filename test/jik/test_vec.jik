@@ -1,0 +1,73 @@
+use "jik/testing" as test
+use "test/jik/support/point"
+
+
+func test_vec_01(ts):
+    v1 := [0 of 0]    
+    test::suite_assert(ts, len(v1) == 0, site())
+    push(v1, 1)
+    test::suite_assert(ts, len(v1) == 1, site())
+    push(v1, 2)
+    test::suite_assert(ts, len(v1) == 2, site())
+    test::suite_assert(ts, v1[0] == 1, site())
+    test::suite_assert(ts, v1[1] == 2, site())
+    x := pop(v1)
+    test::suite_assert(ts, x == 2, site())
+    test::suite_assert(ts, len(v1) == 1, site())
+    x = pop(v1)
+    test::suite_assert(ts, x == 1, site())
+    test::suite_assert(ts, len(v1) == 0, site())
+    v1 = [10 of 1]
+    clear(v1)
+    test::suite_assert(ts, len(v1) == 0, site())
+end
+
+func test_vec_02(ts):
+    v1 := [2 of point::Point{x = 3, y = 2}]
+    test::suite_assert(ts, len(v1) == 2, site())
+    test::suite_assert(ts, v1[0].x == 3, site())
+    test::suite_assert(ts, v1[0].y == 2, site())
+    test::suite_assert(ts, v1[1].x == 3, site())
+    test::suite_assert(ts, v1[1].y == 2, site())
+    clear(v1)
+    test::suite_assert(ts, len(v1) == 0, site())    
+end
+
+func test_vec_03(ts):
+    v1 := [0 of [0 of 0]]
+    test::suite_assert(ts, len(v1) == 0, site())
+    push(v1, [2 of 1])
+    push(v1, [3 of 2])
+    test::suite_assert(ts, len(v1) == 2, site())
+    test::suite_assert(ts, len(v1[0]) == 2, site())
+    test::suite_assert(ts, len(v1[1]) == 3, site())
+end
+
+func test_vec_04(ts):
+    v1 := [2 of point::Point{}]
+    v1[0].x = 3
+    v1[0].y = 2
+    test::suite_assert(ts, v1[1].x == 0, site())
+    test::suite_assert(ts, v1[1].y == 0, site())
+end
+
+func test_vec_05(ts):
+    v1 := [[1, 2], [3, 4]]
+    test::suite_assert(ts, v1[0][0] == 1, site())
+    test::suite_assert(ts, v1[0][1] == 2, site())
+    test::suite_assert(ts, v1[1][0] == 3, site())
+    test::suite_assert(ts, v1[1][1] == 4, site())
+    push(v1[0], 5)
+    push(v1[1], 6)
+    test::suite_assert(ts, v1[0][2] == 5, site())
+    test::suite_assert(ts, v1[1][2] == 6, site())
+end
+
+
+func run_tests(ts):
+    test_vec_01(ts)
+    test_vec_02(ts)
+    test_vec_03(ts)
+    test_vec_04(ts)
+    test_vec_05(ts)
+end

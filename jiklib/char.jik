@@ -1,0 +1,134 @@
+//! Wrapper library for functions operating on single-byte character values.
+//!
+//! These functions are byte-oriented wrappers around the host C library. They
+//! are not Unicode-aware character classification or case-mapping operations.
+
+// -------------------------------------------------------------
+//      API
+// -------------------------------------------------------------
+
+/// Wrapper around isdigit.
+///
+/// @param ch Character.
+/// @returns true if characher is digit, false otherwise.
+extern func jik_impl_isdigit as
+    isdigit(ch: char) -> bool
+
+/// Wrapper around isalpha.
+///
+/// @param ch Character.
+/// @returns true if characher is an alphabet letter, false otherwise.
+extern func jik_impl_isalpha as
+    isalpha(ch: char) -> bool
+
+/// Wrapper around isalnum.
+///
+/// @param ch Character.
+/// @returns true if characher is an alphabet letter or digit, false otherwise.
+extern func jik_impl_isalnum as
+    isalnum(ch: char) -> bool
+
+/// Wrapper around isspace.
+///
+/// @param ch Character.
+/// @returns true if characher is a whitespace character, false otherwise.
+extern func jik_impl_isspace as
+    isspace(ch: char) -> bool
+
+/// Wrapper around isupper.
+///
+/// @param ch Character.
+/// @returns true if characher is an uppercase alphabet letter, false otherwise.
+extern func jik_impl_isupper as
+    isupper(ch: char) -> bool
+
+/// Wrapper around islower.
+///
+/// @param ch Character.
+/// @returns true if characher is a lowercase alphabet letter, false otherwise.
+extern func jik_impl_islower as
+    islower(ch: char) -> bool
+
+/// Wrapper around isxdigit.
+///
+/// @param ch Character.
+/// @returns true if characher is a hexadecimal digit, false otherwise.
+extern func jik_impl_isxdigit as
+    isxdigit(ch: char) -> bool
+
+/// Wrapper around toupper.
+///
+/// @param ch Character.
+/// @returns Uppercase variant if possible, otherwise returns input.
+extern func jik_impl_toupper as
+    toupper(ch: char) -> char
+
+/// Wrapper around tolower.
+///
+/// @param ch Character.
+/// @returns Lowercase variant if possible, otherwise returns input.
+extern func jik_impl_tolower as
+    tolower(ch: char) -> char
+
+
+// -------------------------------------------------------------
+//      C Implementation
+// -------------------------------------------------------------
+
+@embed{C_END}
+
+bool
+jik_impl_isdigit(char c)
+{
+    return isdigit(c);
+}
+
+bool
+jik_impl_isalpha(char c)
+{
+    return isalpha(c);
+}
+
+bool
+jik_impl_isalnum(char c)
+{
+    return isalnum(c);
+}
+
+bool
+jik_impl_isspace(char c)
+{
+    return isspace(c);
+}
+
+bool
+jik_impl_isupper(char c)
+{
+    return isupper(c);
+}
+
+bool
+jik_impl_islower(char c)
+{
+    return islower(c);
+}
+
+bool
+jik_impl_isxdigit(char c)
+{
+    return isxdigit(c);
+}
+
+char
+jik_impl_toupper(char c)
+{
+    return (char)toupper(c);
+}
+
+char
+jik_impl_tolower(char c)
+{
+    return (char)tolower(c);
+}
+
+C_END

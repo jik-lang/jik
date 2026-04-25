@@ -1,0 +1,18 @@
+use "test/jik/support/module_type_base" as base
+
+
+struct Record:
+    point: base::Point
+    backup: Option[base::Point]
+    trail: Vec[base::Point]
+    by_name: Dict[base::Point]
+    payload: base::Payload
+end
+
+variant RecordView:
+    RECORD: Record
+    POINTS: Vec[base::Point]
+    INDEX: Dict[base::Point]
+    MAYBE_POINT: Option[base::Point]
+    PAYLOAD: base::Payload
+end

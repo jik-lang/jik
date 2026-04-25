@@ -1,0 +1,43 @@
+use "jik/testing" as test
+
+use "test/jik/support/module_shapes" as shapes
+use "test/jik/support/module_builders" as builders
+use "test/jik/support/module_logic" as logic
+
+
+func test_module_interop_person(ts):
+    p := builders::make_person("Alice", _)
+
+    test::suite_assert(ts, p.name == "Alice", site())
+    test::suite_assert(ts, len(p.tags) == 2, site())
+    test::suite_assert(ts, p.tags[1] == shapes::fallback_name(_), site())
+    test::suite_assert(ts, logic::nickname_or_fallback(p, _) == "pal", site())
+    test::suite_assert(ts, logic::has_tag(p, "Alice"), site())
+    test::suite_assert(ts, logic::has_tag(p, shapes::fallback_name(_)), site())
+end
+
+func test_module_interop_mutation(ts):
+    p := builders::make_person("Bob", _)
+    builders::rename_person(p, "Dave")
+
+    test::suite_assert(ts, p.name == "Dave", site())
+    test::suite_assert(ts, p.tags[0] == "Dave", site())
+    test::suite_assert(ts, p.nickname is Some, site())
+end
+
+func test_module_interop_variant(ts):
+    msg := builders::make_message("foo", _)
+    text := shapes::Message.TEXT{"hello"}
+    empty := shapes::Message.NONE{}
+
+    test::suite_assert(ts, msg is shapes::Message.PERSON, site())
+    test::suite_assert(ts, logic::message_name(msg, _) == "foo", site())
+    test::suite_assert(ts, logic::message_name(text, _) == "hello", site())
+    test::suite_assert(ts, logic::message_name(empty, _) == shapes::fallback_name(_), site())
+end
+
+func run_tests(ts):
+    test_module_interop_person(ts)
+    test_module_interop_mutation(ts)
+    test_module_interop_variant(ts)
+end

@@ -1,0 +1,93 @@
+use "jik/testing" as test
+
+
+func mark_bool(log: Vec[int], id: int, value: bool) -> bool:
+    push(log, id)
+    return value
+end
+
+func mark_int(log: Vec[int], id: int, value: int) -> int:
+    push(log, id)
+    return value
+end
+
+func test_arithmetic_precedence(ts):
+    test::suite_assert(ts, 2 + 3 * 4 == 14, site())
+    test::suite_assert(ts, (2 + 3) * 4 == 20, site())
+    test::suite_assert(ts, 7 - 2 - 1 == 4, site())
+    test::suite_assert(ts, 20 / 5 * 2 == 8, site())
+    test::suite_assert(ts, 8 % 3 + 1 == 3, site())
+    test::suite_assert(ts, -(2 + 3) == -5, site())
+    test::suite_assert(ts, -2 * 3 == -6, site())
+end
+
+func test_logical_precedence(ts):
+    test::suite_assert(ts, not false and true, site())
+    test::suite_assert(ts, true or false and false, site())
+    test::suite_assert(ts, not ((true or false) and false), site())
+    test::suite_assert(ts, 1 + 2 == 3 and 2 * 3 == 6, site())
+    test::suite_assert(ts, not (1 + 2 == 4), site())
+end
+
+func test_short_circuit(ts):
+    log: Vec[int]
+
+    test::suite_assert(ts, not (false and mark_bool(log, 1, true)), site())
+    test::suite_assert(ts, len(log) == 0, site())
+
+    test::suite_assert(ts, true or mark_bool(log, 2, false), site())
+    test::suite_assert(ts, len(log) == 0, site())
+
+    test::suite_assert(ts, true and mark_bool(log, 3, true), site())
+    test::suite_assert(ts, len(log) == 1, site())
+    test::suite_assert(ts, log[0] == 3, site())
+
+    clear(log)
+
+    test::suite_assert(ts, false or mark_bool(log, 4, true), site())
+    test::suite_assert(ts, len(log) == 1, site())
+    test::suite_assert(ts, log[0] == 4, site())
+end
+
+func test_ternary_evaluation_and_typing(ts):
+    log: Vec[int]
+
+    x := mark_int(log, 1, 11) if true else mark_int(log, 2, 22)
+    test::suite_assert(ts, x == 11, site())
+    test::suite_assert(ts, len(log) == 1, site())
+    test::suite_assert(ts, log[0] == 1, site())
+
+    clear(log)
+
+    y := mark_int(log, 3, 11) if false else mark_int(log, 4, 22)
+    test::suite_assert(ts, y == 22, site())
+    test::suite_assert(ts, len(log) == 1, site())
+    test::suite_assert(ts, log[0] == 4, site())
+
+    z := 1 if true else 2.5
+    test::suite_assert(ts, z == 1.0, site())
+end
+
+func test_compound_assignments(ts):
+    x := 10
+    x += 3
+    x -= 2
+    x *= 4
+    x /= 2
+    test::suite_assert(ts, x == 22, site())
+
+    y := 5.0
+    y += 1.5
+    y *= 2.0
+    y -= 3.0
+    y /= 2.0
+    test::suite_assert(ts, y == 5.0, site())
+end
+
+func run_tests(ts):
+    test_arithmetic_precedence(ts)
+    test_logical_precedence(ts)
+    test_short_circuit(ts)
+    test_ternary_evaluation_and_typing(ts)
+    test_compound_assignments(ts)
+end

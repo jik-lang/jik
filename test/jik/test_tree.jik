@@ -1,0 +1,99 @@
+use "jik/testing" as test
+
+
+extern func jik_string_cmp as strcmp(s1: String, s2: String) -> int
+
+
+struct Tree:
+    key: String
+    val: int
+    empty: bool
+    left: Option[Tree]
+    right: Option[Tree]
+end
+
+
+func Tree_insert(t, key, val):
+    if t.empty:
+        t.empty = false
+        t.key = key
+        t.val = val
+    end
+    if t.key == key:
+        t.val = val    
+    else:
+        res := strcmp(t.key, key)
+        if res > 0:
+            if t.left is None:
+                t.left = Some{Tree{key=key, val=val, empty=false}}
+            else:
+                Tree_insert(t.left?, key, val)
+            end
+        else:
+            if t.right is None:
+                t.right = Some{Tree{key=key, val=val, empty=false}}
+            else:
+                Tree_insert(t.right?, key, val)
+            end
+        end
+    end
+end
+
+
+func Tree_find(t, key) -> Option[int]:
+    if t.empty:
+        return None[.t]
+    end
+    if t.key == key:
+        return Some{t.val}[.t]
+    end
+    res := strcmp(t.key, key)
+    if res > 0:
+        if t.left is None:
+            return None[.t]
+        end
+        return Tree_find(t.left?, key)
+    end
+    if t.right is None:
+        return None[.t]
+    end
+    return Tree_find(t.right?, key)
+end
+
+
+func test_tree(ts):
+    t := Tree{empty=true}
+    Tree_insert(t, "abc", 122)
+    Tree_insert(t, "abca", 1)
+    Tree_insert(t, "def", 44)
+
+    res := Tree_find(t, "po")
+    test::suite_assert(ts, res is None, site())
+
+    res = Tree_find(t, "def")
+    test::suite_assert(ts, res is Some, site())
+    test::suite_assert(ts, res? == 44, site())
+
+    res = Tree_find(t, "abc")
+    test::suite_assert(ts, res is Some, site())
+    test::suite_assert(ts, res? == 122, site())
+
+    res = Tree_find(t, "abca")
+    test::suite_assert(ts, res is Some, site())
+    test::suite_assert(ts, res? == 1, site())
+
+    res = Tree_find(t, "12")
+    test::suite_assert(ts, res is None, site())
+    res = Tree_find(t, "def")
+    test::suite_assert(ts, res is Some, site())
+
+    Tree_insert(t, "defa", 34)
+    res = Tree_find(t, "defa")
+    test::suite_assert(ts, res is Some, site())
+    test::suite_assert(ts, res? == 34, site())
+end
+
+
+func run_tests(ts):
+    test_tree(ts)    
+end

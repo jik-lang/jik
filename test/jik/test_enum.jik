@@ -1,0 +1,78 @@
+use "jik/testing" as test
+use "test/jik/support/enum_support"
+
+
+enum Color:
+    RED
+    GREEN
+    BLUE
+end
+
+struct Paint:
+    color: Color
+end
+
+func pick_color(flag: bool) -> Color:
+    if flag:
+        return Color.RED
+    end
+    return Color.BLUE
+end
+
+func is_green(c: Color) -> bool:
+    return c == Color.GREEN
+end
+
+func test_enum_01(ts):
+    c := Color.RED
+    test::suite_assert(ts, c == Color.RED, site())
+    test::suite_assert(ts, c != Color.GREEN, site())
+
+    c = Color.BLUE
+    test::suite_assert(ts, c == Color.BLUE, site())
+    test::suite_assert(ts, pick_color(true) == Color.RED, site())
+    test::suite_assert(ts, pick_color(false) == Color.BLUE, site())
+    test::suite_assert(ts, is_green(Color.GREEN), site())
+    test::suite_assert(ts, not is_green(Color.RED), site())
+end
+
+func test_enum_02(ts):
+    p := Paint{color=Color.GREEN}
+    test::suite_assert(ts, p.color == Color.GREEN, site())
+    p.color = Color.BLUE
+    test::suite_assert(ts, p.color == Color.BLUE, site())
+end
+
+func test_enum_03(ts):
+    colors := [Color.RED, Color.GREEN, Color.BLUE]
+    test::suite_assert(ts, len(colors) == 3, site())
+    test::suite_assert(ts, colors[0] == Color.RED, site())
+    test::suite_assert(ts, colors[1] == Color.GREEN, site())
+    test::suite_assert(ts, colors[2] == Color.BLUE, site())
+end
+
+func test_enum_04(ts):
+    d := enum_support::Direction.NORTH
+    test::suite_assert(ts, d == enum_support::Direction.NORTH, site())
+    test::suite_assert(ts, d != enum_support::Direction.SOUTH, site())
+end
+
+func test_enum_05(ts):
+    shades: Dict[Color]
+    shades["warm"] = Color.RED
+    shades["cool"] = Color.BLUE
+
+    test::suite_assert(ts, len(shades) == 2, site())
+    test::suite_assert(ts, shades["warm"] is Some, site())
+    test::suite_assert(ts, shades["cool"] is Some, site())
+    test::suite_assert(ts, shades["warm"]? == Color.RED, site())
+    test::suite_assert(ts, shades["cool"]? == Color.BLUE, site())
+end
+
+func run_tests(ts):
+    test_enum_01(ts)
+    test_enum_02(ts)
+    test_enum_03(ts)
+    test_enum_04(ts)
+    test_enum_05(ts)
+end

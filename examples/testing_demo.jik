@@ -1,0 +1,17 @@
+// Example: Basic use of jik/testing
+
+use "jik/testing" as test
+
+func square(x):
+    return x * x
+end
+
+func main():
+    ts := test::TestSuite{}
+
+    test::suite_assert(ts, square(0) == 0, site())
+    test::suite_assert(ts, square(3) == 9, site())
+    test::suite_assert(ts, square(-4) == 16, site())
+
+    test::suite_finish(ts)
+end

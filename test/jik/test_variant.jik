@@ -1,0 +1,156 @@
+use "jik/testing" as test
+
+
+variant Result:
+    OK: int
+    ERR: String
+end
+
+func foo(x, y, ts):
+    if y == 0:
+        return Result.ERR{"foo by 0"}[.ts]
+    end
+    return Result.OK{x}[.ts]
+end
+
+// test non zero second argument
+func _test_match_01(ts, x, y):
+    t := foo(x, y, ts)
+    match t:
+        case Result.OK{v}:
+            test::suite_assert(ts, v == x, site())
+        case Result.ERR{v}:
+            test::suite_assert(ts, false, site())
+    end
+end
+
+// test zero second argument
+func _test_match_02(ts, x, y):
+    t := foo(x, y, ts)
+    match t:
+        case Result.OK{v}:
+            test::suite_assert(ts, false, site())
+        case Result.ERR{v}:
+            test::suite_assert(ts, v == "foo by 0", site())
+    end
+end
+
+func test_var_01(ts):
+    _test_match_01(ts, 3, 2)
+    _test_match_01(ts, 1, 3)
+    _test_match_02(ts, 1, 0)
+    _test_match_02(ts, 2, 0)
+end
+
+
+variant Node:
+    INTEGER: int
+    STRING: String
+    NUMS: Vec[int]
+    RESULT: Result
+end
+
+func test_var_02(ts):
+    n1 := Node.INTEGER{1}
+    test::suite_assert(ts, n1 is Node.INTEGER, site())
+    test::suite_assert(ts, n1[Node.INTEGER] == 1, site())
+
+    n1 = Node.INTEGER{2}
+    test::suite_assert(ts, n1 is Node.INTEGER, site())
+    test::suite_assert(ts, n1[Node.INTEGER] == 2, site())
+
+    n1 = Node.NUMS{[3 of 5]}
+    test::suite_assert(ts, n1 is Node.NUMS, site())
+    test::suite_assert(ts, len(n1[Node.NUMS]) == 3, site())
+    test::suite_assert(ts, n1[Node.NUMS][0] == 5, site())
+    test::suite_assert(ts, n1[Node.NUMS][1] == 5, site())
+    test::suite_assert(ts, n1[Node.NUMS][2] == 5, site())
+end
+
+
+func test_var_03(ts):
+    nodes := [Node.NUMS{[1 of 1]}, Node.INTEGER{2}, Node.STRING{"foo"}]
+    test::suite_assert(ts, nodes[0] is Node.NUMS, site())
+    test::suite_assert(ts, nodes[0][Node.NUMS][0] == 1, site())
+    test::suite_assert(ts, nodes[1] is Node.INTEGER, site())
+    test::suite_assert(ts, nodes[1][Node.INTEGER] == 2, site())
+    test::suite_assert(ts, nodes[2][Node.STRING] == "foo", site())
+end
+
+
+func test_var_04(ts):
+    n := Node.INTEGER{}
+    test::suite_assert(ts, n is Node.INTEGER, site())
+    test::suite_assert(ts, n[Node.INTEGER] == 0, site())
+    n[Node.INTEGER] = 1
+    test::suite_assert(ts, n[Node.INTEGER] == 1, site())
+
+    n = Node.NUMS{}
+    test::suite_assert(ts, n is Node.NUMS, site())
+    test::suite_assert(ts, len(n[Node.NUMS]) == 0, site())
+    n[Node.NUMS] = [1, 2]
+    push(n[Node.NUMS], 3)
+    test::suite_assert(ts, len(n[Node.NUMS]) == 3, site())
+
+    n = Node.RESULT{}
+    test::suite_assert(ts, n[Node.RESULT] is Result.OK, site())
+
+end
+
+struct Fubar:
+    x: Node    
+end
+
+func test_var_05(ts):
+    t1 := Fubar{x=Node.NUMS{}}
+    test::suite_assert(ts, t1.x is Node.NUMS, site())
+    test::suite_assert(ts, len(t1.x[Node.NUMS]) == 0, site())
+    t1.x[Node.NUMS] = [1, 2, 3]
+    test::suite_assert(ts, len(t1.x[Node.NUMS]) == 3, site())
+    test::suite_assert(ts, t1.x[Node.NUMS][0] == 1, site())
+    test::suite_assert(ts, t1.x[Node.NUMS][1] == 2, site())
+    test::suite_assert(ts, t1.x[Node.NUMS][2] == 3, site())
+
+    t1.x = Node.RESULT{Result.ERR{"error"}}
+    test::suite_assert(ts, t1.x is Node.RESULT, site())
+    test::suite_assert(ts, t1.x[Node.RESULT][Result.ERR] == "error", site())
+
+end
+
+
+variant Expr:
+    INTEGER: int
+    BINOP: Binop
+end
+
+struct Binop:
+    left: Option[Expr]
+    right: Option[Expr]
+end
+
+func test_var_06(ts):
+    e := Expr.BINOP{Binop{left=Some{Expr.INTEGER{}}, right=Some{Expr.INTEGER{}}}}
+    test::suite_assert(ts, e is Expr.BINOP, site())
+    test::suite_assert(ts, e[Expr.BINOP].left is Some, site())
+    test::suite_assert(ts, e[Expr.BINOP].right is Some, site())
+    test::suite_assert(ts, e[Expr.BINOP].left? is Expr.INTEGER, site())
+    test::suite_assert(ts, e[Expr.BINOP].right? is Expr.INTEGER, site())
+    test::suite_assert(ts, e[Expr.BINOP].left?[Expr.INTEGER] == 0, site())
+    test::suite_assert(ts, e[Expr.BINOP].right?[Expr.INTEGER] == 0, site())
+
+    e[Expr.BINOP].left = Some{Expr.INTEGER{2}}
+    e[Expr.BINOP].right = Some{Expr.INTEGER{5}}
+    test::suite_assert(ts, e[Expr.BINOP].left?[Expr.INTEGER] == 2, site())
+    test::suite_assert(ts, e[Expr.BINOP].right?[Expr.INTEGER] == 5, site())
+end
+
+
+func run_tests(ts):
+    test_var_01(ts)
+    test_var_02(ts)
+    test_var_03(ts)
+    test_var_04(ts)
+    test_var_05(ts)
+    test_var_06(ts)
+
+end

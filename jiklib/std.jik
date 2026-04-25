@@ -1,0 +1,47 @@
+//! Standard utility functions.
+
+// -------------------------------------------------------------
+//      API
+// -------------------------------------------------------------
+
+/// Terminate the program with an error message.
+///
+/// @param msg Message.
+extern func jik_impl_std_panic as
+    panic(msg: String) -> void
+
+/// Read a line of input from standard input.
+///
+/// @param region Allocation region for the returned string.
+/// @returns Input line as a String.
+extern func jik_impl_std_input as
+    input(region: Region) -> String
+
+
+// -------------------------------------------------------------
+//      C Implementation
+// -------------------------------------------------------------
+
+@embed{C_END}
+
+void
+jik_impl_std_panic(JikString *msg)
+{
+    fprintf(stderr, "%s", msg ? msg->data : "");
+    exit(EXIT_FAILURE);
+}
+
+JikString *
+jik_impl_std_input(JikRegion *a)
+{
+    char input[256];
+    fgets(input, sizeof(input), stdin);
+    size_t len = strlen(input);
+    input[len - 1] = '\0';
+    char *new = jik_region_alloc(a, len);
+    strcpy(new, input);
+    return jik_string_new(new, a);
+}
+
+
+C_END

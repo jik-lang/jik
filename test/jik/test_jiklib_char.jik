@@ -1,0 +1,62 @@
+use "jik/testing" as test
+
+use "jik/char"
+
+
+func run_tests(ts):
+    // isdigit
+    test::suite_assert(ts, char::isdigit('0'), site())
+    test::suite_assert(ts, char::isdigit('9'), site())
+    test::suite_assert(ts, not char::isdigit('a'), site())
+    test::suite_assert(ts, not char::isdigit('-'), site())
+
+    // isalpha
+    test::suite_assert(ts, char::isalpha('a'), site())
+    test::suite_assert(ts, char::isalpha('Z'), site())
+    test::suite_assert(ts, not char::isalpha('0'), site())
+    test::suite_assert(ts, not char::isalpha('_'), site())
+
+    // isalnum
+    test::suite_assert(ts, char::isalnum('a'), site())
+    test::suite_assert(ts, char::isalnum('Z'), site())
+    test::suite_assert(ts, char::isalnum('0'), site())
+    test::suite_assert(ts, not char::isalnum('_'), site())
+
+    // isspace
+    test::suite_assert(ts, char::isspace(' '), site())
+    test::suite_assert(ts, char::isspace('\t'), site())
+    test::suite_assert(ts, char::isspace('\n'), site())
+    test::suite_assert(ts, not char::isspace('a'), site())
+
+    // isupper / islower
+    test::suite_assert(ts, char::isupper('A'), site())
+    test::suite_assert(ts, char::isupper('Z'), site())
+    test::suite_assert(ts, not char::isupper('a'), site())
+
+    test::suite_assert(ts, char::islower('a'), site())
+    test::suite_assert(ts, char::islower('z'), site())
+    test::suite_assert(ts, not char::islower('A'), site())
+
+    // isxdigit
+    test::suite_assert(ts, char::isxdigit('0'), site())
+    test::suite_assert(ts, char::isxdigit('9'), site())
+    test::suite_assert(ts, char::isxdigit('a'), site())
+    test::suite_assert(ts, char::isxdigit('f'), site())
+    test::suite_assert(ts, char::isxdigit('A'), site())
+    test::suite_assert(ts, char::isxdigit('F'), site())
+    test::suite_assert(ts, not char::isxdigit('g'), site())
+    test::suite_assert(ts, not char::isxdigit('G'), site())
+    test::suite_assert(ts, not char::isxdigit('x'), site())
+
+    // toupper
+    test::suite_assert(ts, char::toupper('a') == 'A', site())
+    test::suite_assert(ts, char::toupper('z') == 'Z', site())
+    test::suite_assert(ts, char::toupper('A') == 'A', site())
+    test::suite_assert(ts, char::toupper('0') == '0', site())
+
+    // tolower
+    test::suite_assert(ts, char::tolower('A') == 'a', site())
+    test::suite_assert(ts, char::tolower('Z') == 'z', site())
+    test::suite_assert(ts, char::tolower('a') == 'a', site())
+    test::suite_assert(ts, char::tolower('0') == '0', site())
+end

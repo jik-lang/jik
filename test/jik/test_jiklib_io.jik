@@ -1,0 +1,70 @@
+use "jik/testing" as test
+use "jik/io"
+
+
+func test_fileio(ts):
+    try f := io::open("foo", "r", _):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end       
+
+    try f := io::open("test/jik/input/data.txt", "r", _):
+        data := must io::read(f, _)
+        test::suite_assert(ts, data == "foobar\n", site())
+        must io::close(f)
+    except:
+        test::suite_assert(ts, false, site())
+    end
+
+    try f := io::open("test/jik/input/data2.txt", "w", _):
+        must io::write(f, "12345")
+        must io::close(f)
+        must io::remove("test/jik/input/data2.txt")        
+    except:
+        test::suite_assert(ts, false, site())
+    end
+
+    try f := io::open("test/jik/input/data2.txt", "w", _):
+        must io::write(f, "12")
+        must io::close(f)
+    except:
+        test::suite_assert(ts, false, site())
+    end
+
+    try f := io::open("test/jik/input/data2.txt", "a", _):
+        must io::write(f, "345")
+        must io::close(f)
+    except:
+        test::suite_assert(ts, false, site())
+    end
+
+    try f := io::open("test/jik/input/data2.txt", "r", _):
+        data := must io::read(f, _)
+        test::suite_assert(ts, data == "12345", site())
+        must io::close(f)
+        must io::remove("test/jik/input/data2.txt")
+    except:
+        test::suite_assert(ts, false, site())
+    end
+
+    try io::remove("fubar"):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    try io::write_file("test/jik/input/data2.txt", "alpha", _):
+        data := must io::read_file("test/jik/input/data2.txt", _)
+        test::suite_assert(ts, data == "alpha", site())
+        must io::remove("test/jik/input/data2.txt")
+    except:
+        test::suite_assert(ts, false, site())
+    end
+
+end
+
+
+func run_tests(ts):
+    test_fileio(ts)
+end

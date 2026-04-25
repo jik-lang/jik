@@ -1,0 +1,19 @@
+use "test/jik/support/module_shapes" as shapes
+
+
+func make_person(name: String, r: Region) -> shapes::Person:
+    tags := [0 of ""][r]
+    push(tags, name)
+    push(tags, shapes::fallback_name(r))
+    nickname := Some{"pal"}[r]
+    return shapes::Person{name=name, tags=tags, nickname=nickname}[r]
+end
+
+func rename_person(p: shapes::Person, name: String):
+    p.name = name
+    p.tags[0] = name
+end
+
+func make_message(name: String, r: Region) -> shapes::Message:
+    return shapes::Message.PERSON{make_person(name, r)}[r]
+end

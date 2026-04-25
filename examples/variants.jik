@@ -1,0 +1,37 @@
+// Example: enums, variants, and match
+
+enum Op:
+    ADD
+    MUL
+end
+
+variant CalcResult:
+    OK: int
+    ERR: String
+end
+
+func compute(op, x, y, r):
+    if op == Op.ADD:
+        return CalcResult.OK{x + y}[r]
+    end
+    if y == 0:
+        return CalcResult.ERR{"refusing to multiply by zero"}[r]
+    end
+    return CalcResult.OK{x * y}[r]
+end
+
+func show_result(res):
+    match res:
+        case CalcResult.OK{v}:
+            print("ok: ", v, "\n")
+        case CalcResult.ERR{msg}:
+            print("error: ", msg)
+            print("\n")
+    end
+end
+
+func main():
+    show_result(compute(Op.ADD, 2, 3, _))
+    show_result(compute(Op.MUL, 4, 5, _))
+    show_result(compute(Op.MUL, 7, 0, _))
+end
