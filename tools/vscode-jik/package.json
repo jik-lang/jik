@@ -3,7 +3,7 @@
   "displayName": "Jik Language Tools",
   "description": "Syntax highlighting and stdlib-aware completions for the Jik language.",
   "version": "0.1.0-alpha.0",
-  "publisher": "Radovan Horvat",
+  "publisher": "radovanhorvat",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "vscode": "^1.85.0"
