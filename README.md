@@ -7,7 +7,7 @@ _A readable systems-oriented language that compiles to C._
 </p>
 
 <p align="center">
-  <a href="https://github.com/jik-lang/jik/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jik-lang/jik/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/jik-lang/jik/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jik-lang/jik/actions/workflows/ci.yml/badge.svg?branch=main&event=push"></a>
   <img alt="Status" src="https://img.shields.io/badge/status-alpha-b45309">
   <img alt="Backend" src="https://img.shields.io/badge/backend-C-2563eb">
   <img alt="Memory" src="https://img.shields.io/badge/memory-region--based-0f766e">
