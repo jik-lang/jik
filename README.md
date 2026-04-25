@@ -13,6 +13,9 @@ _A readable systems-oriented language that compiles to C._
   <img alt="Memory" src="https://img.shields.io/badge/memory-region--based-0f766e">
 </p>
 
+## [Try Jik in GitHub Codespaces](https://codespaces.new/jik-lang/try-jik?quickstart=1)
+_Open a ready-to-use Jik development environment._
+
 ---
 
 <a id="intro"></a>
