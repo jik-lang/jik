@@ -377,6 +377,26 @@ get_first_non_literal_allocd_arg(VecJikNode *args)
 }
 
 static bool
+can_retarget_literal(JikNode* literal, JikAllocSpec req_spec)
+{
+    assert(jik_node_is_allocated_literal(literal));
+    JikAllocSpec arg_src = jik_get_alloc_spec(literal);
+    return arg_src.src == JIK_ALLOC_SRC_LOCAL && req_spec.src != JIK_ALLOC_SRC_LOCAL && req_spec.src != JIK_ALLOC_SRC_CROSS;
+}
+
+static void
+maybe_retarget_first_call_literal(JikNode *first_arg, JikAllocSpec req_spec)
+{
+    if (!jik_node_is_allocated_literal(first_arg)) {
+        return;
+    }
+    if (!can_retarget_literal(first_arg, req_spec)) {
+        return;
+    }
+    jik_set_alloc_spec(first_arg, req_spec);
+}
+
+static bool
 jik_both_alloc_sources_known(JikAllocSpec s1, JikAllocSpec s2);
 static bool
 jik_alloc_source_known(JikAllocSpec s);
@@ -541,6 +561,9 @@ is_region_safe_function_call(JikNode *nd)
     else if (nd->val_call.builtin && strcmp(nd->val_call.name->val_id.name, "println") == 0) {
         return true;
     }
+    else if (nd->val_call.builtin && strcmp(nd->val_call.name->val_id.name, "concat") == 0) {
+        return true;
+    }
     return false;
 }
 
@@ -657,8 +680,9 @@ jik_check_region_integrity(JikNode *ast)
                 JikAllocSpec req_spec          = first_non_literal
                                                      ? get_expression_alloc_spec(first_non_literal, spec_tab)
                                                      : get_expression_alloc_spec(first_arg, spec_tab);
-                // jik_diag_fatal_error_if(req_spec.kind == JIK_ALLOC_GLOBAL, "composite globals
-                // cannot be passed to functions", jik_token_to_text(first_arg->token));
+                if (jik_alloc_spec_complete(req_spec)) {
+                    maybe_retarget_first_call_literal(first_arg, req_spec);
+                }
                 //  All arguments need to be in the same region
                 for (size_t i = 1; i < n; i++) {
                     JikNode     *arg     = VecJikNode_get(allocd_args, i);
@@ -666,11 +690,9 @@ jik_check_region_integrity(JikNode *ast)
                     if (jik_both_alloc_sources_known(arg_src, req_spec)) {
                         // We force local literals into same region as other args for better
                         // ergonomics
-                        if (jik_node_is_allocated_literal(arg) &&
-                            arg_src.src == JIK_ALLOC_SRC_LOCAL &&
-                            req_spec.src != JIK_ALLOC_SRC_LOCAL) {
+                        if (jik_node_is_allocated_literal(arg) && can_retarget_literal(arg, req_spec)) {
                             jik_set_alloc_spec(arg, req_spec);
-                            continue;
+                            continue;                            
                         }
                         jik_diag_fatal_error_if(!jik_alloc_sources_match(arg_src, req_spec),
                                                 "all arguments should belong to same region",
@@ -824,13 +846,13 @@ jik_post_check_region_integrity(JikNode *ast)
                 check_nested_literal_consistency(nd, spec_tab);
             }
             else if (nd->type == NODE_EXPR_CALL) {
-                if (nd->val_call.builtin && strcmp(nd->val_call.name->val_id.name, "concat") == 0) {
+                if (is_region_safe_function_call(nd)) {
                     continue;
                 }
                 VecJikNode *allocd_args = get_allocated_args(nd);
                 size_t      n           = VecJikNode_size(allocd_args);
                 if (VecJikNode_size(allocd_args) == 0) {
-                    return;
+                    continue;
                 }
                 JikNode     *first             = VecJikNode_get(allocd_args, 0);
                 JikNode     *first_non_literal = get_first_non_literal_allocd_arg(allocd_args);
