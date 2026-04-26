@@ -56,8 +56,8 @@ Notes:
 
 - The current lexer requires a float to begin with a digit, so `0.5` is valid
   while `.5` is not.
-- Character escapes support `\n`, `\t`, `\r`, `\0`, `\\`, `\'`, and `\"`.
-- Ordinary string literals support `\n`, `\t`, `\r`, `\\`, `\'`, and `\"`.
+- Character escapes support `\n`, `\t`, `\r`, `\0`, `\xNN`, `\\`, `\'`, and `\"`.
+- Ordinary string literals support `\n`, `\t`, `\r`, `\xNN`, `\\`, `\'`, and `\"`.
 - Ordinary and multiline string literals may contain UTF-8 text.
 - Source files that contain non-ASCII text should be saved as UTF-8.
 - Ordinary string literals do not support `\0`; Jik strings are currently null-terminated.

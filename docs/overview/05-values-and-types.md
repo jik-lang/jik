@@ -31,7 +31,7 @@ memory management with regions, where these types are allocated. More on that to
     - type name: `String`
     - translates to C type defined in the Jik support library
     - strings store UTF-8 bytes
-    - ordinary string literals support `\n`, `\t`, `\r`, `\\`, `\'`, and `\"`
+    - ordinary string literals support `\n`, `\t`, `\r`, `\xNN`, `\\`, `\'`, and `\"`
     - ordinary and multiline string literals may contain UTF-8 text
     - source files that contain non-ASCII string text should be saved as UTF-8
     - string length, indexing, and slicing are byte-based

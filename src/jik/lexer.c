@@ -163,40 +163,62 @@ jik_lexer_make_token_from_lexeme(JikLexer *lex, JikTokenType type, char *lexeme)
                       .codeline = VecString_get(lex->lines, lex->lineno - 1)};
 }
 
-static char
-jik_lexer_decode_escape(JikToken *tok, char ch, bool allow_nul)
+static int
+jik_lexer_hex_digit_value(char ch)
 {
+    if (ch >= '0' && ch <= '9') {
+        return ch - '0';
+    }
+    if (ch >= 'a' && ch <= 'f') {
+        return ch - 'a' + 10;
+    }
+    if (ch >= 'A' && ch <= 'F') {
+        return ch - 'A' + 10;
+    }
+    return -1;
+}
+
+static char
+jik_lexer_decode_escape(JikLexer *lex, JikToken *tok, bool allow_nul)
+{
+    char ch = jik_lexer_current_char(lex);
     switch (ch) {
-    case 'n': {
+    case 'n':
         return '\n';
-    }
-    case 't': {
+    case 't':
         return '\t';
-    }
-    case 'r': {
+    case 'r':
         return '\r';
-    }
-    case '0': {
+    case '0':
         if (!allow_nul) {
             jik_diag_fatal_error("syntax error: \\0 is not supported in string literals",
                                  jik_token_to_text(tok));
         }
         return '\0';
+    case 'x': {
+        int hi = jik_lexer_hex_digit_value(jik_lexer_peek_char(lex, 1));
+        int lo = jik_lexer_hex_digit_value(jik_lexer_peek_char(lex, 2));
+        jik_diag_fatal_error_if(hi < 0 || lo < 0,
+                                "syntax error: invalid hex escape sequence",
+                                jik_token_to_text(tok));
+        char value = (char)((hi << 4) | lo);
+        if (!allow_nul && value == '\0') {
+            jik_diag_fatal_error("syntax error: \\x00 is not supported in string literals",
+                                 jik_token_to_text(tok));
+        }
+        jik_lexer_advance_by(lex, 2);
+        return value;
     }
-    case '\\': {
+    case '\\':
         return '\\';
-    }
-    case '\'': {
+    case '\'':
         return '\'';
-    }
-    case '\"': {
+    case '\"':
         return '\"';
-    }
-    default: {
+    default:
         jik_diag_fatal_error("syntax error: unknown escape sequence", jik_token_to_text(tok));
+        return '\0';
     }
-    }
-    return '\0';
 }
 
 static JikToken
@@ -267,8 +289,7 @@ jik_lexer_lex_string(JikLexer *lex)
             jik_diag_fatal_error_if(jik_lexer_reached_EOF(lex),
                                     "syntax error: unterminated string literal",
                                     jik_token_to_text(&tok));
-            char_buffer_push(buf,
-                             jik_lexer_decode_escape(&tok, jik_lexer_current_char(lex), false));
+            char_buffer_push(buf, jik_lexer_decode_escape(lex, &tok, false));
             jik_lexer_advance(lex);
             continue;
         }
@@ -321,7 +342,7 @@ jik_lexer_lex_char(JikLexer *lex)
     char     ch  = jik_lexer_current_char(lex);
     if (ch == '\\') {
         jik_lexer_advance(lex);
-        ch = jik_lexer_decode_escape(&tok, jik_lexer_current_char(lex), true);
+        ch = jik_lexer_decode_escape(lex, &tok, true);
     }
     jik_lexer_advance(lex);
 
