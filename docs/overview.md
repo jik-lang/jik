@@ -3,7 +3,7 @@
 This document is a **language tour**, not a full specification. It is meant to give you a
 solid feel for how to write Jik code and what the core features look like.
 
-This document applies to Jik version `0.1.0-alpha.0` and may change for future versions.
+This document applies to Jik version `0.1.0-alpha.1` and may change for future versions.
 
 ## Chapters
 
