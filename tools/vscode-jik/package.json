@@ -2,7 +2,7 @@
   "name": "jik-language-tools",
   "displayName": "Jik Language Tools",
   "description": "Syntax highlighting and stdlib-aware completions for the Jik language.",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.1",
   "publisher": "radovanhorvat",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
