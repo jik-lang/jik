@@ -13,6 +13,20 @@ Notes:
 
 _None._
 
+## Constants
+
+### `PI`
+
+pi.
+
+---
+
+### `E`
+
+Euler's number e.
+
+---
+
 ## Functions
 
 ### `abs(x: double) -> double`

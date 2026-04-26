@@ -10,7 +10,7 @@ Test suite state.
 
 ## Functions
 
-### `finish(suite: TestSuite) -> void`
+### `suite_finish(suite: TestSuite) -> void`
 
 Print suite summary and exit non-zero if any test failed.
 

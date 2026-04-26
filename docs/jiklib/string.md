@@ -93,6 +93,9 @@ Replace all occurrences of `needle` in `s` with `repl`.
 
 Return a substring of `s` from byte index `start` (inclusive) to byte index `end` (exclusive).
 
+**Behavior**
+- Throws on failure.
+
 **Parameters**
 1. `s: String` - Source string. Foreign parameter.
 2. `from: int` - Start byte index (inclusive).
