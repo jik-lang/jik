@@ -8,14 +8,10 @@ _A readable systems-oriented language that compiles to C._
 
 <p align="center">
   <a href="https://github.com/jik-lang/jik/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jik-lang/jik/actions/workflows/ci.yml/badge.svg?branch=main&event=push"></a>
-  <a href="https://jik-lang.org/"><img alt="Website" src="https://img.shields.io/badge/website-jik--lang.org-1d4ed8"></a>
   <img alt="Status" src="https://img.shields.io/badge/status-alpha-b45309">
   <img alt="Backend" src="https://img.shields.io/badge/backend-C-2563eb">
   <img alt="Memory" src="https://img.shields.io/badge/memory-region--based-0f766e">
 </p>
-
-## [Go to Jik Playground](https://jik-lang.org/playground)
-_The fastest way to see Jik in action._
 
 ## [Try Jik in GitHub Codespaces](https://codespaces.new/jik-lang/try-jik?quickstart=1)
 _Open a ready-to-use Jik development environment._
