@@ -1,6 +1,6 @@
 # Jik
 
-_A readable systems-oriented language that compiles to C._
+_A readable language with region-based memory management that compiles to C._
 
 <p align="center">
   <img src="assets/logo/jik-logo.png" alt="Jik logo" width="280" />
