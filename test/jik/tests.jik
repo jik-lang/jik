@@ -16,6 +16,7 @@ use "test/jik/test_variant"
 use "test/jik/test_jiklib_io"
 use "test/jik/test_jiklib_string"
 use "test/jik/test_jiklib_strbuf"
+use "test/jik/test_jiklib_path"
 use "test/jik/test_jiklib_rand"
 use "test/jik/test_jiklib_math"
 use "test/jik/test_jiklib_char"
@@ -52,6 +53,7 @@ func main():
     test_jiklib_io::run_tests(ts)
     test_jiklib_string::run_tests(ts)
     test_jiklib_strbuf::run_tests(ts)
+    test_jiklib_path::run_tests(ts)
     test_jiklib_rand::run_tests(ts)
     test_jiklib_math::run_tests(ts)
     test_jiklib_char::run_tests(ts)

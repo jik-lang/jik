@@ -128,6 +128,9 @@ function parseFunctionSignature(signatureLine, pendingDoc, throwsFlag) {
   if (!nameMatch) {
     return null;
   }
+  if (nameMatch[1].startsWith("_")) {
+    return null;
+  }
 
   return {
     name: nameMatch[1],

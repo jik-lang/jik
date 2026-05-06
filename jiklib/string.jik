@@ -3,7 +3,7 @@
 //! `String` stores UTF-8 bytes, but the operations in this module are byte-based.
 //! Lengths, indices, and slices refer to byte offsets, not Unicode characters.
 
-use "jik/char" as char
+use "jik/char"
 use "jik/strbuf"
 
 // -------------------------------------------------------------

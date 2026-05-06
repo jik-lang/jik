@@ -1,7 +1,7 @@
 {
   "char": {
     "module": "char",
-    "doc": "Wrapper library for functions operating on characters.",
+    "doc": "Wrapper library for functions operating on single-byte character values.\n\nThese functions are byte-oriented wrappers around the host C library. They\nare not Unicode-aware character classification or case-mapping operations.",
     "symbols": [
       {
         "name": "isdigit",
@@ -126,6 +126,13 @@
         "signature": "remove(path: String) -> void",
         "doc": "Remove a file from the filesystem.",
         "throws": true
+      },
+      {
+        "name": "exists",
+        "kind": "function",
+        "signature": "exists(path: String) -> bool",
+        "doc": "Return whether a filesystem path exists.",
+        "throws": false
       }
     ]
   },
@@ -280,6 +287,47 @@
       }
     ]
   },
+  "path": {
+    "module": "path",
+    "doc": "Path utilities.",
+    "symbols": [
+      {
+        "name": "join",
+        "kind": "function",
+        "signature": "join(parts: Vec[String], r: Region) -> String",
+        "doc": "Join path segments using the platform separator.\n\nEmpty segments are ignored.",
+        "throws": false
+      },
+      {
+        "name": "basename",
+        "kind": "function",
+        "signature": "basename(path: String, r: Region) -> String",
+        "doc": "Return the last path component.",
+        "throws": false
+      },
+      {
+        "name": "dirname",
+        "kind": "function",
+        "signature": "dirname(path: String, r: Region) -> String",
+        "doc": "Return the parent directory.\n\nRoot-like inputs are kept stable.\nA path with no directory component returns `\".\"`.",
+        "throws": false
+      },
+      {
+        "name": "extname",
+        "kind": "function",
+        "signature": "extname(path: String, r: Region) -> String",
+        "doc": "Return the extension of the last path component.",
+        "throws": false
+      },
+      {
+        "name": "is_absolute",
+        "kind": "function",
+        "signature": "is_absolute(path: String) -> bool",
+        "doc": "Return whether `path` is absolute.\n\nWindows paths accept both `\\` and `/` separators.\nDrive-root forms such as `C:\\foo` are treated as absolute.",
+        "throws": false
+      }
+    ]
+  },
   "rand": {
     "module": "rand",
     "doc": "Pseudo-random number generation.",
@@ -324,6 +372,40 @@
         "signature": "range_int(rng: Rng, lo: int, hi: int) -> int",
         "doc": "Generate a random integer in a half-open interval.",
         "throws": true
+      }
+    ]
+  },
+  "region": {
+    "module": "region",
+    "doc": "Region allocator diagnostics.\n\nThis module exposes small read-only helpers for inspecting region allocator\nstate at runtime.\n\nNotes:\n- Reported sizes are allocator-level byte counts, not exact live object size.\n- `used_bytes` includes allocator padding and dead bytes left behind by\nregion growth.\n- These functions are intended for debugging and instrumentation.",
+    "symbols": [
+      {
+        "name": "used_bytes",
+        "kind": "function",
+        "signature": "used_bytes(region: Region) -> int",
+        "doc": "Return the number of allocator-consumed bytes in the region.",
+        "throws": false
+      },
+      {
+        "name": "total_bytes",
+        "kind": "function",
+        "signature": "total_bytes(region: Region) -> int",
+        "doc": "Return the total capacity of all blocks currently owned by the region.",
+        "throws": false
+      },
+      {
+        "name": "block_count",
+        "kind": "function",
+        "signature": "block_count(region: Region) -> int",
+        "doc": "Return the number of allocation blocks currently owned by the region.",
+        "throws": false
+      },
+      {
+        "name": "print_stats",
+        "kind": "function",
+        "signature": "print_stats(region: Region) -> void",
+        "doc": "Print a short region allocator summary to standard output.",
+        "throws": false
       }
     ]
   },
@@ -375,21 +457,21 @@
         "name": "append_char",
         "kind": "function",
         "signature": "append_char(buf: StrBuf, ch: char) -> void",
-        "doc": "Append a single character to the end of the buffer.",
+        "doc": "Append a single byte to the end of the buffer.",
         "throws": false
       },
       {
         "name": "pop",
         "kind": "function",
         "signature": "pop(buf: StrBuf) -> char",
-        "doc": "Pop a character from the end of the buffer.",
+        "doc": "Pop a single byte from the end of the buffer.",
         "throws": false
       },
       {
         "name": "len",
         "kind": "function",
         "signature": "len(buf: StrBuf) -> int",
-        "doc": "Get the length of the buffer (in characters).",
+        "doc": "Get the length of the buffer in bytes.",
         "throws": false
       },
       {
@@ -417,7 +499,7 @@
   },
   "string": {
     "module": "string",
-    "doc": "String utilities.",
+    "doc": "String utilities.\n\n`String` stores UTF-8 bytes, but the operations in this module are byte-based.\nLengths, indices, and slices refer to byte offsets, not Unicode characters.",
     "symbols": [
       {
         "name": "slice",
@@ -479,7 +561,7 @@
         "name": "find",
         "kind": "function",
         "signature": "find(s: String, needle: String) -> int",
-        "doc": "Find the first occurrence of `needle` in `s`.\n\nReturns the start index of the first match, or `-1` if no match exists.",
+        "doc": "Find the first occurrence of `needle` in `s`.\n\nReturns the start byte index of the first match, or `-1` if no match exists.",
         "throws": false
       },
       {

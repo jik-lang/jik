@@ -1,0 +1,54 @@
+use "jik/testing" as test
+use "jik/path"
+use "jik/string"
+use "jik/sys"
+
+
+func _windows() -> bool:
+    return sys::platform(_) == "windows"
+end
+
+func test_path_join(ts):
+    parts := [0 of ""]
+    test::suite_assert(ts, path::join(parts, _) == "", site())
+
+    push(parts, "foo")
+    push(parts, "")
+    push(parts, "bar")
+
+    expect := "foo/bar"
+    if _windows():
+        expect = "foo\\bar"
+    end
+    test::suite_assert(ts, path::join(parts, _) == expect, site())
+end
+
+func test_path_components(ts):
+    test::suite_assert(ts, path::basename("foo/bar.txt", _) == "bar.txt", site())
+    test::suite_assert(ts, path::basename("/foo/bar/", _) == "bar", site())
+    test::suite_assert(ts, path::dirname("foo/bar.txt", _) == "foo", site())
+    test::suite_assert(ts, path::dirname("foo", _) == ".", site())
+    test::suite_assert(ts, path::extname("foo", _) == "", site())
+    test::suite_assert(ts, path::extname(".bashrc", _) == "", site())
+    test::suite_assert(ts, path::extname("foo.tar.gz", _) == ".gz", site())
+    test::suite_assert(ts, path::extname("foo.", _) == ".", site())
+    test::suite_assert(ts, path::extname("foo.txt", _) == ".txt", site())
+    test::suite_assert(ts, path::extname("foo.a", _) == ".a", site())
+end
+
+func test_path_absolute(ts):
+    if _windows():
+        test::suite_assert(ts, path::is_absolute("C:\\foo"), site())
+        test::suite_assert(ts, path::is_absolute("/foo"), site())
+        test::suite_assert(ts, not path::is_absolute("C:foo"), site())
+    else:
+        test::suite_assert(ts, path::is_absolute("/foo"), site())
+        test::suite_assert(ts, not path::is_absolute("foo/bar"), site())
+    end
+end
+
+func run_tests(ts):
+    test_path_join(ts)
+    test_path_components(ts)
+    test_path_absolute(ts)
+end

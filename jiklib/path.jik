@@ -1,0 +1,229 @@
+//! Path utilities.
+
+use "jik/string"
+use "jik/char"
+use "jik/strbuf"
+use "jik/sys"
+
+
+// -------------------------------------------------------------
+//      Helpers
+// -------------------------------------------------------------
+
+/// Return whether the current platform is Windows.
+func _is_windows() -> bool:
+    return sys::platform(_) == "windows"
+end
+
+/// Return the platform path separator.
+func _sep_char() -> char:
+    if _is_windows():
+        return '\\'
+    end
+    return '/'
+end
+
+/// Return whether `ch` is a path separator for the current platform.
+func _is_sep(ch: char, windows: bool) -> bool:
+    if windows:
+        return ch == '/' or ch == '\\'
+    end
+    return ch == '/'
+end
+
+/// Return whether `path` has a Windows drive prefix like `C:`.
+func _has_drive_prefix(foreign path: String) -> bool:
+    return len(path) >= 2 and char::isalpha(path[0]) and path[1] == ':'
+end
+
+/// Trim trailing separators and return the new exclusive end index.
+func _trim_trailing_seps(foreign path: String, windows: bool) -> int:
+    stop := len(path)
+    while stop > 1 and _is_sep(path[stop - 1], windows):
+        stop -= 1
+    end
+    return stop
+end
+
+
+// -------------------------------------------------------------
+//      API
+// -------------------------------------------------------------
+
+/// Join path segments using the platform separator.
+///
+/// Empty segments are ignored.
+///
+/// @param parts Path segments to join. Foreign parameter.
+/// @param r Allocation region for the result.
+/// @returns Combined path string.
+func join(foreign parts: Vec[String], r: Region) -> String:
+    windows := _is_windows()
+    sb := strbuf::new("", r)
+    first := true
+    tail_sep := false
+
+    for part in parts:
+        if len(part) == 0:
+            continue
+        end
+
+        start := 0
+        if not first:
+            while start < len(part) and _is_sep(part[start], windows):
+                start += 1
+            end
+            if not tail_sep:
+                strbuf::append_char(sb, _sep_char())
+            end
+        end
+
+        if start < len(part):
+            strbuf::append(sb, must string::slice(part, start, len(part), r))
+            tail_sep = _is_sep(part[len(part) - 1], windows)
+            first = false
+        end
+    end
+
+    return strbuf::to_string(sb, r)
+end
+
+/// Return the last path component.
+///
+/// @param path Input path. Foreign parameter.
+/// @param r Allocation region for the result.
+/// @returns Last path component, or an empty string for root-like inputs.
+func basename(foreign path: String, r: Region) -> String:
+    windows := _is_windows()
+    n := len(path)
+    if n == 0:
+        return ""[r]
+    end
+
+    end_i := _trim_trailing_seps(path, windows)
+    if end_i == 0:
+        return ""[r]
+    end
+
+    if _has_drive_prefix(path) and len(path) >= 3 and _is_sep(path[2], windows) and end_i <= 3:
+        return must string::slice(path, 0, 3, r)
+    end
+
+    start := end_i
+    while start > 0 and not _is_sep(path[start - 1], windows):
+        start -= 1
+    end
+
+    return must string::slice(path, start, end_i, r)
+end
+
+/// Return the parent directory.
+///
+/// @param path Input path. Foreign parameter.
+/// @param r Allocation region for the result.
+/// @returns Parent directory path.
+///
+/// Root-like inputs are kept stable.
+/// A path with no directory component returns `"."`.
+func dirname(foreign path: String, r: Region) -> String:
+    windows := _is_windows()
+    n := len(path)
+    if n == 0:
+        return "."[r]
+    end
+
+    end_i := _trim_trailing_seps(path, windows)
+    if end_i == 0:
+        return "."[r]
+    end
+
+    if _has_drive_prefix(path) and len(path) >= 3 and _is_sep(path[2], windows) and end_i <= 3:
+        return must string::slice(path, 0, 3, r)
+    end
+
+    i := end_i
+    while i > 0 and not _is_sep(path[i - 1], windows):
+        i -= 1
+    end
+
+    if i == 0:
+        if _has_drive_prefix(path):
+            return must string::slice(path, 0, 2, r)
+        end
+        return "."[r]
+    end
+
+    if i == 1:
+        return must string::slice(path, 0, 1, r)
+    end
+
+    if _has_drive_prefix(path) and len(path) >= 3 and _is_sep(path[2], windows) and i == 3:
+        return must string::slice(path, 0, 3, r)
+    end
+
+    return must string::slice(path, 0, i - 1, r)
+end
+
+/// Return the extension of the last path component.
+///
+/// @param path Input path. Foreign parameter.
+/// @param r Allocation region for the result.
+/// @returns Extension text including the leading dot, or `""` when no extension exists.
+func extname(foreign path: String, r: Region) -> String:
+    windows := _is_windows()
+    n := len(path)
+    if n == 0:
+        return ""[r]
+    end
+
+    end_i := _trim_trailing_seps(path, windows)
+    if end_i == 0:
+        return ""[r]
+    end
+
+    start := end_i
+    while start > 0 and not _is_sep(path[start - 1], windows):
+        start -= 1
+    end
+
+    i := end_i - 1
+    while i >= start:
+        if path[i] == '.':
+            if i == start:
+                return ""[r]
+            end
+            return must string::slice(path, i, end_i, r)
+        end
+        if i == 0:
+            break
+        end
+        i -= 1
+    end
+
+    return ""[r]
+end
+
+/// Return whether `path` is absolute.
+///
+/// @param path Input path. Foreign parameter.
+/// @returns `true` if the path is absolute, otherwise `false`.
+///
+/// Windows paths accept both `\` and `/` separators.
+/// Drive-root forms such as `C:\foo` are treated as absolute.
+func is_absolute(foreign path: String) -> bool:
+    windows := _is_windows()
+    n := len(path)
+    if n == 0:
+        return false
+    end
+
+    if _is_sep(path[0], windows):
+        return true
+    end
+
+    if windows and _has_drive_prefix(path) and n >= 3 and _is_sep(path[2], windows):
+        return true
+    end
+
+    return false
+end
