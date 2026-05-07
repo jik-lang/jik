@@ -89,6 +89,19 @@ Replace all occurrences of `needle` in `s` with `repl`.
 
 ---
 
+### `copy(s: String, region: Region) -> String`
+
+Copy a string into a different allocation region.
+
+**Parameters**
+1. `s: String` - Source string. Foreign parameter.
+2. `region: Region` - Allocation region for the result.
+
+**Returns**
+- A newly allocated string in the destination region.
+
+---
+
 ### `slice(s: String, from: int, to: int, region: Region) -> String`
 
 Return a substring of `s` from byte index `start` (inclusive) to byte index `end` (exclusive).

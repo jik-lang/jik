@@ -55,6 +55,14 @@ extern func jik_impl_string_concat as
 extern func jik_impl_string_replace as
     replace(foreign s: String, foreign needle: String, foreign repl: String, region: Region) -> String
 
+/// Copies a string to new destination region.
+///
+/// @param s Source string.
+/// @param region Allocation region for the string.
+/// @returns A newly allocated string in the destination region.
+extern func jik_impl_string_copy as
+    copy(foreign s: String, region: Region) -> String
+
 /// Return whether `s` starts with `prefix`.
 ///
 /// @param s Source string.
@@ -375,6 +383,12 @@ jik_impl_string_replace(JikString *s, JikString *needle, JikString *repl, JikReg
 
     from[out_size] = '\0';
     return jik_string_new(from, a);
+}
+
+JikString *
+jik_impl_string_copy(JikString *s, JikRegion *a)
+{
+    return jik_string_new(s->data, a);
 }
 
 
