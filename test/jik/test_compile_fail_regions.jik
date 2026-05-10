@@ -98,4 +98,72 @@ end
         "cannot return foreign composite value"
     )
 
+    // Option payload allocated in local region but Option allocated in caller-owned region
+    utils::assert_compile_fail_source(ts,
+"""
+func foo(v):
+    x := "aaa"
+    y := Some{x}[.v]
+end
+
+func main():
+    v := Some{"aaa"}
+    foo(v)
+end
+""",
+        "Option payload should belong to same region as Option"
+    )
+
+    // Variant payload allocated in local region but variant allocated in caller-owned region
+    utils::assert_compile_fail_source(ts,
+"""
+variant Box:
+    TEXT: String
+end
+
+func foo(v):
+    x := "aaa"
+    y := Box.TEXT{x}[.v]
+end
+
+func main():
+    v := Box.TEXT{"aaa"}
+    foo(v)
+end
+""",
+        "variant payload should belong to same region as variant"
+    )
+
+    // Vector element allocated in local region but vector allocated in caller-owned region
+    utils::assert_compile_fail_source(ts,
+"""
+func foo(v):
+    x := "aaa"
+    y := [x][.v]
+end
+
+func main():
+    v := [1 of "aaa"]
+    foo(v)
+end
+""",
+        "all vector elements should belong to same region as vector"
+    )
+
+    // Dictionary value allocated in local region but dictionary allocated in caller-owned region
+    utils::assert_compile_fail_source(ts,
+"""
+func foo(v):
+    x := "aaa"
+    y := {"a": x}[.v]
+end
+
+func main():
+    v: Dict[String]
+    foo(v)
+end
+""",
+        "all dictionary values should belong to same region as dictionary"
+    )
+
 end

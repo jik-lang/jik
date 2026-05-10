@@ -779,55 +779,68 @@ jik_check_region_integrity(JikNode *ast)
 }
 
 static void
+check_literal_child_region(JikNode        *parent,
+                           JikNode        *child,
+                           TabJikAllocSpec *spec_tab,
+                           char           *msg)
+{
+    if (!jik_type_is_allocated(child->jik_type)) {
+        return;
+    }
+    JikAllocSpec parent_spec = get_expression_alloc_spec(parent, spec_tab);
+    JikAllocSpec child_spec  = get_expression_alloc_spec(child, spec_tab);
+    jik_diag_fatal_error_if(!jik_alloc_sources_match(parent_spec, child_spec),
+                            msg,
+                            jik_token_to_text(child->token));
+}
+
+static void
 check_nested_literal_consistency(JikNode *nd, TabJikAllocSpec *spec_tab)
 {
     if (nd->type == NODE_EXPR_VECTOR && jik_type_is_allocated(nd->jik_type->val_vec.elem_type)) {
         if (nd->val_vector.init_elems) {
-            JikNode     *first    = VecJikNode_get(nd->val_vector.init_elems, 0);
-            JikAllocSpec req_spec = get_expression_alloc_spec(first, spec_tab);
-            for (size_t i = 1; i < VecJikNode_size(nd->val_vector.init_elems); i++) {
-                JikNode     *elem     = VecJikNode_get(nd->val_vector.init_elems, i);
-                JikAllocSpec arg_spec = get_expression_alloc_spec(elem, spec_tab);
-                jik_diag_fatal_error_if(!jik_alloc_sources_match(arg_spec, req_spec),
-                                        "all vector elements should belong to same region",
-                                        jik_token_to_text(elem->token));
+            for (size_t i = 0; i < VecJikNode_size(nd->val_vector.init_elems); i++) {
+                JikNode *elem = VecJikNode_get(nd->val_vector.init_elems, i);
+                check_literal_child_region(
+                    nd, elem, spec_tab, "all vector elements should belong to same region as vector");
             }
         }
         else {
-            JikAllocSpec vec_spec  = get_expression_alloc_spec(nd, spec_tab);
-            JikAllocSpec init_spec = get_expression_alloc_spec(nd->val_vector.elem_expr, spec_tab);
-            jik_diag_fatal_error_if(!jik_alloc_sources_match(vec_spec, init_spec),
-                                    "vector initializer should belong to same region as vector",
-                                    jik_token_to_text(nd->val_vector.elem_expr->token));
+            check_literal_child_region(nd,
+                                       nd->val_vector.elem_expr,
+                                       spec_tab,
+                                       "vector initializer should belong to same region as vector");
         }
     }
     else if (nd->type == NODE_EXPR_DICT && nd->val_dict.init_values &&
              jik_type_is_allocated(nd->jik_type->val_dict.elem_type)) {
-        JikNode *first = VecJikNode_get(nd->val_dict.init_values, 0);
-        if (jik_type_is_allocated(first->jik_type)) {
-            JikAllocSpec req_spec = get_expression_alloc_spec(first, spec_tab);
-            for (size_t i = 1; i < VecJikNode_size(nd->val_dict.init_values); i++) {
-                JikNode     *elem     = VecJikNode_get(nd->val_dict.init_values, i);
-                JikAllocSpec arg_spec = get_expression_alloc_spec(elem, spec_tab);
-                jik_diag_fatal_error_if(!jik_alloc_sources_match(arg_spec, req_spec),
-                                        "all dictionary values should belong to same region",
-                                        jik_token_to_text(elem->token));
-            }
+        for (size_t i = 0; i < VecJikNode_size(nd->val_dict.init_values); i++) {
+            JikNode *elem = VecJikNode_get(nd->val_dict.init_values, i);
+            check_literal_child_region(
+                nd, elem, spec_tab, "all dictionary values should belong to same region as dictionary");
         }
     }
     else if (nd->type == NODE_EXPR_STRUCT_NEW) {
-        JikAllocSpec    struct_spec = get_expression_alloc_spec(nd, spec_tab);
         TabJikNode_iter it          = TabJikNode_iter_new(nd->val_struct_new.init_vals);
         TabJikNode_item item;
         while (TabJikNode_iter_next(&it, &item)) {
-            if (!jik_type_is_allocated(item.value->jik_type)) {
-                continue;
-            }
-            JikAllocSpec val_spec = get_expression_alloc_spec(item.value, spec_tab);
-            jik_diag_fatal_error_if(!jik_alloc_sources_match(struct_spec, val_spec),
-                                    "all struct initializer values should belong to same region",
-                                    jik_token_to_text(item.value->token));
+            check_literal_child_region(nd,
+                                       item.value,
+                                       spec_tab,
+                                       "all struct initializer values should belong to same region");
         }
+    }
+    else if (nd->type == NODE_EXPR_VARIANT_NEW && nd->val_variant_new.init_expr) {
+        check_literal_child_region(nd,
+                                   nd->val_variant_new.init_expr,
+                                   spec_tab,
+                                   "variant payload should belong to same region as variant");
+    }
+    else if (nd->type == NODE_EXPR_OPTION_SOME) {
+        check_literal_child_region(nd,
+                                   nd->val_option_some.expr,
+                                   spec_tab,
+                                   "Option payload should belong to same region as Option");
     }
 }
 
