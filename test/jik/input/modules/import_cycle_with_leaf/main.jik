@@ -1,5 +1,5 @@
-use "test/jik/input/modules/import_cycle_with_leaf/a"
-use "test/jik/input/modules/import_cycle_with_leaf/c"
+use "a"
+use "c"
 
 func main():
     c::ok()

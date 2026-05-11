@@ -14,11 +14,12 @@ use "app/utils"
 ```
 
 - The string is a **module path** which points to a `.jik` file with the same name
+- Module paths always use `/` as the separator, on all platforms.
 - `as` gives the module a short alias (`test` in this example).
 - If you omit `as`, the module is referred to by its basename (`utils` in the example above).
 - Import aliases must be unique within a module. This applies to both explicit `as` aliases and implicit basename aliases.
 
-Modules are resolved relative to the current working directory.
+Modules are resolved relative to the directory of the file that contains the `use` declaration.
 Standard library modules are prefixed with `jik` and are resolved relative to the `jik`
 installation directory.
 

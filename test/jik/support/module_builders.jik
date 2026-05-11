@@ -1,4 +1,4 @@
-use "test/jik/support/module_shapes" as shapes
+use "module_shapes" as shapes
 
 
 func make_person(name: String, r: Region) -> shapes::Person:

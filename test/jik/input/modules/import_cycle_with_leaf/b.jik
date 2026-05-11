@@ -1,4 +1,4 @@
-use "test/jik/input/modules/import_cycle_with_leaf/a"
+use "a"
 
 func pong():
 end

@@ -1,8 +1,8 @@
 use "jik/testing" as test
 
-use "test/jik/support/module_type_base" as base
-use "test/jik/support/module_type_records" as records
-use "test/jik/support/module_type_logic" as logic
+use "support/module_type_base" as base
+use "support/module_type_records" as records
+use "support/module_type_logic" as logic
 
 
 func test_cross_module_struct_fields(ts):

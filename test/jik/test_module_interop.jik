@@ -1,8 +1,8 @@
 use "jik/testing" as test
 
-use "test/jik/support/module_shapes" as shapes
-use "test/jik/support/module_builders" as builders
-use "test/jik/support/module_logic" as logic
+use "support/module_shapes" as shapes
+use "support/module_builders" as builders
+use "support/module_logic" as logic
 
 
 func test_module_interop_person(ts):

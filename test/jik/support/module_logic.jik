@@ -1,4 +1,4 @@
-use "test/jik/support/module_shapes" as shapes
+use "module_shapes" as shapes
 
 
 func nickname_or_fallback(p: shapes::Person, r: Region) -> String:

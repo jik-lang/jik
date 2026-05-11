@@ -1,5 +1,5 @@
 use "jik/testing" as test
-use "test/jik/support/enum_support"
+use "support/enum_support"
 
 
 enum Color:

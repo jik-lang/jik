@@ -1,5 +1,5 @@
-use "test/jik/support/module_type_base" as base
-use "test/jik/support/module_type_records" as records
+use "module_type_base" as base
+use "module_type_records" as records
 
 
 func make_record(r: Region) -> records::Record:

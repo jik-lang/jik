@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "alloc.h"
 #include "charbuf.h"
 #include "codegen.h"
 #include "context.h"
@@ -44,11 +45,17 @@ alias_from_filepath(char *filepath)
         return filepath;
 }
 
+static bool
+jik_module_path_is_stdlib(char *path)
+{
+    return strncmp(path, "jik/", 4) == 0;
+}
+
 // Check if path is stdlib path
 static char *
 get_proper_path(char *path, JikContext *ctx)
 {
-    if (strncmp(path, "jik", 3) == 0 && strlen(path) > 3 && path[3] == '/') {
+    if (jik_module_path_is_stdlib(path)) {
         char *tail = strdup(path + 4);
         if (strcmp(tail, "math.jik") == 0) {
             ctx->math_used = true;
@@ -56,6 +63,54 @@ get_proper_path(char *path, JikContext *ctx)
         return JIK_STRING_NCAT(ctx->conf.jiklib_path, tail);
     }
     return path;
+}
+
+static char *
+jik_module_dirname(char *filepath)
+{
+    char *last_slash     = strrchr(filepath, '/');
+    char *last_backslash = strrchr(filepath, '\\');
+    char *last_sep       = last_slash;
+    if (last_backslash && (!last_sep || last_backslash > last_sep))
+        last_sep = last_backslash;
+    if (!last_sep)
+        return "";
+
+    size_t len = (size_t)(last_sep - filepath);
+    char  *dir = jik_alloc(len + 1);
+    strncpy(dir, filepath, len);
+    dir[len] = '\0';
+    return dir;
+}
+
+static bool
+jik_module_path_is_absolute(char *path)
+{
+    return path[0] == '/' || path[0] == '\\' || (strlen(path) > 2 && path[1] == ':');
+}
+
+static char *
+jik_module_resolve_use_path(char *use_path, char *current_source_path)
+{
+    if (jik_module_path_is_stdlib(use_path) || jik_module_path_is_absolute(use_path)) {
+        return use_path;
+    }
+
+    char *dir = jik_module_dirname(current_source_path);
+    if (dir[0] == '\0') {
+        return use_path;
+    }
+
+    return JIK_STRING_NCAT(dir, "/", use_path);
+}
+
+static void
+jik_compiler_validate_use_path(char *path, JikToken *tok)
+{
+    if (strchr(path, '\\') != NULL) {
+        jik_diag_fatal_error("module paths in use declarations must use '/' separators",
+                             jik_token_to_text(tok));
+    }
 }
 
 static size_t
@@ -128,7 +183,8 @@ jik_compiler_get_usages(JikContext *ctx, JikModule *mod)
             if (tok->type != TOK_STRING) {
                 jik_diag_fatal_error("expected string", jik_token_to_text(tok));
             }
-            used_mod.filepath = tok->lexeme;
+            jik_compiler_validate_use_path(tok->lexeme, tok);
+            used_mod.filepath = jik_module_resolve_use_path(tok->lexeme, pp);
             bool *fp          = TabBool_get(seen_filepaths, used_mod.filepath);
             if (fp != NULL) {
                 char *msg = jik_string_cat("reuse of module ", used_mod.filepath);

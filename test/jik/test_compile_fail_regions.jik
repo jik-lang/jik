@@ -1,5 +1,5 @@
 use "jik/testing" as test
-use "test/jik/utils"
+use "utils"
 
 func run_tests(ts):
 

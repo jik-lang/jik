@@ -1,4 +1,4 @@
-use "test/jik/input/modules/import_cycle_no_leaves/a"
+use "a"
 
 func main():
     a::ping()

@@ -1,4 +1,4 @@
-use "test/jik/support/module_type_base" as base
+use "module_type_base" as base
 
 
 struct Record:
