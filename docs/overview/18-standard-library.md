@@ -9,6 +9,7 @@ strings, input/output, math, randomness, and testing.
 - [jik::char](../jiklib/char.md) - character-related helpers
 - [jik::string](../jiklib/string.md) - string operations
 - [jik::strbuf](../jiklib/strbuf.md) - mutable string buffer support
+- [jik::fs](../jiklib/fs.md) - filesystem operations
 - [jik::io](../jiklib/io.md) - file and stream I/O
 - [jik::region](../jiklib/region.md) - region allocator diagnostics
 - [jik::rand](../jiklib/rand.md) - pseudo-random number generation

@@ -1,0 +1,292 @@
+use "jik/testing" as test
+use "jik/fs"
+use "jik/io"
+use "jik/path"
+use "jik/sys"
+
+
+func _root(r: Region) -> String:
+    return "test/jik/input/__fs_tmp"[r]
+end
+
+func _contains(foreign items: Vec[String], foreign want: String) -> bool:
+    for item in items:
+        if item == want:
+            return true
+        end
+    end
+    return false
+end
+
+func _cleanup_root():
+    try fs::remove_dir_all(_root(_)):
+    except:
+    end
+end
+
+func _reset_root():
+    _cleanup_root()
+    must fs::mkdir(_root(_))
+end
+
+func _write(foreign path: String, foreign text: String):
+    must io::write_file(path, text, _)
+end
+
+func test_predicates(ts):
+    _reset_root()
+
+    missing := path::join([_root(), "missing"])
+    test::suite_assert(ts, not fs::exists(missing), site())
+    test::suite_assert(ts, not fs::is_file(missing), site())
+    test::suite_assert(ts, not fs::is_dir(missing), site())
+
+    dir_path := path::join([_root(), "dir1"])
+    must fs::mkdir(dir_path)
+    test::suite_assert(ts, fs::exists(dir_path), site())
+    test::suite_assert(ts, fs::is_dir(dir_path), site())
+    test::suite_assert(ts, not fs::is_file(dir_path), site())
+
+    file_path := path::join([_root(), "file1.txt"])
+    _write(file_path, "alpha")
+    test::suite_assert(ts, fs::exists(file_path), site())
+    test::suite_assert(ts, fs::is_file(file_path), site())
+    test::suite_assert(ts, not fs::is_dir(file_path), site())
+
+    _cleanup_root()
+end
+
+func test_mkdir(ts):
+    _reset_root()
+
+    dir_path := path::join([_root(), "single"])
+    must fs::mkdir(dir_path)
+    test::suite_assert(ts, fs::is_dir(dir_path), site())
+
+    nested := path::join([_root(), "missing", "leaf"])
+    try fs::mkdir(nested):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    try fs::mkdir(dir_path):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    _cleanup_root()
+end
+
+func test_mkdir_all(ts):
+    _reset_root()
+
+    nested := path::join([_root(), "a", "b"])
+    leaf := path::join([nested, "c"])
+
+    must fs::mkdir_all(leaf)
+    test::suite_assert(ts, fs::is_dir(leaf), site())
+
+    must fs::mkdir_all(leaf)
+    test::suite_assert(ts, fs::is_dir(leaf), site())
+
+    blocker := path::join([_root(), "blocker"])
+    _write(blocker, "x")
+    bad := path::join([blocker, "child", "leaf"])
+    try fs::mkdir_all(bad):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    _cleanup_root()
+end
+
+func test_remove_file(ts):
+    _reset_root()
+
+    file_path := path::join([_root(), "gone.txt"])
+    _write(file_path, "bye")
+    must fs::remove_file(file_path)
+    test::suite_assert(ts, not fs::exists(file_path), site())
+
+    try fs::remove_file(file_path):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    dir_path := path::join([_root(), "dir2"])
+    must fs::mkdir(dir_path)
+    try fs::remove_file(dir_path):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    _cleanup_root()
+end
+
+func test_remove_dir(ts):
+    _reset_root()
+
+    dir_path := path::join([_root(), "empty"])
+    must fs::mkdir(dir_path)
+    must fs::remove_dir(dir_path)
+    test::suite_assert(ts, not fs::exists(dir_path), site())
+
+    try fs::remove_dir(dir_path):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    nonempty := path::join([_root(), "nonempty"])
+    must fs::mkdir(nonempty)
+    _write(path::join([nonempty, "child.txt"]), "x")
+    try fs::remove_dir(nonempty):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    _cleanup_root()
+end
+
+func test_remove_dir_all(ts):
+    _reset_root()
+
+    top := path::join([_root(), "tree"])
+    sub := path::join([top, "sub"])
+    must fs::mkdir(top)
+    must fs::mkdir(sub)
+    _write(path::join([top, "a.txt"]), "a")
+    _write(path::join([sub, "b.txt"]), "b")
+
+    must fs::remove_dir_all(top)
+    test::suite_assert(ts, not fs::exists(top), site())
+
+    try fs::remove_dir_all(top):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    file_path := path::join([_root(), "plain.txt"])
+    _write(file_path, "x")
+    try fs::remove_dir_all(file_path):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    _cleanup_root()
+end
+
+func test_rename(ts):
+    _reset_root()
+
+    src_file := path::join([_root(), "from.txt"])
+    dst_file := path::join([_root(), "to.txt"])
+    _write(src_file, "alpha")
+    must fs::rename(src_file, dst_file)
+    test::suite_assert(ts, not fs::exists(src_file), site())
+    test::suite_assert(ts, fs::is_file(dst_file), site())
+    test::suite_assert(ts, must io::read_file(dst_file, _) == "alpha", site())
+
+    src_dir := path::join([_root(), "dir_from"])
+    dst_dir := path::join([_root(), "dir_to"])
+    must fs::mkdir(src_dir)
+    _write(path::join([src_dir, "inner.txt"]), "beta")
+    must fs::rename(src_dir, dst_dir)
+    test::suite_assert(ts, not fs::exists(src_dir), site())
+    test::suite_assert(ts, fs::is_dir(dst_dir), site())
+    test::suite_assert(ts, fs::is_file(path::join([dst_dir, "inner.txt"])), site())
+
+    try fs::rename(path::join([_root(), "missing.txt"]), path::join([_root(), "never.txt"])):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    _cleanup_root()
+end
+
+func test_copy_file(ts):
+    _reset_root()
+
+    src := path::join([_root(), "src.txt"])
+    dst := path::join([_root(), "dst.txt"])
+    _write(src, "alpha\nbeta")
+    must fs::copy_file(src, dst)
+    test::suite_assert(ts, must io::read_file(dst, _) == "alpha\nbeta", site())
+
+    _write(dst, "old")
+    must fs::copy_file(src, dst)
+    test::suite_assert(ts, must io::read_file(dst, _) == "alpha\nbeta", site())
+
+    try fs::copy_file(path::join([_root(), "missing.txt"]), dst):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    try fs::copy_file(src, src):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, must io::read_file(src, _) == "alpha\nbeta", site())
+    end
+
+    _cleanup_root()
+end
+
+func test_read_dir(ts):
+    _reset_root()
+
+    must fs::mkdir(path::join([_root(), "dir_a"]))
+    _write(path::join([_root(), "one.txt"]), "1")
+    _write(path::join([_root(), "two.txt"]), "2")
+
+    entries := must fs::read_dir(_root(_), _)
+    test::suite_assert(ts, len(entries) == 3, site())
+    test::suite_assert(ts, _contains(entries, "dir_a"), site())
+    test::suite_assert(ts, _contains(entries, "one.txt"), site())
+    test::suite_assert(ts, _contains(entries, "two.txt"), site())
+    test::suite_assert(ts, not _contains(entries, "."), site())
+    test::suite_assert(ts, not _contains(entries, ".."), site())
+
+    try fs::read_dir(path::join([_root(), "missing"]), _):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    file_path := path::join([_root(), "plain.txt"])
+    _write(file_path, "x")
+    try fs::read_dir(file_path, _):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+
+    _cleanup_root()
+end
+
+func test_temp_dir(ts):
+    td := fs::temp_dir(_)
+    test::suite_assert(ts, len(td) > 0, site())
+end
+
+func run_tests(ts):
+    test_predicates(ts)
+    test_mkdir(ts)
+    test_mkdir_all(ts)
+    test_remove_file(ts)
+    test_remove_dir(ts)
+    test_remove_dir_all(ts)
+    test_rename(ts)
+    test_copy_file(ts)
+    test_read_dir(ts)
+    test_temp_dir(ts)
+end

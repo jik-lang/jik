@@ -1,4 +1,5 @@
 use "jik/io"
+use "jik/fs"
 use "jik/std"
 use "jik/string"
 use "jik/sys"
@@ -22,7 +23,7 @@ func write_string_to_file(foreign path: String, foreign s: String):
 end
 
 func remove_if_exists(foreign path: String):
-    try io::remove(path):
+    try fs::remove_file(path):
     except:
     end
 end

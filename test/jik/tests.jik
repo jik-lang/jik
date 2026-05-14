@@ -14,6 +14,7 @@ use "test_enum"
 use "test_dict"
 use "test_variant"
 use "test_jiklib_io"
+use "test_jiklib_fs"
 use "test_jiklib_string"
 use "test_jiklib_strbuf"
 use "test_jiklib_path"
@@ -51,6 +52,7 @@ func main():
     test_dict::run_tests(ts)
     test_variant::run_tests(ts)
     test_jiklib_io::run_tests(ts)
+    test_jiklib_fs::run_tests(ts)
     test_jiklib_string::run_tests(ts)
     test_jiklib_strbuf::run_tests(ts)
     test_jiklib_path::run_tests(ts)

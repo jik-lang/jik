@@ -1,0 +1,637 @@
+//! Filesystem utilities.
+//!
+//! This module provides filesystem object and directory operations.
+
+use "jik/path"
+use "jik/string"
+
+// -------------------------------------------------------------
+//      Helpers
+// -------------------------------------------------------------
+
+func _join_child(foreign dir: String, foreign name: String, r: Region) -> String:
+    parts := [0 of ""][r]
+    push(parts, string::copy(dir, r))
+    push(parts, string::copy(name, r))
+    return path::join(parts, r)
+end
+
+// -------------------------------------------------------------
+//      API
+// -------------------------------------------------------------
+
+/// Return whether a filesystem path exists.
+///
+/// @param path Filesystem path.
+/// @returns `true` if the path exists, otherwise `false`.
+extern func jik_impl_fs_exists as
+    exists(foreign path: String) -> bool
+
+/// Return whether a filesystem path refers to a regular file.
+///
+/// @param path Filesystem path.
+/// @returns `true` only for regular files.
+extern func jik_impl_fs_is_file as
+    is_file(foreign path: String) -> bool
+
+/// Return whether a filesystem path refers to a directory.
+///
+/// @param path Filesystem path.
+/// @returns `true` only for directories.
+extern func jik_impl_fs_is_dir as
+    is_dir(foreign path: String) -> bool
+
+/// Create a directory.
+///
+/// @param path Directory path.
+extern throws func jik_impl_fs_mkdir as
+    mkdir(foreign path: String) -> void
+
+/// Create a directory path and any missing parents.
+///
+/// @param path Directory path.
+throws func mkdir_all(foreign path: String) -> void:
+    if is_dir(path):
+        return
+    end
+    if exists(path):
+        fail("fs::mkdir_all: path component is not a directory")
+    end
+
+    parent := path::dirname(path, _)
+    if parent != "." and parent != path and not is_dir(parent):
+        try mkdir_all(parent):
+        except:
+            fail(error_msg(_), error_code())
+        end
+    end
+
+    try mkdir(path):
+    except:
+        fail(error_msg(_), error_code())
+    end
+end
+
+/// Remove a file.
+///
+/// @param path File path.
+extern throws func jik_impl_fs_remove_file as
+    remove_file(foreign path: String) -> void
+
+/// Remove an empty directory.
+///
+/// @param path Directory path.
+extern throws func jik_impl_fs_remove_dir as
+    remove_dir(foreign path: String) -> void
+
+/// Remove a directory tree recursively.
+///
+/// @param path Directory path.
+throws func remove_dir_all(foreign path: String) -> void:
+    if not exists(path):
+        fail("fs::remove_dir_all: could not remove directory")
+    end
+    if not is_dir(path):
+        fail("fs::remove_dir_all: path is not a directory")
+    end
+
+    try entries := read_dir(path, _):
+        for entry in entries:
+            child := _join_child(path, entry, _)
+            if is_dir(child):
+                try remove_dir_all(child):
+                except:
+                    fail(error_msg(_), error_code())
+                end
+            else:
+                try remove_file(child):
+                except:
+                    fail(error_msg(_), error_code())
+                end
+            end
+        end
+    except:
+        fail(error_msg(_), error_code())
+    end
+
+    try remove_dir(path):
+    except:
+        fail(error_msg(_), error_code())
+    end
+end
+
+/// Rename or move a filesystem object.
+///
+/// @param old_path Source path.
+/// @param new_path Destination path.
+extern throws func jik_impl_fs_rename as
+    rename(foreign old_path: String, foreign new_path: String) -> void
+
+/// Copy a file.
+///
+/// @param src_path Source path.
+/// @param dst_path Destination path.
+extern throws func jik_impl_fs_copy_file as
+    copy_file(foreign src_path: String, foreign dst_path: String) -> void
+
+extern struct jik_impl_fs_Dir as
+    _Dir
+
+extern throws func jik_impl_fs_read_dir_open as
+    _read_dir_open(foreign path: String, region: Region) -> _Dir
+
+extern throws func jik_impl_fs_read_dir_next as
+    _read_dir_next(dir: _Dir, region: Region) -> String
+
+extern throws func jik_impl_fs_read_dir_close as
+    _read_dir_close(dir: _Dir) -> void
+
+/// Return the names of entries directly inside a directory.
+///
+/// Entry names are returned without directory prefixes.
+///
+/// @param path Directory path.
+/// @param region Allocation region for the returned vector and strings.
+/// @returns Directory entry names.
+throws func read_dir(foreign path: String, region: Region) -> Vec[String]:
+    try dir := _read_dir_open(path, region):
+        entries := [0 of ""][region]
+        while true:
+            try name := _read_dir_next(dir, region):
+                if name == "":
+                    break
+                end
+                push(entries, name)
+            except:
+                try _read_dir_close(dir):
+                except:
+                end
+                fail(error_msg(region), error_code())
+            end
+        end
+
+        try _read_dir_close(dir):
+            return entries
+        except:
+            fail(error_msg(region), error_code())
+        end
+    except:
+        fail(error_msg(region), error_code())
+    end
+end
+
+/// Return the platform temporary directory path.
+///
+/// @param region Allocation region for the returned string.
+/// @returns Temporary directory path.
+extern func jik_impl_fs_temp_dir as
+    temp_dir(region: Region) -> String
+
+
+// -------------------------------------------------------------
+//      C implementation
+// -------------------------------------------------------------
+
+@embed{C_END}
+
+#ifdef _WIN32
+#include <windows.h>
+#include <direct.h>
+#include <io.h>
+#else
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <dirent.h>
+#include <unistd.h>
+#endif
+
+static bool
+jik_impl_fs_invalid_path(JikString *path)
+{
+    return !path || !path->data || path->data[0] == '\0';
+}
+
+#ifdef _WIN32
+
+static bool
+jik_impl_fs_is_sep(char ch)
+{
+    return ch == '\\' || ch == '/';
+}
+
+static bool
+jik_impl_fs_get_attrs(const char *path, DWORD *attrs_out)
+{
+    DWORD attrs;
+
+    if (!path || path[0] == '\0') {
+        return false;
+    }
+
+    attrs = GetFileAttributesA(path);
+    if (attrs == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+    if (attrs_out) {
+        *attrs_out = attrs;
+    }
+    return true;
+}
+
+static bool
+jik_impl_fs_exists_cstr(const char *path)
+{
+    return jik_impl_fs_get_attrs(path, NULL);
+}
+
+static bool
+jik_impl_fs_is_file_cstr(const char *path)
+{
+    DWORD attrs;
+    return jik_impl_fs_get_attrs(path, &attrs) && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static bool
+jik_impl_fs_is_dir_cstr(const char *path)
+{
+    DWORD attrs;
+    return jik_impl_fs_get_attrs(path, &attrs) && (attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static char *
+jik_impl_fs_join_path(const char *base, const char *name)
+{
+    size_t base_len = strlen(base);
+    size_t name_len = strlen(name);
+    bool need_sep = base_len > 0 && !jik_impl_fs_is_sep(base[base_len - 1]);
+    size_t total = base_len + (need_sep ? 1 : 0) + name_len;
+    char *out = jik_malloc(total + 1);
+
+    for (size_t i = 0; i < base_len; i++) {
+        out[i] = (base[i] == '/') ? '\\' : base[i];
+    }
+    if (need_sep) {
+        out[base_len] = '\\';
+        for (size_t i = 0; i < name_len; i++) {
+            out[base_len + 1 + i] = (name[i] == '/') ? '\\' : name[i];
+        }
+    } else {
+        for (size_t i = 0; i < name_len; i++) {
+            out[base_len + i] = (name[i] == '/') ? '\\' : name[i];
+        }
+    }
+    out[total] = '\0';
+    return out;
+}
+
+#else
+
+static bool
+jik_impl_fs_exists_cstr(const char *path)
+{
+    struct stat st;
+    return path && path[0] != '\0' && stat(path, &st) == 0;
+}
+
+static bool
+jik_impl_fs_is_file_cstr(const char *path)
+{
+    struct stat st;
+    return path && path[0] != '\0' && stat(path, &st) == 0 && S_ISREG(st.st_mode);
+}
+
+static bool
+jik_impl_fs_is_dir_cstr(const char *path)
+{
+    struct stat st;
+    return path && path[0] != '\0' && stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+#endif
+
+bool
+jik_impl_fs_exists(JikString *path)
+{
+    if (jik_impl_fs_invalid_path(path)) {
+        return false;
+    }
+    return jik_impl_fs_exists_cstr(path->data);
+}
+
+bool
+jik_impl_fs_is_file(JikString *path)
+{
+    if (jik_impl_fs_invalid_path(path)) {
+        return false;
+    }
+    return jik_impl_fs_is_file_cstr(path->data);
+}
+
+bool
+jik_impl_fs_is_dir(JikString *path)
+{
+    if (jik_impl_fs_invalid_path(path)) {
+        return false;
+    }
+    return jik_impl_fs_is_dir_cstr(path->data);
+}
+
+void
+jik_impl_fs_mkdir(JikString *path, JikError *e)
+{
+    if (jik_impl_fs_invalid_path(path)) {
+        jik_error_set(e, 1, "fs::mkdir: could not create directory");
+        return;
+    }
+    if (jik_impl_fs_exists_cstr(path->data)) {
+        jik_error_set(e, 1, "fs::mkdir: could not create directory");
+        return;
+    }
+#ifdef _WIN32
+    if (!CreateDirectoryA(path->data, NULL)) {
+        jik_error_set(e, 1, "fs::mkdir: could not create directory");
+    }
+#else
+    if (mkdir(path->data, 0777) != 0) {
+        jik_error_set(e, 1, "fs::mkdir: could not create directory");
+    }
+#endif
+}
+
+void
+jik_impl_fs_remove_file(JikString *path, JikError *e)
+{
+    if (jik_impl_fs_invalid_path(path)) {
+        jik_error_set(e, 1, "fs::remove_file: path is not a file");
+        return;
+    }
+    if (!jik_impl_fs_exists_cstr(path->data)) {
+        jik_error_set(e, 1, "fs::remove_file: could not remove file");
+        return;
+    }
+    if (!jik_impl_fs_is_file_cstr(path->data)) {
+        jik_error_set(e, 1, "fs::remove_file: path is not a file");
+        return;
+    }
+#ifdef _WIN32
+    if (!DeleteFileA(path->data)) {
+        jik_error_set(e, 1, "fs::remove_file: could not remove file");
+    }
+#else
+    if (unlink(path->data) != 0) {
+        jik_error_set(e, 1, "fs::remove_file: could not remove file");
+    }
+#endif
+}
+
+void
+jik_impl_fs_remove_dir(JikString *path, JikError *e)
+{
+    if (jik_impl_fs_invalid_path(path)) {
+        jik_error_set(e, 1, "fs::remove_dir: path is not a directory");
+        return;
+    }
+    if (!jik_impl_fs_exists_cstr(path->data)) {
+        jik_error_set(e, 1, "fs::remove_dir: could not remove directory");
+        return;
+    }
+    if (!jik_impl_fs_is_dir_cstr(path->data)) {
+        jik_error_set(e, 1, "fs::remove_dir: path is not a directory");
+        return;
+    }
+#ifdef _WIN32
+    if (!RemoveDirectoryA(path->data)) {
+        jik_error_set(e, 1, "fs::remove_dir: could not remove directory");
+    }
+#else
+    if (rmdir(path->data) != 0) {
+        jik_error_set(e, 1, "fs::remove_dir: could not remove directory");
+    }
+#endif
+}
+
+void
+jik_impl_fs_rename(JikString *old_path, JikString *new_path, JikError *e)
+{
+    if (jik_impl_fs_invalid_path(old_path) || !jik_impl_fs_exists_cstr(old_path->data)) {
+        jik_error_set(e, 1, "fs::rename: source path is missing");
+        return;
+    }
+    if (jik_impl_fs_invalid_path(new_path)) {
+        jik_error_set(e, 1, "fs::rename: could not rename path");
+        return;
+    }
+#ifdef _WIN32
+    if (!MoveFileA(old_path->data, new_path->data)) {
+        jik_error_set(e, 1, "fs::rename: could not rename path");
+    }
+#else
+    if (rename(old_path->data, new_path->data) != 0) {
+        jik_error_set(e, 1, "fs::rename: could not rename path");
+    }
+#endif
+}
+
+void
+jik_impl_fs_copy_file(JikString *src_path, JikString *dst_path, JikError *e)
+{
+    FILE *src;
+    FILE *dst;
+    unsigned char buffer[8192];
+
+    if (jik_impl_fs_invalid_path(src_path) || !jik_impl_fs_exists_cstr(src_path->data)) {
+        jik_error_set(e, 1, "fs::copy_file: source path is missing");
+        return;
+    }
+    if (!jik_impl_fs_is_file_cstr(src_path->data)) {
+        jik_error_set(e, 1, "fs::copy_file: source path is not a file");
+        return;
+    }
+    if (jik_impl_fs_invalid_path(dst_path)) {
+        jik_error_set(e, 1, "fs::copy_file: could not copy file");
+        return;
+    }
+    if (strcmp(src_path->data, dst_path->data) == 0) {
+        jik_error_set(e, 1, "fs::copy_file: source and destination are the same file");
+        return;
+    }
+
+    src = fopen(src_path->data, "rb");
+    if (!src) {
+        jik_error_set(e, 1, "fs::copy_file: could not copy file");
+        return;
+    }
+
+    dst = fopen(dst_path->data, "wb");
+    if (!dst) {
+        fclose(src);
+        jik_error_set(e, 1, "fs::copy_file: could not copy file");
+        return;
+    }
+
+    for (;;) {
+        size_t n = fread(buffer, 1, sizeof(buffer), src);
+        if (n > 0 && fwrite(buffer, 1, n, dst) != n) {
+            fclose(src);
+            fclose(dst);
+            jik_error_set(e, 1, "fs::copy_file: could not copy file");
+            return;
+        }
+        if (n < sizeof(buffer)) {
+            if (ferror(src)) {
+                fclose(src);
+                fclose(dst);
+                jik_error_set(e, 1, "fs::copy_file: could not copy file");
+                return;
+            }
+            break;
+        }
+    }
+
+    fclose(src);
+    if (fclose(dst) != 0) {
+        jik_error_set(e, 1, "fs::copy_file: could not copy file");
+    }
+}
+
+typedef struct jik_impl_fs_Dir {
+#ifdef _WIN32
+    HANDLE handle;
+    WIN32_FIND_DATAA data;
+    bool first_ready;
+#else
+    DIR *dir;
+#endif
+    bool closed;
+    bool done;
+} jik_impl_fs_Dir;
+
+jik_impl_fs_Dir *
+jik_impl_fs_read_dir_open(JikString *path, JikRegion *a, JikError *e)
+{
+    jik_impl_fs_Dir *dir = jik_region_alloc(a, sizeof(jik_impl_fs_Dir));
+    dir->closed = false;
+    dir->done = false;
+
+    if (jik_impl_fs_invalid_path(path) || !jik_impl_fs_is_dir_cstr(path->data)) {
+        jik_error_set(e, 1, "fs::read_dir: could not open directory");
+#ifdef _WIN32
+        dir->handle = INVALID_HANDLE_VALUE;
+        dir->first_ready = false;
+#else
+        dir->dir = NULL;
+#endif
+        return dir;
+    }
+
+#ifdef _WIN32
+    {
+        char *pattern = jik_impl_fs_join_path(path->data, "*");
+        dir->handle = FindFirstFileA(pattern, &dir->data);
+        free(pattern);
+        if (dir->handle == INVALID_HANDLE_VALUE) {
+            jik_error_set(e, 1, "fs::read_dir: could not open directory");
+            dir->first_ready = false;
+            return dir;
+        }
+        dir->first_ready = true;
+    }
+#else
+    dir->dir = opendir(path->data);
+    if (!dir->dir) {
+        jik_error_set(e, 1, "fs::read_dir: could not open directory");
+        return dir;
+    }
+#endif
+
+    return dir;
+}
+
+JikString *
+jik_impl_fs_read_dir_next(jik_impl_fs_Dir *dir, JikRegion *a, JikError *e)
+{
+    if (!dir || dir->closed || dir->done) {
+        return jik_string_new("", a);
+    }
+
+#ifdef _WIN32
+    for (;;) {
+        const char *name;
+
+        if (dir->first_ready) {
+            dir->first_ready = false;
+        } else if (!FindNextFileA(dir->handle, &dir->data)) {
+            if (GetLastError() == ERROR_NO_MORE_FILES) {
+                dir->done = true;
+                return jik_string_new("", a);
+            }
+            jik_error_set(e, 1, "fs::read_dir: could not read directory");
+            return jik_string_new("", a);
+        }
+
+        name = dir->data.cFileName;
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
+            continue;
+        }
+        return jik_string_new((char *)name, a);
+    }
+#else
+    for (;;) {
+        struct dirent *entry = readdir(dir->dir);
+        if (!entry) {
+            dir->done = true;
+            return jik_string_new("", a);
+        }
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        return jik_string_new(entry->d_name, a);
+    }
+#endif
+}
+
+void
+jik_impl_fs_read_dir_close(jik_impl_fs_Dir *dir, JikError *e)
+{
+    if (!dir || dir->closed) {
+        return;
+    }
+
+#ifdef _WIN32
+    if (dir->handle != INVALID_HANDLE_VALUE) {
+        if (!FindClose(dir->handle)) {
+            jik_error_set(e, 1, "fs::read_dir: could not close directory");
+            return;
+        }
+    }
+#else
+    if (dir->dir && closedir(dir->dir) != 0) {
+        jik_error_set(e, 1, "fs::read_dir: could not close directory");
+        return;
+    }
+#endif
+
+    dir->closed = true;
+}
+
+JikString *
+jik_impl_fs_temp_dir(JikRegion *a)
+{
+#ifdef _WIN32
+    char buf[4096];
+    DWORD n = GetTempPathA((DWORD)sizeof(buf), buf);
+    if (n > 0 && n < sizeof(buf)) {
+        return jik_string_new(buf, a);
+    }
+    return jik_string_new(".", a);
+#else
+    const char *tmp = getenv("TMPDIR");
+    if (tmp && tmp[0] != '\0') {
+        return jik_string_new((char *)tmp, a);
+    }
+    return jik_string_new("/tmp", a);
+#endif
+}
+
+
+C_END

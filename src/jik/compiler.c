@@ -480,7 +480,9 @@ jik_compiler_build(JikContext *ctx, bool run)
         jik_compiler_verbose(&ctx->conf, "run", out_bin);
         int status = jik_compiler_run_binary(out_bin);
         remove(out_bin);
-        jik_diag_fatal_error_if(status != 0, "program exited with non-zero status", out_bin);
+        if (status != 0) {
+            exit(EXIT_FAILURE);
+        }
     }
 }
 

@@ -46,18 +46,6 @@ Open a file.
 
 ---
 
-### `exists(path: String) -> bool`
-
-Return whether a filesystem path exists.
-
-**Parameters**
-1. `path: String` - File path. Foreign parameter.
-
-**Returns**
-- `true` if the path exists, otherwise `false`.
-
----
-
 ### `read(file: File, region: Region) -> String`
 
 Read the full contents of a file.
@@ -90,18 +78,6 @@ Read an entire file by path.
 
 **Returns**
 - Full file contents.
-
----
-
-### `remove(path: String) -> void`
-
-Remove a file from the filesystem.
-
-**Behavior**
-- Throws on failure.
-
-**Parameters**
-1. `path: String` - File path.
 
 ---
 

@@ -68,6 +68,102 @@
       }
     ]
   },
+  "fs": {
+    "module": "fs",
+    "doc": "Filesystem utilities.\n\nThis module provides filesystem object and directory operations.",
+    "symbols": [
+      {
+        "name": "exists",
+        "kind": "function",
+        "signature": "exists(path: String) -> bool",
+        "doc": "Return whether a filesystem path exists.",
+        "throws": false
+      },
+      {
+        "name": "is_file",
+        "kind": "function",
+        "signature": "is_file(path: String) -> bool",
+        "doc": "Return whether a filesystem path refers to a regular file.",
+        "throws": false
+      },
+      {
+        "name": "is_dir",
+        "kind": "function",
+        "signature": "is_dir(path: String) -> bool",
+        "doc": "Return whether a filesystem path refers to a directory.",
+        "throws": false
+      },
+      {
+        "name": "mkdir",
+        "kind": "function",
+        "signature": "mkdir(path: String) -> void",
+        "doc": "Create a directory.",
+        "throws": true
+      },
+      {
+        "name": "mkdir_all",
+        "kind": "function",
+        "signature": "mkdir_all(path: String) -> void",
+        "doc": "Create a directory path and any missing parents.",
+        "throws": true
+      },
+      {
+        "name": "remove_file",
+        "kind": "function",
+        "signature": "remove_file(path: String) -> void",
+        "doc": "Remove a file.",
+        "throws": true
+      },
+      {
+        "name": "remove_dir",
+        "kind": "function",
+        "signature": "remove_dir(path: String) -> void",
+        "doc": "Remove an empty directory.",
+        "throws": true
+      },
+      {
+        "name": "remove_dir_all",
+        "kind": "function",
+        "signature": "remove_dir_all(path: String) -> void",
+        "doc": "Remove a directory tree recursively.",
+        "throws": true
+      },
+      {
+        "name": "rename",
+        "kind": "function",
+        "signature": "rename(old_path: String, new_path: String) -> void",
+        "doc": "Rename or move a filesystem object.",
+        "throws": true
+      },
+      {
+        "name": "copy_file",
+        "kind": "function",
+        "signature": "copy_file(src_path: String, dst_path: String) -> void",
+        "doc": "Copy a file.",
+        "throws": true
+      },
+      {
+        "name": "_Dir",
+        "kind": "struct",
+        "signature": "_Dir",
+        "doc": ""
+      },
+      {
+        "name": "read_dir",
+        "kind": "function",
+        "signature": "read_dir(path: String, region: Region) -> Vec[String]",
+        "doc": "Return the names of entries directly inside a directory.\n\nEntry names are returned without directory prefixes.",
+        "throws": true
+      },
+      {
+        "name": "temp_dir",
+        "kind": "function",
+        "signature": "temp_dir(region: Region) -> String",
+        "doc": "Return the platform temporary directory path.",
+        "throws": false
+      }
+    ]
+  },
   "io": {
     "module": "io",
     "doc": "File I/O utilities.\n\nThis module provides a minimal wrapper around basic C stdio file operations.\nSupported file modes are currently `\"r\"` for reading, `\"w\"` for writing, and `\"a\"` for appending.\nAll operations throw on error.",
@@ -119,20 +215,6 @@
         "signature": "write_file(path: String, text: String, region: Region) -> void",
         "doc": "Write a string to a file by path, truncating existing contents.",
         "throws": true
-      },
-      {
-        "name": "remove",
-        "kind": "function",
-        "signature": "remove(path: String) -> void",
-        "doc": "Remove a file from the filesystem.",
-        "throws": true
-      },
-      {
-        "name": "exists",
-        "kind": "function",
-        "signature": "exists(path: String) -> bool",
-        "doc": "Return whether a filesystem path exists.",
-        "throws": false
       }
     ]
   },
@@ -534,6 +616,13 @@
         "kind": "function",
         "signature": "replace(s: String, needle: String, repl: String, region: Region) -> String",
         "doc": "Replace all occurrences of `needle` in `s` with `repl`.\n\nIf `needle` is empty, the function returns a copy of `s`.",
+        "throws": false
+      },
+      {
+        "name": "copy",
+        "kind": "function",
+        "signature": "copy(s: String, region: Region) -> String",
+        "doc": "Copies a string to new destination region.",
         "throws": false
       },
       {

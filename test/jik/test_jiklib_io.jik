@@ -1,5 +1,6 @@
 use "jik/testing" as test
 use "jik/io"
+use "jik/fs"
 
 
 func test_fileio(ts):
@@ -20,7 +21,7 @@ func test_fileio(ts):
     try f := io::open("test/jik/input/data2.txt", "w", _):
         must io::write(f, "12345")
         must io::close(f)
-        must io::remove("test/jik/input/data2.txt")        
+        must fs::remove_file("test/jik/input/data2.txt")
     except:
         test::suite_assert(ts, false, site())
     end
@@ -43,12 +44,12 @@ func test_fileio(ts):
         data := must io::read(f, _)
         test::suite_assert(ts, data == "12345", site())
         must io::close(f)
-        must io::remove("test/jik/input/data2.txt")
+        must fs::remove_file("test/jik/input/data2.txt")
     except:
         test::suite_assert(ts, false, site())
     end
 
-    try io::remove("fubar"):
+    try fs::remove_file("fubar"):
         test::suite_assert(ts, false, site())
     except:
         test::suite_assert(ts, true, site())
@@ -57,7 +58,7 @@ func test_fileio(ts):
     try io::write_file("test/jik/input/data2.txt", "alpha", _):
         data := must io::read_file("test/jik/input/data2.txt", _)
         test::suite_assert(ts, data == "alpha", site())
-        must io::remove("test/jik/input/data2.txt")
+        must fs::remove_file("test/jik/input/data2.txt")
     except:
         test::suite_assert(ts, false, site())
     end

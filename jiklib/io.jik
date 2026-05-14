@@ -71,31 +71,11 @@ throws func write_file(foreign path: String, foreign text: String, region: Regio
     must close(f)
 end
 
-/// Remove a file from the filesystem.
-///
-/// @param path File path.
-extern throws func jik_impl_io_remove as
-    remove(path: String) -> void
-
-/// Return whether a filesystem path exists.
-///
-/// @param path File path.
-/// @returns `true` if the path exists, otherwise `false`.
-extern func jik_impl_io_exists as
-    exists(path: String) -> bool
-
-
 // -------------------------------------------------------------
 //      C implementation
 // -------------------------------------------------------------
 
 @embed{C_END}
-
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <sys/stat.h>
-#endif
 
 typedef struct jik_impl_io_File {
     FILE *file;
@@ -192,28 +172,5 @@ jik_impl_io_write(jik_impl_io_File *fh, JikString *s, JikError *e)
         return;
     }
 }
-
-void
-jik_impl_io_remove(JikString *fn, JikError *e)
-{
-    if (remove(fn->data) != 0) {
-        jik_error_set(e, 1, "io::remove: could not remove file");
-    }
-}
-
-bool
-jik_impl_io_exists(JikString *path)
-{
-    if (!path || !path->data || path->data[0] == '\0') {
-        return false;
-    }
-#ifdef _WIN32
-    return GetFileAttributesA(path->data) != INVALID_FILE_ATTRIBUTES;
-#else
-    struct stat st;
-    return stat(path->data, &st) == 0;
-#endif
-}
-
 
 C_END
