@@ -78,12 +78,11 @@ const JikCommand JIK_COMMANDS[] = {
                 },
             },
     },
-    // COMMAND: doctor
+    // COMMAND: env
     {
-        .name      = "doctor",
-        .help_desc = "Report resolved Jik paths, compiler selection, and availability of relevant "
-                     "host tools.",
-        .help_desc_short = "report CLI environment status",
+        .name      = "env",
+        .help_desc = "Print resolved Jik configuration values as key=value lines.",
+        .help_desc_short = "print resolved Jik configuration",
         .num_options     = 0,
     },
     // COMMAND: build

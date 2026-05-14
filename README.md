@@ -180,7 +180,6 @@ To start programming in Jik:
 - from the extracted directory, run `jik help` to confirm the executable works
 - (optional) add the extracted directory to `PATH`
 - if you plan to use `jik run` or `jik build`, either pass the compiler name with `--cc` or set `JIK_CC`, for example `clang` or `gcc`
-- (optional) use `jik doctor` to inspect the resolved paths and selected compiler
 - create a file `hello.jik`:
 
 ```jik

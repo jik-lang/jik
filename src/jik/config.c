@@ -191,7 +191,7 @@ jik_config_make(int argc, char **argv)
             else if (strcmp(argv[i], "version") == 0) {
                 conf.command = argv[i];
             }
-            else if (strcmp(argv[i], "doctor") == 0) {
+            else if (strcmp(argv[i], "env") == 0) {
                 conf.command = argv[i];
             }
             else if (strcmp(argv[i], "help") == 0) {

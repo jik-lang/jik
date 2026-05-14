@@ -414,63 +414,21 @@ jik_get_compiler_from_conf(JikConfig *conf)
     return compiler;
 }
 
-static char *
-jik_get_compiler_source(JikConfig *conf)
-{
-    if (conf->cc) {
-        return "--cc";
-    }
-    if (get_jik_cc_env()) {
-        return "JIK_CC";
-    }
-#ifndef _WIN32
-    if (system_has_tool("cc", "--version")) {
-        return "host default compiler";
-    }
-#endif
-    return "not found";
-}
-
-static bool
-jik_path_exists(char *path)
-{
-    FILE *f = fopen(path, "r");
-    if (f) {
-        fclose(f);
-        return true;
-    }
-    return false;
-}
-
 static void
-jik_compiler_doctor(JikConfig *conf)
+jik_compiler_env(JikConfig *conf)
 {
-    char *compiler        = jik_get_compiler_from_conf(conf);
-    char *compiler_source = jik_get_compiler_source(conf);
-    char *stdlib_probe    = JIK_STRING_NCAT(conf->jiklib_path, "std.jik");
-    bool  compiler_ok     = compiler != NULL && system_has_tool(compiler, "--version");
+    char *compiler = jik_get_compiler_from_conf(conf);
 
-    printf("Jik environment report\n\n");
-    printf("paths:\n");
-    printf("  root: %s\n", conf->jik_root_dir);
-    printf(
-        "  jiklib: %s [%s]\n", conf->jiklib_path, jik_path_exists(stdlib_probe) ? "OK" : "missing");
-    printf("  core.h: %s [%s]\n",
-           conf->jik_core_h_path,
-           jik_path_exists(conf->jik_core_h_path) ? "OK" : "missing");
-    printf("\n");
-    printf("compiler:\n");
-    printf("  source: %s\n", compiler_source);
-    printf("  JIK_CC: %s\n", get_jik_cc_env() ? get_jik_cc_env() : "<unset>");
-    printf("  selected: %s [%s]\n",
-           compiler ? compiler : "<none>",
-           compiler_ok ? "OK" : "not available");
-    printf("\n");
-    printf("tools:\n");
-    printf("  clang-format: %s\n",
-           system_has_tool("clang-format", "--version") ? "available" : "not available");
-    printf("  valgrind: %s\n",
-           system_has_tool("valgrind", "--version") ? "available" : "not available");
+    printf("version=%s\n", JIK_VERSION_STRING);
+#ifdef _WIN32
+    printf("platform=windows\n");
+#else
+    printf("platform=linux\n");
+#endif
+    printf("root=%s\n", conf->jik_root_dir);
+    printf("jiklib=%s\n", conf->jiklib_path);
+    printf("core=%s\n", conf->jik_core_h_path);
+    printf("cc=%s\n", compiler ? compiler : "");
 }
 
 static char *
@@ -563,8 +521,8 @@ jik_compiler_run(JikConfig conf)
         printf("jik version: %s\n", JIK_VERSION_STRING);
         return;
     }
-    if (strcmp(conf.command, "doctor") == 0) {
-        jik_compiler_doctor(&conf);
+    if (strcmp(conf.command, "env") == 0) {
+        jik_compiler_env(&conf);
         return;
     }
     if (strcmp(conf.command, "help_general") == 0) {
