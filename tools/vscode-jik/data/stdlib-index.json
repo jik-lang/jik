@@ -1,4 +1,148 @@
 {
+  "bytes": {
+    "module": "bytes",
+    "doc": "Binary-safe byte sequences and growable byte buffers.\n\n`Bytes` stores immutable raw byte data. `ByteBuf` is a mutable growable byte\nbuffer for constructing binary data. Neither type is NUL-terminated by\ncontract, and both can contain byte value `0`.\n\nNotes:\n- `String` is text. Use `from_string` or `buf_append_string` to copy text\nbytes into binary storage.\n- Use `to_hex` for binary display.\n- Use `to_string_ascii` only when the bytes are known ASCII text.\n- All allocations are performed in the provided `Region`.",
+    "symbols": [
+      {
+        "name": "Bytes",
+        "kind": "struct",
+        "signature": "Bytes",
+        "doc": "Immutable byte sequence allocated in a `Region`."
+      },
+      {
+        "name": "ByteBuf",
+        "kind": "struct",
+        "signature": "ByteBuf",
+        "doc": "Mutable growable byte buffer allocated in a `Region`."
+      },
+      {
+        "name": "new",
+        "kind": "function",
+        "signature": "new(region: Region) -> Bytes",
+        "doc": "Create an empty byte sequence.",
+        "throws": false
+      },
+      {
+        "name": "from_string",
+        "kind": "function",
+        "signature": "from_string(text: String, region: Region) -> Bytes",
+        "doc": "Copy a string's exact bytes into a byte sequence.",
+        "throws": false
+      },
+      {
+        "name": "len",
+        "kind": "function",
+        "signature": "len(bytes: Bytes) -> int",
+        "doc": "Get the length of a byte sequence.",
+        "throws": false
+      },
+      {
+        "name": "get",
+        "kind": "function",
+        "signature": "get(bytes: Bytes, index: int) -> char",
+        "doc": "Get one byte by index.",
+        "throws": false
+      },
+      {
+        "name": "slice",
+        "kind": "function",
+        "signature": "slice(bytes: Bytes, start: int, stop: int, region: Region) -> Bytes",
+        "doc": "Copy a byte range.",
+        "throws": false
+      },
+      {
+        "name": "equals",
+        "kind": "function",
+        "signature": "equals(left: Bytes, right: Bytes) -> bool",
+        "doc": "Return whether two byte sequences have identical contents.",
+        "throws": false
+      },
+      {
+        "name": "to_hex",
+        "kind": "function",
+        "signature": "to_hex(bytes: Bytes, region: Region) -> String",
+        "doc": "Convert bytes to lowercase hexadecimal text.",
+        "throws": false
+      },
+      {
+        "name": "to_string_ascii",
+        "kind": "function",
+        "signature": "to_string_ascii(bytes: Bytes, region: Region) -> String",
+        "doc": "Convert known ASCII text bytes to a `String`.\n\nRejects embedded NUL and byte values above `127`.",
+        "throws": true
+      },
+      {
+        "name": "buf_new",
+        "kind": "function",
+        "signature": "buf_new(region: Region) -> ByteBuf",
+        "doc": "Create an empty mutable byte buffer.",
+        "throws": false
+      },
+      {
+        "name": "buf_from_string",
+        "kind": "function",
+        "signature": "buf_from_string(text: String, region: Region) -> ByteBuf",
+        "doc": "Create a byte buffer initialized from a string's exact bytes.",
+        "throws": false
+      },
+      {
+        "name": "buf_len",
+        "kind": "function",
+        "signature": "buf_len(buf: ByteBuf) -> int",
+        "doc": "Get the length of a byte buffer.",
+        "throws": false
+      },
+      {
+        "name": "buf_get",
+        "kind": "function",
+        "signature": "buf_get(buf: ByteBuf, index: int) -> char",
+        "doc": "Get one byte from a byte buffer by index.",
+        "throws": false
+      },
+      {
+        "name": "buf_push",
+        "kind": "function",
+        "signature": "buf_push(buf: ByteBuf, byte: char) -> void",
+        "doc": "Append one byte.",
+        "throws": false
+      },
+      {
+        "name": "buf_push_int",
+        "kind": "function",
+        "signature": "buf_push_int(buf: ByteBuf, byte: int) -> void",
+        "doc": "Append one integer value after validating it is a byte.",
+        "throws": true
+      },
+      {
+        "name": "buf_append",
+        "kind": "function",
+        "signature": "buf_append(buf: ByteBuf, bytes: Bytes) -> void",
+        "doc": "Append all bytes from an immutable byte sequence.",
+        "throws": false
+      },
+      {
+        "name": "buf_append_string",
+        "kind": "function",
+        "signature": "buf_append_string(buf: ByteBuf, text: String) -> void",
+        "doc": "Append a string's exact bytes.",
+        "throws": false
+      },
+      {
+        "name": "buf_clear",
+        "kind": "function",
+        "signature": "buf_clear(buf: ByteBuf) -> void",
+        "doc": "Clear a byte buffer without reclaiming region memory.",
+        "throws": false
+      },
+      {
+        "name": "to_bytes",
+        "kind": "function",
+        "signature": "to_bytes(buf: ByteBuf, region: Region) -> Bytes",
+        "doc": "Copy a byte buffer into an immutable byte sequence.",
+        "throws": false
+      }
+    ]
+  },
   "char": {
     "module": "char",
     "doc": "Wrapper library for functions operating on single-byte character values.\n\nThese functions are byte-oriented wrappers around the host C library. They\nare not Unicode-aware character classification or case-mapping operations.",

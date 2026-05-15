@@ -17,6 +17,7 @@ use "test_jiklib_io"
 use "test_jiklib_fs"
 use "test_jiklib_string"
 use "test_jiklib_strbuf"
+use "test_jiklib_bytes"
 use "test_jiklib_path"
 use "test_jiklib_rand"
 use "test_jiklib_math"
@@ -55,6 +56,7 @@ func main():
     test_jiklib_fs::run_tests(ts)
     test_jiklib_string::run_tests(ts)
     test_jiklib_strbuf::run_tests(ts)
+    test_jiklib_bytes::run_tests(ts)
     test_jiklib_path::run_tests(ts)
     test_jiklib_rand::run_tests(ts)
     test_jiklib_math::run_tests(ts)

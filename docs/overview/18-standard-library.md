@@ -7,6 +7,7 @@ strings, input/output, math, randomness, and testing.
 
 - [jik::std](../jiklib/std.md) - basic utility functions
 - [jik::char](../jiklib/char.md) - character-related helpers
+- [jik::bytes](../jiklib/bytes.md) - binary-safe byte sequences and buffers
 - [jik::string](../jiklib/string.md) - string operations
 - [jik::strbuf](../jiklib/strbuf.md) - mutable string buffer support
 - [jik::fs](../jiklib/fs.md) - filesystem operations

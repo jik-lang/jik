@@ -1,0 +1,432 @@
+//! Binary-safe byte sequences and growable byte buffers.
+//!
+//! `Bytes` stores immutable raw byte data. `ByteBuf` is a mutable growable byte
+//! buffer for constructing binary data. Neither type is NUL-terminated by
+//! contract, and both can contain byte value `0`.
+//!
+//! Notes:
+//! - `String` is text. Use `from_string` or `buf_append_string` to copy text
+//!   bytes into binary storage.
+//! - Use `to_hex` for binary display.
+//! - Use `to_string_ascii` only when the bytes are known ASCII text.
+//! - All allocations are performed in the provided `Region`.
+
+
+// -------------------------------------------------------------
+//      API
+// -------------------------------------------------------------
+
+
+/// Immutable byte sequence allocated in a `Region`.
+extern struct jik_impl_bytes_Bytes as
+    Bytes
+
+/// Mutable growable byte buffer allocated in a `Region`.
+extern struct jik_impl_bytes_ByteBuf as
+    ByteBuf
+
+/// Create an empty byte sequence.
+///
+/// @param region Allocation region.
+/// @returns Empty `Bytes`.
+extern func jik_impl_bytes_new as
+    new(region: Region) -> Bytes
+
+/// Copy a string's exact bytes into a byte sequence.
+///
+/// @param text Source string.
+/// @param region Allocation region.
+/// @returns Copied `Bytes`.
+extern func jik_impl_bytes_from_string as
+    from_string(foreign text: String, region: Region) -> Bytes
+
+/// Get the length of a byte sequence.
+///
+/// @param bytes Byte sequence.
+/// @returns Number of bytes.
+extern func jik_impl_bytes_len as
+    len(bytes: Bytes) -> int
+
+/// Get one byte by index.
+///
+/// @param bytes Byte sequence.
+/// @param index Byte index.
+/// @returns Byte at `index`.
+extern func jik_impl_bytes_get as
+    get(bytes: Bytes, index: int) -> char
+
+/// Copy a byte range.
+///
+/// @param bytes Byte sequence.
+/// @param start Start byte index, inclusive.
+/// @param stop Stop byte index, exclusive.
+/// @param region Allocation region.
+/// @returns Copied byte range.
+extern func jik_impl_bytes_slice as
+    slice(bytes: Bytes, start: int, stop: int, region: Region) -> Bytes
+
+/// Return whether two byte sequences have identical contents.
+///
+/// @param left Left byte sequence.
+/// @param right Right byte sequence.
+/// @returns `true` if lengths and contents are equal.
+extern func jik_impl_bytes_equals as
+    equals(left: Bytes, right: Bytes) -> bool
+
+/// Convert bytes to lowercase hexadecimal text.
+///
+/// @param bytes Byte sequence.
+/// @param region Allocation region.
+/// @returns Hexadecimal representation.
+extern func jik_impl_bytes_to_hex as
+    to_hex(bytes: Bytes, region: Region) -> String
+
+/// Convert known ASCII text bytes to a `String`.
+///
+/// Rejects embedded NUL and byte values above `127`.
+/// @param bytes Byte sequence.
+/// @param region Allocation region.
+/// @returns Copied ASCII text.
+extern throws func jik_impl_bytes_to_string_ascii as
+    to_string_ascii(bytes: Bytes, region: Region) -> String
+
+/// Create an empty mutable byte buffer.
+///
+/// @param region Allocation region.
+/// @returns Empty `ByteBuf`.
+extern func jik_impl_bytes_buf_new as
+    buf_new(region: Region) -> ByteBuf
+
+/// Create a byte buffer initialized from a string's exact bytes.
+///
+/// @param text Source string.
+/// @param region Allocation region.
+/// @returns New `ByteBuf`.
+extern func jik_impl_bytes_buf_from_string as
+    buf_from_string(foreign text: String, region: Region) -> ByteBuf
+
+/// Get the length of a byte buffer.
+///
+/// @param buf Byte buffer.
+/// @returns Number of bytes currently stored.
+extern func jik_impl_bytes_buf_len as
+    buf_len(buf: ByteBuf) -> int
+
+/// Get one byte from a byte buffer by index.
+///
+/// @param buf Byte buffer.
+/// @param index Byte index.
+/// @returns Byte at `index`.
+extern func jik_impl_bytes_buf_get as
+    buf_get(buf: ByteBuf, index: int) -> char
+
+/// Append one byte.
+///
+/// @param buf Byte buffer.
+/// @param byte Byte to append.
+extern func jik_impl_bytes_buf_push as
+    buf_push(buf: ByteBuf, byte: char) -> void
+
+/// Append one integer value after validating it is a byte.
+///
+/// @param buf Byte buffer.
+/// @param byte Integer byte value.
+extern throws func jik_impl_bytes_buf_push_int as
+    buf_push_int(buf: ByteBuf, byte: int) -> void
+
+/// Append all bytes from an immutable byte sequence.
+///
+/// @param buf Byte buffer.
+/// @param bytes Bytes to append.
+extern func jik_impl_bytes_buf_append as
+    buf_append(buf: ByteBuf, bytes: Bytes) -> void
+
+/// Append a string's exact bytes.
+///
+/// @param buf Byte buffer.
+/// @param text String to append.
+extern func jik_impl_bytes_buf_append_string as
+    buf_append_string(buf: ByteBuf, foreign text: String) -> void
+
+/// Clear a byte buffer without reclaiming region memory.
+///
+/// @param buf Byte buffer.
+extern func jik_impl_bytes_buf_clear as
+    buf_clear(buf: ByteBuf) -> void
+
+/// Copy a byte buffer into an immutable byte sequence.
+///
+/// @param buf Byte buffer.
+/// @param region Allocation region.
+/// @returns Copied `Bytes`.
+extern func jik_impl_bytes_to_bytes as
+    to_bytes(buf: ByteBuf, region: Region) -> Bytes
+
+
+// -------------------------------------------------------------
+//      C Implementation
+// -------------------------------------------------------------
+
+@embed{C_END}
+
+typedef struct jik_impl_bytes_Bytes {
+    uint8_t *data;
+    size_t size;
+    JikRegion *region;
+} jik_impl_bytes_Bytes;
+
+typedef struct jik_impl_bytes_ByteBuf {
+    uint8_t *data;
+    size_t size;
+    size_t capacity;
+    JikRegion *region;
+} jik_impl_bytes_ByteBuf;
+
+static int32_t
+jik_impl_bytes_size_to_int(size_t n)
+{
+    return n > INT32_MAX ? INT32_MAX : (int32_t)n;
+}
+
+static jik_impl_bytes_Bytes *
+jik_impl_bytes_alloc_bytes(uint8_t *data, size_t size, JikRegion *a)
+{
+    jik_impl_bytes_Bytes *bytes = jik_region_alloc(a, sizeof(jik_impl_bytes_Bytes));
+    bytes->data                = data;
+    bytes->size                = size;
+    bytes->region              = a;
+    return bytes;
+}
+
+static JikString *
+jik_impl_bytes_string_from_raw(uint8_t *data, size_t size, JikRegion *a)
+{
+    JikString *s = jik_region_alloc(a, sizeof(JikString));
+    s->data      = jik_region_alloc(a, size + 1);
+    if (size > 0) {
+        memcpy(s->data, data, size);
+    }
+    s->data[size] = '\0';
+    s->size       = size;
+    s->capacity   = size;
+    s->region     = a;
+    return s;
+}
+
+static void
+jik_impl_bytes_buf_reserve(jik_impl_bytes_ByteBuf *buf, size_t needed)
+{
+    if (needed <= buf->capacity) {
+        return;
+    }
+
+    size_t new_cap = buf->capacity ? buf->capacity : 16;
+    while (new_cap < needed) {
+        if (new_cap > SIZE_MAX / 2) {
+            jik_die("bytes::ByteBuf: capacity overflow");
+        }
+        new_cap *= 2;
+    }
+
+    uint8_t *new_data = jik_region_alloc(buf->region, new_cap);
+    if (buf->data && buf->size > 0) {
+        memcpy(new_data, buf->data, buf->size);
+    }
+    buf->data     = new_data;
+    buf->capacity = new_cap;
+}
+
+jik_impl_bytes_Bytes *
+jik_impl_bytes_new(JikRegion *a)
+{
+    return jik_impl_bytes_alloc_bytes(NULL, 0, a);
+}
+
+jik_impl_bytes_Bytes *
+jik_impl_bytes_from_string(JikString *text, JikRegion *a)
+{
+    size_t n = text->size;
+    uint8_t *data = NULL;
+    if (n > 0) {
+        data = jik_region_alloc(a, n);
+        memcpy(data, text->data, n);
+    }
+    return jik_impl_bytes_alloc_bytes(data, n, a);
+}
+
+int32_t
+jik_impl_bytes_len(jik_impl_bytes_Bytes *bytes)
+{
+    return jik_impl_bytes_size_to_int(bytes->size);
+}
+
+uint8_t
+jik_impl_bytes_get(jik_impl_bytes_Bytes *bytes, int32_t index)
+{
+    if (index < 0 || (size_t)index >= bytes->size) {
+        jik_die("bytes::get: index out of bounds");
+    }
+    return bytes->data[index];
+}
+
+jik_impl_bytes_Bytes *
+jik_impl_bytes_slice(jik_impl_bytes_Bytes *bytes, int32_t start, int32_t stop, JikRegion *a)
+{
+    if (start < 0 || stop < start || (size_t)stop > bytes->size) {
+        jik_die("bytes::slice: index out of bounds");
+    }
+
+    size_t n = (size_t)(stop - start);
+    uint8_t *data = NULL;
+    if (n > 0) {
+        data = jik_region_alloc(a, n);
+        memcpy(data, bytes->data + start, n);
+    }
+    return jik_impl_bytes_alloc_bytes(data, n, a);
+}
+
+bool
+jik_impl_bytes_equals(jik_impl_bytes_Bytes *left, jik_impl_bytes_Bytes *right)
+{
+    if (left->size != right->size) {
+        return false;
+    }
+    if (left->size == 0) {
+        return true;
+    }
+    return memcmp(left->data, right->data, left->size) == 0;
+}
+
+JikString *
+jik_impl_bytes_to_hex(jik_impl_bytes_Bytes *bytes, JikRegion *a)
+{
+    static const char hex[] = "0123456789abcdef";
+    if (bytes->size > (SIZE_MAX - 1) / 2) {
+        jik_die("bytes::to_hex: size overflow");
+    }
+
+    size_t out_size = bytes->size * 2;
+    uint8_t *out = jik_region_alloc(a, out_size + 1);
+    for (size_t i = 0; i < bytes->size; i++) {
+        uint8_t b       = bytes->data[i];
+        out[i * 2]      = (uint8_t)hex[b >> 4];
+        out[i * 2 + 1]  = (uint8_t)hex[b & 0x0f];
+    }
+    out[out_size] = '\0';
+    return jik_impl_bytes_string_from_raw(out, out_size, a);
+}
+
+JikString *
+jik_impl_bytes_to_string_ascii(jik_impl_bytes_Bytes *bytes, JikRegion *a, JikError *e)
+{
+    for (size_t i = 0; i < bytes->size; i++) {
+        if (bytes->data[i] == 0 || bytes->data[i] > 127) {
+            jik_error_set(e, 1, "bytes::to_string_ascii: non-ASCII or NUL byte");
+            return jik_string_new("", a);
+        }
+    }
+    return jik_impl_bytes_string_from_raw(bytes->data, bytes->size, a);
+}
+
+jik_impl_bytes_ByteBuf *
+jik_impl_bytes_buf_new(JikRegion *a)
+{
+    jik_impl_bytes_ByteBuf *buf = jik_region_alloc(a, sizeof(jik_impl_bytes_ByteBuf));
+    buf->data                  = jik_region_alloc(a, 16);
+    buf->size                  = 0;
+    buf->capacity              = 16;
+    buf->region                = a;
+    return buf;
+}
+
+jik_impl_bytes_ByteBuf *
+jik_impl_bytes_buf_from_string(JikString *text, JikRegion *a)
+{
+    jik_impl_bytes_ByteBuf *buf = jik_impl_bytes_buf_new(a);
+    jik_impl_bytes_buf_reserve(buf, text->size);
+    if (text->size > 0) {
+        memcpy(buf->data, text->data, text->size);
+    }
+    buf->size = text->size;
+    return buf;
+}
+
+int32_t
+jik_impl_bytes_buf_len(jik_impl_bytes_ByteBuf *buf)
+{
+    return jik_impl_bytes_size_to_int(buf->size);
+}
+
+uint8_t
+jik_impl_bytes_buf_get(jik_impl_bytes_ByteBuf *buf, int32_t index)
+{
+    if (index < 0 || (size_t)index >= buf->size) {
+        jik_die("bytes::buf_get: index out of bounds");
+    }
+    return buf->data[index];
+}
+
+void
+jik_impl_bytes_buf_push(jik_impl_bytes_ByteBuf *buf, uint8_t byte)
+{
+    jik_impl_bytes_buf_reserve(buf, buf->size + 1);
+    buf->data[buf->size++] = byte;
+}
+
+void
+jik_impl_bytes_buf_push_int(jik_impl_bytes_ByteBuf *buf, int32_t byte, JikError *e)
+{
+    if (byte < 0 || byte > 255) {
+        jik_error_set(e, 1, "bytes::buf_push_int: byte out of range");
+        return;
+    }
+    jik_impl_bytes_buf_push(buf, (uint8_t)byte);
+}
+
+void
+jik_impl_bytes_buf_append(jik_impl_bytes_ByteBuf *buf, jik_impl_bytes_Bytes *bytes)
+{
+    if (bytes->size == 0) {
+        return;
+    }
+    if (buf->size > SIZE_MAX - bytes->size) {
+        jik_die("bytes::buf_append: size overflow");
+    }
+    jik_impl_bytes_buf_reserve(buf, buf->size + bytes->size);
+    memcpy(buf->data + buf->size, bytes->data, bytes->size);
+    buf->size += bytes->size;
+}
+
+void
+jik_impl_bytes_buf_append_string(jik_impl_bytes_ByteBuf *buf, JikString *text)
+{
+    if (text->size == 0) {
+        return;
+    }
+    if (buf->size > SIZE_MAX - text->size) {
+        jik_die("bytes::buf_append_string: size overflow");
+    }
+    jik_impl_bytes_buf_reserve(buf, buf->size + text->size);
+    memcpy(buf->data + buf->size, text->data, text->size);
+    buf->size += text->size;
+}
+
+void
+jik_impl_bytes_buf_clear(jik_impl_bytes_ByteBuf *buf)
+{
+    buf->size = 0;
+}
+
+jik_impl_bytes_Bytes *
+jik_impl_bytes_to_bytes(jik_impl_bytes_ByteBuf *buf, JikRegion *a)
+{
+    uint8_t *data = NULL;
+    if (buf->size > 0) {
+        data = jik_region_alloc(a, buf->size);
+        memcpy(data, buf->data, buf->size);
+    }
+    return jik_impl_bytes_alloc_bytes(data, buf->size, a);
+}
+
+
+C_END

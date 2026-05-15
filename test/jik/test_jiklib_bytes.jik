@@ -1,0 +1,130 @@
+use "jik/testing" as test
+
+use "jik/bytes"
+
+
+func test_empty(ts):
+    b := bytes::new(_)
+    test::suite_assert(ts, bytes::len(b) == 0, site())
+    test::suite_assert(ts, bytes::to_hex(b, _) == "", site())
+    test::suite_assert(ts, bytes::equals(b, bytes::new(_)), site())
+    test::suite_assert(ts, must bytes::to_string_ascii(b, _) == "", site())
+end
+
+
+func test_from_string(ts):
+    b := bytes::from_string("ABC", _)
+    test::suite_assert(ts, bytes::len(b) == 3, site())
+    test::suite_assert(ts, bytes::get(b, 0) == 'A', site())
+    test::suite_assert(ts, bytes::get(b, 1) == 'B', site())
+    test::suite_assert(ts, bytes::get(b, 2) == 'C', site())
+    test::suite_assert(ts, bytes::to_hex(b, _) == "414243", site())
+    test::suite_assert(ts, must bytes::to_string_ascii(b, _) == "ABC", site())
+end
+
+
+func test_slice(ts):
+    b := bytes::from_string("abcdef", _)
+    middle := bytes::slice(b, 2, 5, _)
+    empty := bytes::slice(b, 3, 3, _)
+    full := bytes::slice(b, 0, bytes::len(b), _)
+
+    test::suite_assert(ts, bytes::equals(middle, bytes::from_string("cde", _)), site())
+    test::suite_assert(ts, bytes::len(empty) == 0, site())
+    test::suite_assert(ts, bytes::equals(full, b), site())
+end
+
+
+func test_equals(ts):
+    left := bytes::from_string("abc", _)
+    same := bytes::from_string("abc", _)
+    shorter := bytes::from_string("ab", _)
+    different := bytes::from_string("abd", _)
+
+    test::suite_assert(ts, bytes::equals(left, same), site())
+    test::suite_assert(ts, not bytes::equals(left, shorter), site())
+    test::suite_assert(ts, not bytes::equals(left, different), site())
+end
+
+
+func test_bytebuf(ts):
+    buf := bytes::buf_new(_)
+    test::suite_assert(ts, bytes::buf_len(buf) == 0, site())
+
+    bytes::buf_push(buf, 'A')
+    must bytes::buf_push_int(buf, 0)
+    must bytes::buf_push_int(buf, 255)
+    bytes::buf_append_string(buf, "BC")
+    bytes::buf_append(buf, bytes::from_string("DE", _))
+
+    b := bytes::to_bytes(buf, _)
+    test::suite_assert(ts, bytes::buf_len(buf) == 7, site())
+    test::suite_assert(ts, bytes::buf_get(buf, 0) == 'A', site())
+    test::suite_assert(ts, bytes::to_hex(b, _) == "4100ff42434445", site())
+
+    bytes::buf_clear(buf)
+    test::suite_assert(ts, bytes::buf_len(buf) == 0, site())
+    bytes::buf_append_string(buf, "Z")
+    test::suite_assert(ts, bytes::to_hex(bytes::to_bytes(buf, _), _) == "5a", site())
+    test::suite_assert(ts, bytes::to_hex(b, _) == "4100ff42434445", site())
+end
+
+
+func test_buf_from_string(ts):
+    buf := bytes::buf_from_string("xyz", _)
+    test::suite_assert(ts, bytes::buf_len(buf) == 3, site())
+    test::suite_assert(ts, bytes::buf_get(buf, 0) == 'x', site())
+    test::suite_assert(ts, bytes::to_hex(bytes::to_bytes(buf, _), _) == "78797a", site())
+end
+
+
+func test_push_int_errors(ts):
+    buf := bytes::buf_new(_)
+
+    try bytes::buf_push_int(buf, -1):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg(_) == "bytes::buf_push_int: byte out of range", site())
+    end
+
+    try bytes::buf_push_int(buf, 256):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg(_) == "bytes::buf_push_int: byte out of range", site())
+    end
+end
+
+
+func test_to_string_ascii_errors(ts):
+    nul_buf := bytes::buf_new(_)
+    bytes::buf_push(nul_buf, 'A')
+    must bytes::buf_push_int(nul_buf, 0)
+    bytes::buf_push(nul_buf, 'B')
+
+    try s := bytes::to_string_ascii(bytes::to_bytes(nul_buf, _), _):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg(_) == "bytes::to_string_ascii: non-ASCII or NUL byte", site())
+    end
+
+    high_buf := bytes::buf_new(_)
+    must bytes::buf_push_int(high_buf, 128)
+
+    try s := bytes::to_string_ascii(bytes::to_bytes(high_buf, _), _):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg(_) == "bytes::to_string_ascii: non-ASCII or NUL byte", site())
+    end
+end
+
+
+func run_tests(ts):
+    test_empty(ts)
+    test_from_string(ts)
+    test_slice(ts)
+    test_equals(ts)
+    test_bytebuf(ts)
+    test_buf_from_string(ts)
+    test_push_int_errors(ts)
+    test_to_string_ascii_errors(ts)
+end
