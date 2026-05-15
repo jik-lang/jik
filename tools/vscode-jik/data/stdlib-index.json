@@ -1,7 +1,7 @@
 {
   "bytes": {
     "module": "bytes",
-    "doc": "Binary-safe byte sequences and growable byte buffers.\n\n`Bytes` stores immutable raw byte data. `ByteBuf` is a mutable growable byte\nbuffer for constructing binary data. Neither type is NUL-terminated by\ncontract, and both can contain byte value `0`.\n\nNotes:\n- `String` is text. Use `from_string` or `buf_append_string` to copy text\nbytes into binary storage.\n- Use `to_hex` for binary display.\n- Use `to_string_ascii` only when the bytes are known ASCII text.\n- All allocations are performed in the provided `Region`.",
+    "doc": "Binary-safe byte sequences and growable byte buffers.\n\n`Bytes` stores immutable raw byte data. `ByteBuf` is a mutable growable byte\nbuffer for constructing binary data. Neither type is NUL-terminated by\ncontract, and both can contain byte value `0`.\n\nNotes:\n- `String` is text. Use `from_string` or `buf_append_string` to copy text\nbytes into binary storage.\n- Use `to_hex` for binary display.\n- Use `to_string_ascii` only when the bytes are known ASCII text.\n- All allocations are performed in the provided `Region`.\n- `Bytes` and `ByteBuf` have default initializers. `Bytes{}`, `ByteBuf{}`,\nand typed declarations such as `b: Bytes` create empty values in the\ncurrent region.",
     "symbols": [
       {
         "name": "Bytes",
@@ -19,7 +19,7 @@
         "name": "new",
         "kind": "function",
         "signature": "new(region: Region) -> Bytes",
-        "doc": "Create an empty byte sequence.",
+        "doc": "Create an empty byte sequence.\n\nThis is also the default initializer used by `Bytes{}` and typed\ndeclarations without an initializer.",
         "throws": false
       },
       {
@@ -75,7 +75,7 @@
         "name": "buf_new",
         "kind": "function",
         "signature": "buf_new(region: Region) -> ByteBuf",
-        "doc": "Create an empty mutable byte buffer.",
+        "doc": "Create an empty mutable byte buffer.\n\nThis is also the default initializer used by `ByteBuf{}` and typed\ndeclarations without an initializer.",
         "throws": false
       },
       {

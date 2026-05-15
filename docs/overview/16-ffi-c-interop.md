@@ -2,7 +2,10 @@
 
 # 16. Foreign Function Interface (C interop)
 
-Within Jik, one can embed C code and expose it through a foreign function interface, using the `extern` keyword. One can expose functions and structs. Structs are always opaque and need to be handled through a dedicated API.
+Within Jik, one can embed C code and expose it through a foreign function
+interface, using the `extern` keyword. One can expose functions and structs.
+Extern structs are opaque handle types. Their fields are not visible to Jik,
+so construction and access must go through extern functions.
 
 ### 16.1 Extern functions
 
@@ -75,8 +78,53 @@ C_END
 
 Typically, when creating composite objects, we need to pass a region where they should be allocated.
 
-Extern structs cannot be created, read nor modified the same way as non-extern structs, since they are opaque.
-This needs to be achieved through a specifically constructed API, as demonstrated above.
+Extern structs cannot be read or modified the same way as non-extern structs,
+since they are opaque. Field access and mutation must be exposed through a
+specifically constructed API, as demonstrated above.
 
+### 16.3 Default initialization for extern structs
+
+Some extern structs have a meaningful empty value. These can declare one
+extern function as the type's default initializer:
+
+```jik
+extern struct impl_Buffer as Buffer
+
+extern init func impl_Buffer_new as
+    new(region: Region) -> Buffer
+```
+
+An `extern init func` must:
+
+- return an extern struct type
+- take exactly one `Region` parameter
+- not be `throws`
+- be the only init function declared for that extern struct type
+
+The public function name is not special. `new` is only a convention; the
+`init` marker is what makes the function a default initializer.
+
+When an extern struct has an init function, default construction uses it:
+
+```jik
+b1: Buffer
+b2 := Buffer{}
+```
+
+Both declarations above are lowered as if they called the marked init function
+with the current allocation region:
+
+```jik
+b := new(_)
+```
+
+Only empty construction is allowed. Extern structs are still opaque, so a
+fielded construction such as `Buffer{x = 1}` is invalid.
+
+Extern structs without an init function cannot be default-constructed:
+
+```jik
+f: io::File // error because io::File has no extern init function
+```
 
 ---

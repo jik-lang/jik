@@ -12,6 +12,9 @@ Notes:
 - Use `to_hex` for binary display.
 - Use `to_string_ascii` only when the bytes are known ASCII text.
 - All allocations are performed in the provided `Region`.
+- `Bytes` and `ByteBuf` have default initializers. `bytes::Bytes{}`,
+  `bytes::ByteBuf{}`, and typed declarations such as `b: bytes::Bytes` create
+  empty values in the local region.
 
 ## Types
 
@@ -94,7 +97,8 @@ Get the length of a byte buffer.
 
 ### `buf_new(region: Region) -> ByteBuf`
 
-Create an empty mutable byte buffer.
+Create an empty mutable byte buffer. This is also the default initializer used
+by `bytes::ByteBuf{}` and typed declarations without an initializer.
 
 **Parameters**
 1. `region: Region` - Allocation region.
@@ -180,7 +184,8 @@ Get the length of a byte sequence.
 
 ### `new(region: Region) -> Bytes`
 
-Create an empty byte sequence.
+Create an empty byte sequence. This is also the default initializer used by
+`bytes::Bytes{}` and typed declarations without an initializer.
 
 **Parameters**
 1. `region: Region` - Allocation region.
