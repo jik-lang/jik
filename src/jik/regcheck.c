@@ -427,7 +427,8 @@ get_expression_alloc_spec(JikNode *nd, TabJikAllocSpec *tvs)
         if (res) {
             return *res;
         }
-        JikNode *gs = jik_scope_get_global_symbol(nd->val_id.name, nd->token->mod_alias);
+        char    *mod_alias = nd->val_id.mod_alias ? nd->val_id.mod_alias : nd->token->mod_alias;
+        JikNode *gs        = jik_scope_get_global_symbol(nd->val_id.name, mod_alias);
         if (!gs) {
             jik_diag_fatal_error("internal error: unresolved global symbol in region check", "");
         }

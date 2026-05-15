@@ -16,6 +16,7 @@ func test_globals_01(ts):
     foo(ts, "abc")
     foo(ts, "")
     test::suite_assert(ts, globals::x == 0, site())
+    test::suite_assert(ts, globals::VERSION == "1.2.3", site())
     test::suite_assert(ts, len(lst) == 2, site())
 end
 
