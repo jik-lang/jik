@@ -76,7 +76,7 @@
     "keywords": {
       "patterns": [
         {
-          "match": "\\b(func|struct|enum|variant|if|elif|else|while|for|end|return|of|this|break|continue|use|as|true|false|and|or|not|extern|hints|must|try|except|throws|foreign|is)\\b",
+          "match": "\\b(func|struct|enum|variant|if|elif|else|while|for|end|return|of|this|break|continue|use|as|true|false|and|or|not|extern|init|hints|must|try|except|throws|foreign|is)\\b",
           "name": "keyword.control.jik"
         }
       ]

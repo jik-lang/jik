@@ -120,6 +120,8 @@ jik_token_type_pretty_name(JikTokenType type)
         return "of";
     case TOK_KWD_EXTERN:
         return "extern";
+    case TOK_KWD_INIT:
+        return "init";
     case TOK_KWD_TRUE:
         return "true";
     case TOK_KWD_FALSE:

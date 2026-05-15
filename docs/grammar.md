@@ -154,12 +154,15 @@ parser accepts only top-level `:=` declarations.
 
 ```ebnf
 top_decl ::= decl_prefix ( func_decl | struct_decl )
-decl_prefix ::= { "extern" | "throws" }
+decl_prefix ::= { "extern" | "throws" | "init" }
 ```
 
 Current parser restrictions:
 
 - `extern` and `throws` may prefix `func`.
+- `extern init func ...` declares the default initializer for an opaque extern
+  struct return type.
+- `init` is valid only with `extern func`.
 - `extern` may prefix `struct`.
 - `throws struct ...` is rejected.
 
@@ -173,7 +176,7 @@ func_decl ::= "func" identifier "(" [ params ] ")" [ "->" type_desc ] ":"
 Extern functions use a different form:
 
 ```ebnf
-extern_func_decl ::= "extern" [ "throws" ] "func"
+extern_func_decl ::= "extern" [ "init" | "throws" ] "func"
                      identifier "as" identifier
                      "(" [ extern_params ] ")"
                      "->" type_desc

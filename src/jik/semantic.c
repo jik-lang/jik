@@ -13,6 +13,25 @@
 
 static JikType *
 jik_semantic_resolve_type_or_error(JikNode *nd);
+static JikNode *
+jik_make_init_call_for_extern_struct(JikType  *t,
+                                     char     *mod_alias,
+                                     JikScope *context,
+                                     JikToken *token);
+
+static bool
+jik_type_is_extern_struct(JikType *t)
+{
+    return t && t->name == TYPE_STRUCT && t->is_extern;
+}
+
+static bool
+jik_tab_jik_node_is_empty(TabJikNode *tab)
+{
+    TabJikNode_iter it = TabJikNode_iter_new(tab);
+    TabJikNode_item item;
+    return !TabJikNode_iter_next(&it, &item);
+}
 
 void
 jik_semantic_init(JikSemanticAnalyzer *sa, JikContext *ctx)
@@ -521,9 +540,11 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                                                     "\" not defined"),
                                     jik_token_to_text(nd->token));
             jik_semantic_ensure_module_used(nd->val_struct_new.name);
-            jik_diag_fatal_error_if(s->val_struct.is_extern,
-                                    JIK_STRING_NCAT("external structs cannot be instantiated"),
-                                    jik_token_to_text(nd->token));
+            if (s->val_struct.is_extern) {
+                jik_diag_fatal_error_if(!jik_tab_jik_node_is_empty(nd->val_struct_new.init_vals),
+                                        "external structs cannot be instantiated with fields",
+                                        jik_token_to_text(nd->token));
+            }
             nd->val_struct_new.struct_node = s;
         }
         else if (nd->type == NODE_EXPR_VARIANT_NEW) {
@@ -1040,6 +1061,16 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
                                            nd->val_struct_new.name->val_id.name,
                                            nd->val_struct_new.name->val_id.mod_alias,
                                            nd->token->mod_alias);
+        if (st->val_struct.is_extern) {
+            JikNode *call = jik_make_init_call_for_extern_struct(
+                st->jik_type,
+                nd->val_struct_new.name->val_id.mod_alias,
+                nd->context,
+                nd->token);
+            *nd                 = *call;
+            sa->needs_recollect = true;
+            return;
+        }
         nd->jik_type = st->jik_type;
     }
     else if (nd->type == NODE_EXPR_VARIANT_NEW) {
@@ -1059,7 +1090,7 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
             if (!nd->val_variant_new.init_expr) {
                 nd->val_variant_new.init_expr = *init_expr;
                 sa->needs_recollect           = true;
-                if (jik_type_is_allocated(nd->val_variant_new.init_expr->jik_type)) {
+                if (jik_node_is_allocated_literal(nd->val_variant_new.init_expr)) {
                     // TODO: we set alloc specs in different places, this is messy
                     jik_set_alloc_spec(nd->val_variant_new.init_expr,
                                        nd->val_variant_new.alloc_spec);
@@ -1622,6 +1653,40 @@ jik_semantic_resolve_type_or_error(JikNode *nd)
 }
 
 static JikNode *
+jik_make_init_call_for_extern_struct(JikType  *t,
+                                     char     *mod_alias,
+                                     JikScope *context,
+                                     JikToken *token)
+{
+    if (!t->init_func) {
+        jik_diag_fatal_error(
+            JIK_STRING_NCAT("external struct type has no init function: ", jik_type_pretty_name(t)),
+            jik_token_to_text(token));
+    }
+
+    JikNode *func      = t->init_func;
+    mod_alias          = mod_alias ? mod_alias : func->token->mod_alias;
+    JikNode *name      = jik_node_new_identifier(
+        func->val_extern_function.name, mod_alias, context, token);
+    VecJikNode *args = VecJikNode_new_empty();
+    VecJikNode_push(args, jik_node_new_local_region(context, token));
+
+    JikNode *call = jik_node_new_call(name, args, context, token);
+    call->val_call.extern_name = func->val_extern_function.C_func_name;
+    call->jik_type             = t;
+    return call;
+}
+
+static JikNode *
+jik_get_default_initializer_for_extern_struct(JikNode *type_desc, JikType *t)
+{
+    return jik_make_init_call_for_extern_struct(t,
+                                               type_desc->val_type_desc.name->val_id.mod_alias,
+                                               type_desc->context,
+                                               type_desc->token);
+}
+
+static JikNode *
 jik_get_default_initializer_for_type_desc(JikSemanticAnalyzer *sa, JikNode *nd)
 {
     // TODOY: this planting of lexemes contexts and tokens is weird, check
@@ -1682,6 +1747,9 @@ jik_get_default_initializer_for_type_desc(JikSemanticAnalyzer *sa, JikNode *nd)
         return ret;
     }
     else if (t->name == TYPE_STRUCT) {
+        if (jik_type_is_extern_struct(t)) {
+            return jik_get_default_initializer_for_extern_struct(nd, t);
+        }
         if (!nd->val_type_desc.name->val_id.mod_alias) {
             nd->val_type_desc.name->val_id.mod_alias = nd->token->mod_alias;
         }
@@ -1843,6 +1911,27 @@ jik_semantic_set_extern_function_types(JikSemanticAnalyzer *sa)
             }
             JikType *t = jik_semantic_resolve_type_or_error(nd->val_extern_function.ret_node);
             nd->jik_type->val_func.ret_type = t;
+            if (nd->val_extern_function.init) {
+                jik_diag_fatal_error_if(nd->val_extern_function.throws,
+                                        "extern init functions cannot throw",
+                                        jik_token_to_text(nd->token));
+                jik_diag_fatal_error_if(!jik_type_is_extern_struct(t),
+                                        "extern init function must return an extern struct",
+                                        jik_token_to_text(nd->token));
+                jik_diag_fatal_error_if(n != 1,
+                                        "extern init function must take one Region parameter",
+                                        jik_token_to_text(nd->token));
+                JikType *param_type = VecJikType_get(nd->jik_type->val_func.param_types, 0);
+                jik_diag_fatal_error_if(!jik_type_equal(param_type, &JIK_TYPE_REGION),
+                                        "extern init function must take one Region parameter",
+                                        jik_token_to_text(nd->token));
+                jik_diag_fatal_error_if(t->init_func,
+                                        JIK_STRING_NCAT("extern struct type already has an init "
+                                                        "function: ",
+                                                        jik_type_pretty_name(t)),
+                                        jik_token_to_text(nd->token));
+                t->init_func = nd;
+            }
         }
     }
 }

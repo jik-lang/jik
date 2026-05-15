@@ -489,6 +489,8 @@ match_keyword_or_id(const char *kwd)
         return TOK_KWD_AS;
     if (strcmp(kwd, "extern") == 0)
         return TOK_KWD_EXTERN;
+    if (strcmp(kwd, "init") == 0)
+        return TOK_KWD_INIT;
     if (strcmp(kwd, "true") == 0)
         return TOK_KWD_TRUE;
     if (strcmp(kwd, "false") == 0)

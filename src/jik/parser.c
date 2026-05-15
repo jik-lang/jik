@@ -1087,7 +1087,7 @@ jik_parser_parse_function(JikParser *p, bool throws)
 }
 
 static JikNode *
-jik_parser_parse_extern_function(JikParser *p, bool throws)
+jik_parser_parse_extern_function(JikParser *p, bool throws, bool init)
 {
     JikToken *tok_C_func_name = jik_parser_eat_token(p, TOK_ID);
     jik_parser_eat_token(p, TOK_KWD_AS);
@@ -1096,6 +1096,7 @@ jik_parser_parse_extern_function(JikParser *p, bool throws)
     JikNode  *function      = jik_node_new_extern_function(tok_func_name->lexeme,
                                                      tok_C_func_name->lexeme,
                                                      throws,
+                                                     init,
                                                      jik_parser_current_context(p),
                                                      tok_func_name);
     jik_parser_eat_token(p, TOK_LPAREN);
@@ -1122,6 +1123,7 @@ jik_parser_parse_extern_struct(JikParser *p)
                                                tok_struct_name);
     struct_node->jik_type         = jik_type_new_struct(tok_struct_name->lexeme, TabJikType_new());
     struct_node->jik_type->C_name = JIK_STRING_NCAT("struct ", tok_C_struct_name->lexeme, " *");
+    struct_node->jik_type->is_extern = true;
     return struct_node;
 }
 
@@ -1303,6 +1305,7 @@ jik_parser_skip_usage(JikParser *p)
 typedef struct {
     bool is_extern;
     bool is_throws;
+    bool is_init;
 } JikFuncPrefix;
 
 static JikFuncPrefix
@@ -1328,6 +1331,11 @@ jik_parser_parse_decl_prefix(JikParser *p)
             px.is_throws = true;
             progressed   = true;
         }
+        else if (tok->type == TOK_KWD_INIT && !px.is_init) {
+            jik_parser_eat_token(p, TOK_KWD_INIT);
+            px.is_init = true;
+            progressed = true;
+        }
     } while (progressed);
 
     return px;
@@ -1348,18 +1356,25 @@ jik_parser_parse(JikParser *p)
             VecJikNode_push(p->ast->val_program.globals, nd);
         }
         else if (tok->type == TOK_KWD_EXTERN || tok->type == TOK_KWD_THROWS ||
-                 tok->type == TOK_KWD_FUNC || tok->type == TOK_KWD_STRUCT) {
+                 tok->type == TOK_KWD_INIT || tok->type == TOK_KWD_FUNC ||
+                 tok->type == TOK_KWD_STRUCT) {
             JikFuncPrefix px = jik_parser_parse_decl_prefix(p);
             tok              = jik_parser_current_token(p);
             jik_diag_fatal_error_if(!tok, "unexpected end of file", "");
 
             if (tok->type == TOK_KWD_FUNC) {
                 if (px.is_extern) {
+                    jik_diag_fatal_error_if(px.is_throws && px.is_init,
+                                            "extern init functions cannot throw",
+                                            jik_token_to_text(tok));
                     jik_parser_eat_token(p, TOK_KWD_FUNC);
-                    nd = jik_parser_parse_extern_function(p, px.is_throws);
+                    nd = jik_parser_parse_extern_function(p, px.is_throws, px.is_init);
                     VecJikNode_push(p->ast->val_program.extern_functions, nd);
                 }
                 else {
+                    jik_diag_fatal_error_if(px.is_init,
+                                            "init is only supported for extern functions",
+                                            jik_token_to_text(tok));
                     nd = jik_parser_parse_function(p, px.is_throws);
                     VecJikNode_push(p->ast->val_program.functions, nd);
                 }
@@ -1367,6 +1382,9 @@ jik_parser_parse(JikParser *p)
             else if (tok->type == TOK_KWD_STRUCT) {
                 jik_diag_fatal_error_if(
                     px.is_throws, "unsupported declaration", jik_token_to_text(tok));
+                jik_diag_fatal_error_if(px.is_init,
+                                        "init is only supported for extern functions",
+                                        jik_token_to_text(tok));
                 if (px.is_extern) {
                     jik_parser_eat_token(p, TOK_KWD_STRUCT);
                     nd = jik_parser_parse_extern_struct(p);

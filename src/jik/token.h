@@ -44,6 +44,7 @@ typedef struct JikToken JikToken;
     X(TOK_KWD_AS)                                                                                  \
     X(TOK_KWD_OF)                                                                                  \
     X(TOK_KWD_EXTERN)                                                                              \
+    X(TOK_KWD_INIT)                                                                                \
     X(TOK_KWD_TRUE)                                                                                \
     X(TOK_KWD_FALSE)                                                                               \
     X(TOK_KWD_IS)                                                                                  \

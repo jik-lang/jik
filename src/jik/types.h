@@ -4,6 +4,8 @@
 #include "common.h"
 #include "htab.h"
 
+struct JikNode;
+
 #define C_TYPE_NAME_VOID    "void"
 #define C_TYPE_NAME_INTEGER "int32_t"
 #define C_TYPE_NAME_FLOAT   "double"
@@ -52,7 +54,9 @@ typedef struct JikType {
     JikTypeName name;
     char       *C_name;
     // TODO: this also is used for struct name, so a bit misleading
-    char *mangled_name;
+    char           *mangled_name;
+    bool            is_extern;
+    struct JikNode *init_func;
     union {
         // Function
         struct {

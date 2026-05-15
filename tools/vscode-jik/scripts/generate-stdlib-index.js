@@ -74,7 +74,7 @@ function parseStdlibModule(moduleName, source) {
           doc: normalizeDoc(pendingDoc)
         };
       }
-    } else if (/^extern\s+(throws\s+)?func\b/.test(line) && /\bas\s*$/.test(line)) {
+    } else if (/^extern\s+(?:(?:throws|init)\s+)*func\b/.test(line) && /\bas\s*$/.test(line)) {
       const signatureLine = nextNonEmptyLine(lines, i + 1);
       if (signatureLine) {
         symbol = parseFunctionSignature(signatureLine.trim(), pendingDoc, /throws/.test(line));

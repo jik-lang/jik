@@ -2,6 +2,21 @@ use "jik/testing" as test
 
 use "jik/bytes"
 
+struct BytesHolder:
+    b: bytes::Bytes
+    buf: bytes::ByteBuf
+    maybe: Option[bytes::Bytes]
+    values: Vec[bytes::Bytes]
+    lookup: Dict[bytes::Bytes]
+end
+
+variant BytesVariant:
+    BYTES: bytes::Bytes
+    MAYBE: Option[bytes::Bytes]
+    VALUES: Vec[bytes::Bytes]
+    LOOKUP: Dict[bytes::Bytes]
+end
+
 
 func test_empty(ts):
     b := bytes::new(_)
@@ -9,6 +24,139 @@ func test_empty(ts):
     test::suite_assert(ts, bytes::to_hex(b, _) == "", site())
     test::suite_assert(ts, bytes::equals(b, bytes::new(_)), site())
     test::suite_assert(ts, must bytes::to_string_ascii(b, _) == "", site())
+end
+
+func test_default_init(ts):
+    b: bytes::Bytes
+    b2 := bytes::Bytes{}
+    buf: bytes::ByteBuf
+    buf2 := bytes::ByteBuf{}
+    holder := BytesHolder{}
+
+    test::suite_assert(ts, bytes::len(b) == 0, site())
+    test::suite_assert(ts, bytes::len(b2) == 0, site())
+    test::suite_assert(ts, bytes::buf_len(buf) == 0, site())
+    test::suite_assert(ts, bytes::buf_len(buf2) == 0, site())
+    test::suite_assert(ts, bytes::len(holder.b) == 0, site())
+    test::suite_assert(ts, bytes::buf_len(holder.buf) == 0, site())
+    test::suite_assert(ts, holder.maybe is None, site())
+    test::suite_assert(ts, len(holder.values) == 0, site())
+    test::suite_assert(ts, len(holder.lookup) == 0, site())
+    bytes::buf_push(holder.buf, 'a')
+    test::suite_assert(ts, bytes::buf_len(holder.buf) == 1, site())
+end
+
+func test_composite_interop(ts):
+    values := [2 of bytes::Bytes{}]
+    test::suite_assert(ts, len(values) == 2, site())
+    test::suite_assert(ts, bytes::len(values[0]) == 0, site())
+    test::suite_assert(ts, bytes::len(values[1]) == 0, site())
+
+    lookup: Dict[bytes::Bytes]
+    test::suite_assert(ts, len(lookup) == 0, site())
+    lookup["foo"] = bytes::Bytes{}
+    test::suite_assert(ts, len(lookup) == 1, site())
+    foo_bytes := lookup["foo"]
+    test::suite_assert(ts, foo_bytes is Some, site())
+    test::suite_assert(ts, bytes::len(foo_bytes?) == 0, site())
+
+    holder := BytesHolder{
+        b = bytes::Bytes{},
+        buf = bytes::ByteBuf{},
+        maybe = None,
+        values = values,
+        lookup = lookup
+    }
+    test::suite_assert(ts, bytes::len(holder.b) == 0, site())
+    test::suite_assert(ts, bytes::buf_len(holder.buf) == 0, site())
+    test::suite_assert(ts, holder.maybe is None, site())
+    test::suite_assert(ts, len(holder.values) == 2, site())
+    test::suite_assert(ts, len(holder.lookup) == 1, site())
+end
+
+func test_variant_interop(ts):
+    bv_explicit := BytesVariant.BYTES{bytes::Bytes{}}
+    bv_default := BytesVariant.BYTES{}
+    mv := BytesVariant.MAYBE{}
+    vv := BytesVariant.VALUES{}
+    dv := BytesVariant.LOOKUP{}
+
+    match bv_explicit:
+        case BytesVariant.BYTES{b}:
+            test::suite_assert(ts, bytes::len(b) == 0, site())
+        case BytesVariant.MAYBE{m}:
+            test::suite_assert(ts, false, site())
+        case BytesVariant.VALUES{v}:
+            test::suite_assert(ts, false, site())
+        case BytesVariant.LOOKUP{d}:
+            test::suite_assert(ts, false, site())
+    end
+
+    match bv_default:
+        case BytesVariant.BYTES{b}:
+            test::suite_assert(ts, bytes::len(b) == 0, site())
+        case BytesVariant.MAYBE{m}:
+            test::suite_assert(ts, false, site())
+        case BytesVariant.VALUES{v}:
+            test::suite_assert(ts, false, site())
+        case BytesVariant.LOOKUP{d}:
+            test::suite_assert(ts, false, site())
+    end
+
+    match mv:
+        case BytesVariant.BYTES{b}:
+            test::suite_assert(ts, false, site())
+        case BytesVariant.MAYBE{m}:
+            test::suite_assert(ts, m is None, site())
+        case BytesVariant.VALUES{v}:
+            test::suite_assert(ts, false, site())
+        case BytesVariant.LOOKUP{d}:
+            test::suite_assert(ts, false, site())
+    end
+
+    match vv:
+        case BytesVariant.BYTES{b}:
+            test::suite_assert(ts, false, site())
+        case BytesVariant.MAYBE{m}:
+            test::suite_assert(ts, false, site())
+        case BytesVariant.VALUES{v}:
+            test::suite_assert(ts, len(v) == 0, site())
+        case BytesVariant.LOOKUP{d}:
+            test::suite_assert(ts, false, site())
+    end
+
+    match dv:
+        case BytesVariant.BYTES{b}:
+            test::suite_assert(ts, false, site())
+        case BytesVariant.MAYBE{m}:
+            test::suite_assert(ts, false, site())
+        case BytesVariant.VALUES{v}:
+            test::suite_assert(ts, false, site())
+        case BytesVariant.LOOKUP{d}:
+            test::suite_assert(ts, len(d) == 0, site())
+    end
+end
+
+func test_opaque_print_codegen(ts):
+    holder := BytesHolder{}
+    values := [1 of bytes::Bytes{}]
+    lookup: Dict[bytes::Bytes]
+    lookup["foo"] = bytes::Bytes{}
+    bv := BytesVariant.BYTES{}
+
+    // Although this will never happen, it still goes through codegen,
+    // which is what we want.
+    if false:
+        print(bytes::Bytes{})
+        print(bytes::ByteBuf{})
+        print(holder)
+        print(holder.maybe)
+        print(holder.values)
+        print(holder.lookup)
+        print(values)
+        print(lookup)
+        print(bv)
+    end
 end
 
 
@@ -120,6 +268,10 @@ end
 
 func run_tests(ts):
     test_empty(ts)
+    test_default_init(ts)
+    test_composite_interop(ts)
+    test_variant_interop(ts)
+    test_opaque_print_codegen(ts)
     test_from_string(ts)
     test_slice(ts)
     test_equals(ts)

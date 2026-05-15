@@ -29,7 +29,7 @@ extern struct jik_impl_bytes_ByteBuf as
 ///
 /// @param region Allocation region.
 /// @returns Empty `Bytes`.
-extern func jik_impl_bytes_new as
+extern init func jik_impl_bytes_new as
     new(region: Region) -> Bytes
 
 /// Copy a string's exact bytes into a byte sequence.
@@ -94,7 +94,7 @@ extern throws func jik_impl_bytes_to_string_ascii as
 ///
 /// @param region Allocation region.
 /// @returns Empty `ByteBuf`.
-extern func jik_impl_bytes_buf_new as
+extern init func jik_impl_bytes_buf_new as
     buf_new(region: Region) -> ByteBuf
 
 /// Create a byte buffer initialized from a string's exact bytes.

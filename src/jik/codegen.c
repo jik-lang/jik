@@ -321,8 +321,17 @@ get_print_seq_trans(JikCodeGenerator *cg, JikNode *nd)
         char *tse       = jik_codegen_emit_expression(cg, arg);
         char *type_name = jik_codegen_get_print_type_name(arg->jik_type);
         assert(type_name);
-        char *pf         = jik_codegen_get_print_function(cg, type_name);
-        char *final_expr = JIK_STRING_NCAT(pf, "(", tse, ", ", JIK_REGION_VAR_NAME, ")");
+        char **entry = TabString_get(cg->print_functions, type_name);
+        char  *final_expr;
+        if (entry) {
+            char *pf   = *entry;
+            final_expr = JIK_STRING_NCAT(pf, "(", tse, ", ", JIK_REGION_VAR_NAME, ")");
+        }
+        else {
+            char *pretty_name = sanitize_string(jik_type_pretty_name(arg->jik_type));
+            final_expr        = JIK_STRING_NCAT(
+                "jik_string_new(\"<", pretty_name, ">\", ", JIK_REGION_VAR_NAME, ")");
+        }
         char_buffer_append(cb, final_expr);
         char_buffer_append(cb, ", ");
     }
@@ -1877,14 +1886,23 @@ jik_codegen_emit_struct_print_function(JikCodeGenerator *cg, JikNode *nd, char *
         char    *elem_type_name = jik_codegen_get_print_type_name(field_type);
         assert(elem_type_name);
         entry = TabString_get(cg->print_functions, elem_type_name);
-        assert(entry);
-        func_name = *entry;
         jik_writer_write_line(
             &cg->cw, JIK_STRING_NCAT("jik_char_buffer_append(cb, \"", field_name, "=\", a);"));
-        jik_writer_write_line(
-            &cg->cw,
-            JIK_STRING_NCAT(
-                "jik_char_buffer_append(cb, ", func_name, "(s->", field_name, ", a)->data, a);"));
+        if (entry) {
+            func_name = *entry;
+            jik_writer_write_line(&cg->cw,
+                                  JIK_STRING_NCAT("jik_char_buffer_append(cb, ",
+                                                  func_name,
+                                                  "(s->",
+                                                  field_name,
+                                                  ", a)->data, a);"));
+        }
+        else {
+            char *field_pretty_name = sanitize_string(jik_type_pretty_name(field_type));
+            jik_writer_write_line(
+                &cg->cw,
+                JIK_STRING_NCAT("jik_char_buffer_append(cb, \"<", field_pretty_name, ">\", a);"));
+        }
         jik_writer_write_line(&cg->cw,
                               JIK_STRING_NCAT("jik_char_buffer_append(cb, \"", " ", "\", a);"));
     }
@@ -1942,10 +1960,19 @@ jik_codegen_emit_variant_print_function(JikCodeGenerator *cg, JikNode *nd, char 
         char *elem_type_name = jik_codegen_get_print_type_name((*member_node)->jik_type);
         assert(elem_type_name);
         entry = TabString_get(cg->print_functions, elem_type_name);
-        assert(entry);
-        func_name = *entry;
-        jik_writer_write_line(
-            &cg->cw, JIK_STRING_NCAT("return ", func_name, "(", "s->val.", member_name, ", a);"));
+        if (entry) {
+            func_name = *entry;
+            jik_writer_write_line(
+                &cg->cw,
+                JIK_STRING_NCAT("return ", func_name, "(", "s->val.", member_name, ", a);"));
+        }
+        else {
+            char *member_pretty_name =
+                sanitize_string(jik_type_pretty_name((*member_node)->jik_type));
+            jik_writer_write_line(
+                &cg->cw,
+                JIK_STRING_NCAT("return jik_string_new(\"<", member_pretty_name, ">\", a);"));
+        }
 
         // jik_writer_write_line(&cg->cw, "break;");
         jik_writer_dedent(&cg->cw);
@@ -1980,12 +2007,20 @@ jik_codegen_emit_vec_print_function(JikCodeGenerator *cg, JikNode *nd, char *man
     char    *elem_type_name = jik_codegen_get_print_type_name(elem_type);
     assert(elem_type_name);
     entry = TabString_get(cg->print_functions, elem_type_name);
-    assert(entry);
-    func_name = *entry;
     jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("jik_char_buffer_append(cb, ", "\" \", a);"));
-    jik_writer_write_line(
-        &cg->cw,
-        JIK_STRING_NCAT("jik_char_buffer_append(cb, ", func_name, "(s->data[i], a)->data, a);"));
+    if (entry) {
+        func_name = *entry;
+        jik_writer_write_line(&cg->cw,
+                              JIK_STRING_NCAT("jik_char_buffer_append(cb, ",
+                                              func_name,
+                                              "(s->data[i], a)->data, a);"));
+    }
+    else {
+        char *elem_pretty_name = sanitize_string(jik_type_pretty_name(elem_type));
+        jik_writer_write_line(
+            &cg->cw,
+            JIK_STRING_NCAT("jik_char_buffer_append(cb, \"<", elem_pretty_name, ">\", a);"));
+    }
 
     jik_writer_dedent(&cg->cw);
     jik_writer_write_line(&cg->cw, "}");
@@ -2021,8 +2056,6 @@ jik_codegen_emit_dict_print_function(JikCodeGenerator *cg, JikNode *nd, char *ma
     char *elem_type_name = jik_codegen_get_print_type_name(elem_type);
     assert(elem_type_name);
     entry = TabString_get(cg->print_functions, elem_type_name);
-    assert(entry);
-    func_name = *entry;
     jik_writer_write_line(&cg->cw, "if (s->items[i].key) {");
     // jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("jik_char_buffer_append(cb, ", "if
     // (s->items[i].key.data) {"));
@@ -2033,10 +2066,19 @@ jik_codegen_emit_dict_print_function(JikCodeGenerator *cg, JikNode *nd, char *ma
         &cg->cw,
         JIK_STRING_NCAT("jik_char_buffer_append(cb, ", *entry2, "(s->items[i].key, a)->data, a);"));
     jik_writer_write_line(&cg->cw, "jik_char_buffer_append(cb, \": \", a);");
-    jik_writer_write_line(&cg->cw,
-                          JIK_STRING_NCAT("jik_char_buffer_append(cb, ",
-                                          func_name,
-                                          "(s->items[i].val, a)->data, a);"));
+    if (entry) {
+        func_name = *entry;
+        jik_writer_write_line(&cg->cw,
+                              JIK_STRING_NCAT("jik_char_buffer_append(cb, ",
+                                              func_name,
+                                              "(s->items[i].val, a)->data, a);"));
+    }
+    else {
+        char *elem_pretty_name = sanitize_string(jik_type_pretty_name(elem_type));
+        jik_writer_write_line(
+            &cg->cw,
+            JIK_STRING_NCAT("jik_char_buffer_append(cb, \"<", elem_pretty_name, ">\", a);"));
+    }
     jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("jik_char_buffer_append(cb, \",\", a);"));
     jik_writer_write_line(&cg->cw, "}");
     // jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("jik_char_buffer_append(cb, ", "}"));
@@ -2065,14 +2107,21 @@ jik_codegen_emit_option_print_function(JikCodeGenerator *cg, JikType *opt_type)
                           JIK_STRING_NCAT("if (!s) { return ", JIK_NULL_PRINT_EXPR, "; }"));
     char *elem_type_name = jik_codegen_get_print_type_name(opt_type->val_option.elem_type);
     assert(elem_type_name);
-    entry = TabString_get(cg->print_functions, elem_type_name);
-    assert(entry);
-    char *elem_print_func  = *entry;
+    entry                  = TabString_get(cg->print_functions, elem_type_name);
     char *elem_pretty_name = sanitize_string(jik_type_pretty_name(opt_type->val_option.elem_type));
     jik_writer_write_line(&cg->cw, "if (s->is_some) {");
     jik_writer_indent(&cg->cw);
-    jik_writer_write_line(
-        &cg->cw, JIK_STRING_NCAT("JikString *val_str = ", elem_print_func, "(s->val, a);"));
+    if (entry) {
+        char *elem_print_func = *entry;
+        jik_writer_write_line(
+            &cg->cw, JIK_STRING_NCAT("JikString *val_str = ", elem_print_func, "(s->val, a);"));
+    }
+    else {
+        jik_writer_write_line(&cg->cw,
+                              JIK_STRING_NCAT("JikString *val_str = jik_string_new(\"<",
+                                              elem_pretty_name,
+                                              ">\", a);"));
+    }
     jik_writer_write_line(&cg->cw, "JikCharBuffer *cb = jik_char_buffer_new(\"<Some: \", a);");
     jik_writer_write_line(&cg->cw, "jik_char_buffer_append(cb, val_str->data, a);");
     jik_writer_write_line(&cg->cw, "jik_char_buffer_append(cb, \">\", a);");

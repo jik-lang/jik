@@ -125,6 +125,81 @@ end
         "uses reserved prefix")
 end
 
+func test_compile_fail_10(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+use "jik/io"
+
+func main():
+    f := io::File{}
+end
+""",
+        "external struct type has no init function")
+end
+
+func test_compile_fail_11(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+use "jik/io"
+
+func main():
+    f: io::File
+end
+""",
+        "external struct type has no init function")
+end
+
+func test_compile_fail_12(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+use "jik/io"
+
+struct Foo:
+    f: io::File
+end
+
+func main():
+end
+""",
+        "external struct type has no init function")
+end
+
+func test_compile_fail_13(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+extern struct jik_TestOpaque as
+    TestOpaque
+
+extern init func jik_test_opaque_new1 as
+    new1(region: Region) -> TestOpaque
+
+extern init func jik_test_opaque_new2 as
+    new2(region: Region) -> TestOpaque
+
+@embed{C_END}
+typedef struct jik_TestOpaque {
+    int x;
+} jik_TestOpaque;
+
+jik_TestOpaque *
+jik_test_opaque_new1(JikRegion *r)
+{
+    return jik_region_alloc(r, sizeof(jik_TestOpaque));
+}
+
+jik_TestOpaque *
+jik_test_opaque_new2(JikRegion *r)
+{
+    return jik_region_alloc(r, sizeof(jik_TestOpaque));
+}
+C_END
+
+func main():
+end
+""",
+        "extern struct type already has an init function")
+end
+
 func run_tests(ts):
     test_compile_fail_01(ts)
     test_compile_fail_02(ts)
@@ -135,6 +210,10 @@ func run_tests(ts):
     test_compile_fail_07(ts)
     test_compile_fail_08(ts)
     test_compile_fail_09(ts)
+    test_compile_fail_10(ts)
+    test_compile_fail_11(ts)
+    test_compile_fail_12(ts)
+    test_compile_fail_13(ts)
 end
 
 func main():

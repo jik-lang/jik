@@ -107,6 +107,7 @@ JikNode *
 jik_node_new_extern_function(char     *name,
                              char     *C_func_name,
                              bool      throws,
+                             bool      init,
                              JikScope *ctx,
                              JikToken *tok)
 {
@@ -118,6 +119,7 @@ jik_node_new_extern_function(char     *name,
     nd->val_extern_function.params      = NULL;
     nd->val_extern_function.ret_node    = NULL;
     nd->val_extern_function.throws      = throws;
+    nd->val_extern_function.init        = init;
     nd->context                         = ctx;
     nd->token                           = tok;
     return nd;

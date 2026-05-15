@@ -353,6 +353,7 @@ typedef struct JikNode {
             VecJikNode     *params;
             struct JikNode *ret_node;
             bool            throws;
+            bool            init;
         } val_extern_function;
 
         // Match
@@ -465,6 +466,7 @@ JikNode *
 jik_node_new_extern_function(char     *name,
                              char     *C_func_name,
                              bool      throws,
+                             bool      init,
                              JikScope *ctx,
                              JikToken *tok);
 JikNode *
