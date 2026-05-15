@@ -15,7 +15,7 @@ jik_make_alloc_src_mismatch_msg(JikAllocSpec lhs, JikAllocSpec rhs)
     if (lhs.src == JIK_ALLOC_SRC_CROSS || rhs.src == JIK_ALLOC_SRC_CROSS) {
         return JIK_STRING_NCAT(msg, "illegal foreign parameter in store operation");
     }
-    else if (lhs.src == JIK_ALLOC_LOCAL || rhs.src == JIK_ALLOC_LOCAL) {
+    else if (lhs.src == JIK_ALLOC_SRC_LOCAL || rhs.src == JIK_ALLOC_SRC_LOCAL) {
         return JIK_STRING_NCAT(msg, "illegal store operation between local and non-local value");
     }
     return JIK_STRING_NCAT(msg, "illegal store operation between incompatible allocation sources");
