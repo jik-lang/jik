@@ -207,6 +207,17 @@ jik_impl_bytes_alloc_bytes(uint8_t *data, size_t size, JikRegion *a)
     return bytes;
 }
 
+jik_impl_bytes_Bytes *
+jik_impl_bytes_from_raw_copy(uint8_t *data, size_t size, JikRegion *a)
+{
+    uint8_t *copy = NULL;
+    if (size > 0) {
+        copy = jik_region_alloc(a, size);
+        memcpy(copy, data, size);
+    }
+    return jik_impl_bytes_alloc_bytes(copy, size, a);
+}
+
 static JikString *
 jik_impl_bytes_string_from_raw(uint8_t *data, size_t size, JikRegion *a)
 {

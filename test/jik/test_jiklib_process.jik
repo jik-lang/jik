@@ -1,0 +1,40 @@
+use "jik/testing" as test
+use "jik/bytes" as bytes
+use "jik/process"
+use "jik/sys"
+
+
+func _jik_exe(r: Region) -> String:
+    if sys::platform() == "windows":
+        return "jik.exe"[r]
+    end
+    return "./jik"[r]
+end
+
+func test_process_capture_stdout_stderr(ts):
+    res := must process::capture(_jik_exe(), ["version"], _)
+    test::suite_assert(ts, res.code == 0, site())
+    test::suite_assert(ts, bytes::len(res.out) > 0, site())
+    test::suite_assert(ts, bytes::len(res.err) == 0, site())
+end
+
+func test_process_capture_nonzero_status(ts):
+    res := must process::capture(_jik_exe(), ["__jik_bad_command__"], _)
+    test::suite_assert(ts, res.code != 0, site())
+    test::suite_assert(ts, bytes::len(res.err) > 0, site())
+end
+
+func test_process_capture_missing_program(ts):
+    try res := process::capture("__jik_bar_baz_1234__", ["version"], _):
+        test::suite_assert(ts, false, site())
+        test::suite_assert(ts, res.code != 0, site())
+    except:
+        test::suite_assert(ts, error_msg() == "process::capture: could not start process", site())
+    end
+end
+
+func run_tests(ts):
+    test_process_capture_stdout_stderr(ts)
+    test_process_capture_nonzero_status(ts)
+    test_process_capture_missing_program(ts)
+end

@@ -1,0 +1,823 @@
+//! Shell-free process execution.
+//!
+//! This module provides a small argv-based process API. It does not invoke a
+//! shell, so arguments are passed as structured values instead of one quoted
+//! command string.
+
+use "jik/bytes" as bytes
+
+// -------------------------------------------------------------
+//      API
+// -------------------------------------------------------------
+
+/// Result of a completed captured child process.
+struct Result:
+    code: int
+    out: bytes::Bytes
+    err: bytes::Bytes
+end
+
+extern struct jik_impl_process_Result as
+    _Result
+
+/// Run a child process with inherited stdio and wait for it.
+///
+/// `program` is the executable name or path. `args` contains only child
+/// arguments, not `argv[0]`.
+///
+/// @param program Executable name or path. Foreign parameter.
+/// @param args Child process arguments. Foreign parameter.
+/// @returns Child exit code.
+extern throws func jik_impl_process_run as
+    run(foreign program: String, foreign args: Vec[String]) -> int
+
+/// Run a child process, capture stdout and stderr, and wait for it.
+///
+/// `program` is the executable name or path. `args` contains only child
+/// arguments, not `argv[0]`. A nonzero child exit code is returned in the
+/// result and is not a thrown error.
+///
+/// @param program Executable name or path. Foreign parameter.
+/// @param args Child process arguments. Foreign parameter.
+/// @param region Allocation region for the returned result and captured bytes.
+/// @returns Child exit code, stdout, and stderr.
+throws func capture(foreign program: String, foreign args: Vec[String], region: Region) -> Result:
+    try raw := _capture_raw(program, args, region):
+        return Result{
+            code = _result_code(raw),
+            out = _result_out(raw),
+            err = _result_err(raw)
+        }[region]
+    except:
+        fail(error_msg(region), error_code())
+    end
+end
+
+extern throws func jik_impl_process_capture_raw as
+    _capture_raw(foreign program: String, foreign args: Vec[String], region: Region) -> _Result
+
+extern func jik_impl_process_result_code as
+    _result_code(res: _Result) -> int
+
+extern func jik_impl_process_result_out as
+    _result_out(res: _Result) -> bytes::Bytes
+
+extern func jik_impl_process_result_err as
+    _result_err(res: _Result) -> bytes::Bytes
+
+
+// -------------------------------------------------------------
+//      C Implementation
+// -------------------------------------------------------------
+
+@embed{C_END}
+
+struct vec_JikString;
+JikString *vec_JikString_get(struct vec_JikString *v, size_t idx, char *dbg_info);
+size_t vec_JikString_size(struct vec_JikString *v, char *dbg_info);
+struct jik_impl_bytes_Bytes;
+struct jik_impl_bytes_Bytes *
+jik_impl_bytes_from_raw_copy(uint8_t *data, size_t size, JikRegion *a);
+
+typedef struct jik_impl_process_Result {
+    int32_t code;
+    struct jik_impl_bytes_Bytes *out;
+    struct jik_impl_bytes_Bytes *err;
+} jik_impl_process_Result;
+
+typedef struct jik_impl_process_Buffer {
+    uint8_t *data;
+    size_t size;
+    size_t capacity;
+} jik_impl_process_Buffer;
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/select.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
+static void
+jik_impl_process_set_error(JikError *e, const char *msg)
+{
+    jik_error_set(e, 1, (char *)msg);
+}
+
+static bool
+jik_impl_process_buffer_append(jik_impl_process_Buffer *b, uint8_t *data, size_t size)
+{
+    if (size == 0) {
+        return true;
+    }
+    if (b->size > SIZE_MAX - size) {
+        return false;
+    }
+    size_t needed = b->size + size;
+    if (needed > b->capacity) {
+        size_t new_cap = b->capacity ? b->capacity : 4096;
+        while (new_cap < needed) {
+            if (new_cap > SIZE_MAX / 2) {
+                new_cap = needed;
+                break;
+            }
+            new_cap *= 2;
+        }
+        uint8_t *new_data = realloc(b->data, new_cap);
+        if (!new_data) {
+            return false;
+        }
+        b->data = new_data;
+        b->capacity = new_cap;
+    }
+    memcpy(b->data + b->size, data, size);
+    b->size = needed;
+    return true;
+}
+
+static void
+jik_impl_process_buffer_free(jik_impl_process_Buffer *b)
+{
+    free(b->data);
+    b->data = NULL;
+    b->size = 0;
+    b->capacity = 0;
+}
+
+jik_impl_process_Result *
+jik_impl_process_result_new(int32_t code,
+                            jik_impl_process_Buffer *out,
+                            jik_impl_process_Buffer *err,
+                            JikRegion *r)
+{
+    jik_impl_process_Result *res = jik_region_alloc(r, sizeof(jik_impl_process_Result));
+    res->code = code;
+    res->out = jik_impl_bytes_from_raw_copy(out->data, out->size, r);
+    res->err = jik_impl_bytes_from_raw_copy(err->data, err->size, r);
+    return res;
+}
+
+int32_t
+jik_impl_process_result_code(jik_impl_process_Result *res)
+{
+    return res->code;
+}
+
+struct jik_impl_bytes_Bytes *
+jik_impl_process_result_out(jik_impl_process_Result *res)
+{
+    return res->out;
+}
+
+struct jik_impl_bytes_Bytes *
+jik_impl_process_result_err(jik_impl_process_Result *res)
+{
+    return res->err;
+}
+
+#ifdef _WIN32
+
+static bool
+jik_impl_process_arg_needs_quotes(const char *s)
+{
+    if (s[0] == '\0') {
+        return true;
+    }
+    for (const char *p = s; *p; p++) {
+        if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\v' || *p == '"') {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool
+jik_impl_process_append_windows_arg(JikCharBuffer *b, const char *arg, JikRegion *r)
+{
+    if (!jik_impl_process_arg_needs_quotes(arg)) {
+        jik_char_buffer_append(b, arg, r);
+        return true;
+    }
+
+    jik_char_buffer_append_char(b, '"', r);
+
+    size_t backslashes = 0;
+    for (const char *p = arg; *p; p++) {
+        if (*p == '\\') {
+            backslashes++;
+            continue;
+        }
+
+        if (*p == '"') {
+            for (size_t i = 0; i < backslashes * 2 + 1; i++) {
+                jik_char_buffer_append_char(b, '\\', r);
+            }
+            jik_char_buffer_append_char(b, '"', r);
+            backslashes = 0;
+            continue;
+        }
+
+        for (size_t i = 0; i < backslashes; i++) {
+            jik_char_buffer_append_char(b, '\\', r);
+        }
+        backslashes = 0;
+        jik_char_buffer_append_char(b, *p, r);
+    }
+
+    for (size_t i = 0; i < backslashes * 2; i++) {
+        jik_char_buffer_append_char(b, '\\', r);
+    }
+    jik_char_buffer_append_char(b, '"', r);
+    return true;
+}
+
+static char *
+jik_impl_process_build_windows_command_line(
+    JikString *program, struct vec_JikString *args, JikRegion *r)
+{
+    JikCharBuffer *b = jik_char_buffer_new("", r);
+    jik_impl_process_append_windows_arg(b, program->data, r);
+
+    size_t n = vec_JikString_size(args, "process::run args");
+    for (size_t i = 0; i < n; i++) {
+        JikString *arg = vec_JikString_get(args, i, "process::run args");
+        jik_char_buffer_append_char(b, ' ', r);
+        jik_impl_process_append_windows_arg(b, arg->data, r);
+    }
+
+    return b->data;
+}
+
+int32_t
+jik_impl_process_run(JikString *program, struct vec_JikString *args, JikError *e)
+{
+    if (program->data[0] == '\0') {
+        jik_impl_process_set_error(e, "process::run: invalid program");
+        return -1;
+    }
+
+    JikRegion *r = jik_region_new(0);
+    char *cmdline = jik_impl_process_build_windows_command_line(program, args, r);
+
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof(si));
+    memset(&pi, 0, sizeof(pi));
+    si.cb = sizeof(si);
+
+    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
+    if (!ok) {
+        jik_region_free(r);
+        jik_impl_process_set_error(e, "process::run: could not start process");
+        return -1;
+    }
+    jik_region_free(r);
+
+    DWORD wait_res = WaitForSingleObject(pi.hProcess, INFINITE);
+    if (wait_res != WAIT_OBJECT_0) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        jik_impl_process_set_error(e, "process::run: wait failed");
+        return -1;
+    }
+
+    DWORD code = 0;
+    if (!GetExitCodeProcess(pi.hProcess, &code)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        jik_impl_process_set_error(e, "process::run: wait failed");
+        return -1;
+    }
+
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return (int32_t)code;
+}
+
+typedef struct jik_impl_process_WinReader {
+    HANDLE handle;
+    jik_impl_process_Buffer buffer;
+    DWORD error;
+} jik_impl_process_WinReader;
+
+static DWORD WINAPI
+jik_impl_process_reader_thread(LPVOID param)
+{
+    jik_impl_process_WinReader *reader = (jik_impl_process_WinReader *)param;
+    uint8_t tmp[4096];
+
+    for (;;) {
+        DWORD got = 0;
+        BOOL ok = ReadFile(reader->handle, tmp, sizeof(tmp), &got, NULL);
+        if (!ok) {
+            DWORD err = GetLastError();
+            if (err == ERROR_BROKEN_PIPE) {
+                return 0;
+            }
+            reader->error = err;
+            return 1;
+        }
+        if (got == 0) {
+            return 0;
+        }
+        if (!jik_impl_process_buffer_append(&reader->buffer, tmp, (size_t)got)) {
+            reader->error = ERROR_NOT_ENOUGH_MEMORY;
+            return 1;
+        }
+    }
+}
+
+static void
+jik_impl_process_close_handle_if_open(HANDLE h)
+{
+    if (h && h != INVALID_HANDLE_VALUE) {
+        CloseHandle(h);
+    }
+}
+
+static bool
+jik_impl_process_create_pipe(HANDLE *read_handle, HANDLE *write_handle)
+{
+    SECURITY_ATTRIBUTES sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+
+    if (!CreatePipe(read_handle, write_handle, &sa, 0)) {
+        return false;
+    }
+    if (!SetHandleInformation(*read_handle, HANDLE_FLAG_INHERIT, 0)) {
+        CloseHandle(*read_handle);
+        CloseHandle(*write_handle);
+        *read_handle = NULL;
+        *write_handle = NULL;
+        return false;
+    }
+    return true;
+}
+
+jik_impl_process_Result *
+jik_impl_process_capture_raw(JikString *program, struct vec_JikString *args, JikRegion *out_region, JikError *e)
+{
+    if (program->data[0] == '\0') {
+        jik_impl_process_set_error(e, "process::capture: invalid program");
+        return NULL;
+    }
+
+    HANDLE stdout_read = NULL;
+    HANDLE stdout_write = NULL;
+    HANDLE stderr_read = NULL;
+    HANDLE stderr_write = NULL;
+    HANDLE stdout_thread = NULL;
+    HANDLE stderr_thread = NULL;
+    jik_impl_process_WinReader stdout_reader = {0};
+    jik_impl_process_WinReader stderr_reader = {0};
+
+    if (!jik_impl_process_create_pipe(&stdout_read, &stdout_write) ||
+        !jik_impl_process_create_pipe(&stderr_read, &stderr_write)) {
+        jik_impl_process_close_handle_if_open(stdout_read);
+        jik_impl_process_close_handle_if_open(stdout_write);
+        jik_impl_process_close_handle_if_open(stderr_read);
+        jik_impl_process_close_handle_if_open(stderr_write);
+        jik_impl_process_set_error(e, "process::capture: could not create pipe");
+        return NULL;
+    }
+
+    JikRegion *r = jik_region_new(0);
+    char *cmdline = jik_impl_process_build_windows_command_line(program, args, r);
+
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof(si));
+    memset(&pi, 0, sizeof(pi));
+    si.cb = sizeof(si);
+    si.dwFlags |= STARTF_USESTDHANDLES;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    si.hStdOutput = stdout_write;
+    si.hStdError = stderr_write;
+
+    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
+    jik_region_free(r);
+    jik_impl_process_close_handle_if_open(stdout_write);
+    jik_impl_process_close_handle_if_open(stderr_write);
+    stdout_write = NULL;
+    stderr_write = NULL;
+
+    if (!ok) {
+        jik_impl_process_close_handle_if_open(stdout_read);
+        jik_impl_process_close_handle_if_open(stderr_read);
+        jik_impl_process_set_error(e, "process::capture: could not start process");
+        return NULL;
+    }
+
+    stdout_reader.handle = stdout_read;
+    stderr_reader.handle = stderr_read;
+    stdout_thread = CreateThread(NULL, 0, jik_impl_process_reader_thread, &stdout_reader, 0, NULL);
+    stderr_thread = CreateThread(NULL, 0, jik_impl_process_reader_thread, &stderr_reader, 0, NULL);
+    if (!stdout_thread || !stderr_thread) {
+        TerminateProcess(pi.hProcess, 1);
+        jik_impl_process_close_handle_if_open(stdout_read);
+        jik_impl_process_close_handle_if_open(stderr_read);
+        if (stdout_thread) {
+            WaitForSingleObject(stdout_thread, INFINITE);
+        }
+        if (stderr_thread) {
+            WaitForSingleObject(stderr_thread, INFINITE);
+        }
+        jik_impl_process_close_handle_if_open(stdout_thread);
+        jik_impl_process_close_handle_if_open(stderr_thread);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        jik_impl_process_buffer_free(&stdout_reader.buffer);
+        jik_impl_process_buffer_free(&stderr_reader.buffer);
+        jik_impl_process_set_error(e, "process::capture: pipe read failed");
+        return NULL;
+    }
+
+    DWORD wait_res = WaitForSingleObject(pi.hProcess, INFINITE);
+    WaitForSingleObject(stdout_thread, INFINITE);
+    WaitForSingleObject(stderr_thread, INFINITE);
+
+    jik_impl_process_close_handle_if_open(stdout_thread);
+    jik_impl_process_close_handle_if_open(stderr_thread);
+    jik_impl_process_close_handle_if_open(stdout_read);
+    jik_impl_process_close_handle_if_open(stderr_read);
+
+    if (wait_res != WAIT_OBJECT_0) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        jik_impl_process_buffer_free(&stdout_reader.buffer);
+        jik_impl_process_buffer_free(&stderr_reader.buffer);
+        jik_impl_process_set_error(e, "process::capture: wait failed");
+        return NULL;
+    }
+
+    DWORD code = 0;
+    if (!GetExitCodeProcess(pi.hProcess, &code)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        jik_impl_process_buffer_free(&stdout_reader.buffer);
+        jik_impl_process_buffer_free(&stderr_reader.buffer);
+        jik_impl_process_set_error(e, "process::capture: wait failed");
+        return NULL;
+    }
+
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+
+    if (stdout_reader.error || stderr_reader.error) {
+        jik_impl_process_buffer_free(&stdout_reader.buffer);
+        jik_impl_process_buffer_free(&stderr_reader.buffer);
+        jik_impl_process_set_error(e, "process::capture: pipe read failed");
+        return NULL;
+    }
+
+    jik_impl_process_Result *res =
+        jik_impl_process_result_new((int32_t)code, &stdout_reader.buffer, &stderr_reader.buffer, out_region);
+    jik_impl_process_buffer_free(&stdout_reader.buffer);
+    jik_impl_process_buffer_free(&stderr_reader.buffer);
+    return res;
+}
+
+#else
+
+static int
+jik_impl_process_set_cloexec(int fd)
+{
+    int flags = fcntl(fd, F_GETFD);
+    if (flags < 0) {
+        return -1;
+    }
+    return fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+}
+
+static void
+jik_impl_process_close_if_open(int fd)
+{
+    if (fd >= 0) {
+        close(fd);
+    }
+}
+
+static char **
+jik_impl_process_build_argv(JikString *program, struct vec_JikString *args)
+{
+    size_t n = vec_JikString_size(args, "process::run args");
+    char **argv = malloc((n + 2) * sizeof(char *));
+    if (!argv) {
+        return NULL;
+    }
+
+    argv[0] = program->data;
+    for (size_t i = 0; i < n; i++) {
+        JikString *arg = vec_JikString_get(args, i, "process::run args");
+        argv[i + 1] = arg->data;
+    }
+    argv[n + 1] = NULL;
+    return argv;
+}
+
+static int32_t
+jik_impl_process_exit_code_from_status(int status)
+{
+    if (WIFEXITED(status)) {
+        return (int32_t)WEXITSTATUS(status);
+    }
+    if (WIFSIGNALED(status)) {
+        return (int32_t)(128 + WTERMSIG(status));
+    }
+    return 1;
+}
+
+int32_t
+jik_impl_process_run(JikString *program, struct vec_JikString *args, JikError *e)
+{
+    if (program->data[0] == '\0') {
+        jik_impl_process_set_error(e, "process::run: invalid program");
+        return -1;
+    }
+
+    char **argv = jik_impl_process_build_argv(program, args);
+    if (!argv) {
+        jik_impl_process_set_error(e, "process::run: allocation failed");
+        return -1;
+    }
+
+    int exec_err_pipe[2] = {-1, -1};
+    if (pipe(exec_err_pipe) != 0) {
+        free(argv);
+        jik_impl_process_set_error(e, "process::run: could not start process");
+        return -1;
+    }
+    if (jik_impl_process_set_cloexec(exec_err_pipe[1]) != 0) {
+        free(argv);
+        jik_impl_process_close_if_open(exec_err_pipe[0]);
+        jik_impl_process_close_if_open(exec_err_pipe[1]);
+        jik_impl_process_set_error(e, "process::run: could not start process");
+        return -1;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        free(argv);
+        jik_impl_process_close_if_open(exec_err_pipe[0]);
+        jik_impl_process_close_if_open(exec_err_pipe[1]);
+        jik_impl_process_set_error(e, "process::run: could not start process");
+        return -1;
+    }
+
+    if (pid == 0) {
+        close(exec_err_pipe[0]);
+        execvp(program->data, argv);
+        int err = errno;
+        (void)write(exec_err_pipe[1], &err, sizeof(err));
+        _exit(127);
+    }
+
+    free(argv);
+    close(exec_err_pipe[1]);
+
+    int child_exec_errno = 0;
+    ssize_t nread;
+    do {
+        nread = read(exec_err_pipe[0], &child_exec_errno, sizeof(child_exec_errno));
+    } while (nread < 0 && errno == EINTR);
+    close(exec_err_pipe[0]);
+
+    int status = 0;
+    pid_t waited;
+    do {
+        waited = waitpid(pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+
+    if (waited < 0) {
+        jik_impl_process_set_error(e, "process::run: wait failed");
+        return -1;
+    }
+
+    if (nread > 0) {
+        jik_impl_process_set_error(e, "process::run: could not start process");
+        return -1;
+    }
+    if (nread < 0) {
+        jik_impl_process_set_error(e, "process::run: could not start process");
+        return -1;
+    }
+
+    return jik_impl_process_exit_code_from_status(status);
+}
+
+static bool
+jik_impl_process_read_ready_fd(int fd, jik_impl_process_Buffer *buf)
+{
+    uint8_t tmp[4096];
+    for (;;) {
+        ssize_t n = read(fd, tmp, sizeof(tmp));
+        if (n > 0) {
+            return jik_impl_process_buffer_append(buf, tmp, (size_t)n);
+        }
+        if (n == 0) {
+            return true;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        return false;
+    }
+}
+
+static bool
+jik_impl_process_drain_pipes(int stdout_fd,
+                             int stderr_fd,
+                             jik_impl_process_Buffer *stdout_buf,
+                             jik_impl_process_Buffer *stderr_buf)
+{
+    bool stdout_open = true;
+    bool stderr_open = true;
+
+    while (stdout_open || stderr_open) {
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        int maxfd = -1;
+        if (stdout_open) {
+            FD_SET(stdout_fd, &rfds);
+            if (stdout_fd > maxfd) {
+                maxfd = stdout_fd;
+            }
+        }
+        if (stderr_open) {
+            FD_SET(stderr_fd, &rfds);
+            if (stderr_fd > maxfd) {
+                maxfd = stderr_fd;
+            }
+        }
+
+        int ready;
+        do {
+            ready = select(maxfd + 1, &rfds, NULL, NULL, NULL);
+        } while (ready < 0 && errno == EINTR);
+        if (ready < 0) {
+            return false;
+        }
+
+        if (stdout_open && FD_ISSET(stdout_fd, &rfds)) {
+            size_t before = stdout_buf->size;
+            if (!jik_impl_process_read_ready_fd(stdout_fd, stdout_buf)) {
+                return false;
+            }
+            if (stdout_buf->size == before) {
+                stdout_open = false;
+                close(stdout_fd);
+            }
+        }
+        if (stderr_open && FD_ISSET(stderr_fd, &rfds)) {
+            size_t before = stderr_buf->size;
+            if (!jik_impl_process_read_ready_fd(stderr_fd, stderr_buf)) {
+                return false;
+            }
+            if (stderr_buf->size == before) {
+                stderr_open = false;
+                close(stderr_fd);
+            }
+        }
+    }
+
+    return true;
+}
+
+jik_impl_process_Result *
+jik_impl_process_capture_raw(JikString *program, struct vec_JikString *args, JikRegion *out_region, JikError *e)
+{
+    if (program->data[0] == '\0') {
+        jik_impl_process_set_error(e, "process::capture: invalid program");
+        return NULL;
+    }
+
+    char **argv = jik_impl_process_build_argv(program, args);
+    if (!argv) {
+        jik_impl_process_set_error(e, "process::capture: allocation failed");
+        return NULL;
+    }
+
+    int stdout_pipe[2] = {-1, -1};
+    int stderr_pipe[2] = {-1, -1};
+    int exec_err_pipe[2] = {-1, -1};
+    if (pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0 || pipe(exec_err_pipe) != 0) {
+        free(argv);
+        jik_impl_process_close_if_open(stdout_pipe[0]);
+        jik_impl_process_close_if_open(stdout_pipe[1]);
+        jik_impl_process_close_if_open(stderr_pipe[0]);
+        jik_impl_process_close_if_open(stderr_pipe[1]);
+        jik_impl_process_close_if_open(exec_err_pipe[0]);
+        jik_impl_process_close_if_open(exec_err_pipe[1]);
+        jik_impl_process_set_error(e, "process::capture: could not create pipe");
+        return NULL;
+    }
+    if (jik_impl_process_set_cloexec(exec_err_pipe[1]) != 0) {
+        free(argv);
+        jik_impl_process_close_if_open(stdout_pipe[0]);
+        jik_impl_process_close_if_open(stdout_pipe[1]);
+        jik_impl_process_close_if_open(stderr_pipe[0]);
+        jik_impl_process_close_if_open(stderr_pipe[1]);
+        jik_impl_process_close_if_open(exec_err_pipe[0]);
+        jik_impl_process_close_if_open(exec_err_pipe[1]);
+        jik_impl_process_set_error(e, "process::capture: could not create pipe");
+        return NULL;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        free(argv);
+        jik_impl_process_close_if_open(stdout_pipe[0]);
+        jik_impl_process_close_if_open(stdout_pipe[1]);
+        jik_impl_process_close_if_open(stderr_pipe[0]);
+        jik_impl_process_close_if_open(stderr_pipe[1]);
+        jik_impl_process_close_if_open(exec_err_pipe[0]);
+        jik_impl_process_close_if_open(exec_err_pipe[1]);
+        jik_impl_process_set_error(e, "process::capture: could not start process");
+        return NULL;
+    }
+
+    if (pid == 0) {
+        close(stdout_pipe[0]);
+        close(stderr_pipe[0]);
+        close(exec_err_pipe[0]);
+
+        if (dup2(stdout_pipe[1], STDOUT_FILENO) < 0 ||
+            dup2(stderr_pipe[1], STDERR_FILENO) < 0) {
+            int err = errno;
+            (void)write(exec_err_pipe[1], &err, sizeof(err));
+            _exit(127);
+        }
+
+        close(stdout_pipe[1]);
+        close(stderr_pipe[1]);
+        execvp(program->data, argv);
+        int err = errno;
+        (void)write(exec_err_pipe[1], &err, sizeof(err));
+        _exit(127);
+    }
+
+    free(argv);
+    close(stdout_pipe[1]);
+    close(stderr_pipe[1]);
+    close(exec_err_pipe[1]);
+
+    jik_impl_process_Buffer stdout_buf = {0};
+    jik_impl_process_Buffer stderr_buf = {0};
+    bool read_ok = jik_impl_process_drain_pipes(stdout_pipe[0], stderr_pipe[0], &stdout_buf, &stderr_buf);
+    stdout_pipe[0] = -1;
+    stderr_pipe[0] = -1;
+
+    int child_exec_errno = 0;
+    ssize_t nread;
+    do {
+        nread = read(exec_err_pipe[0], &child_exec_errno, sizeof(child_exec_errno));
+    } while (nread < 0 && errno == EINTR);
+    close(exec_err_pipe[0]);
+
+    int status = 0;
+    pid_t waited;
+    do {
+        waited = waitpid(pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+
+    if (!read_ok) {
+        jik_impl_process_buffer_free(&stdout_buf);
+        jik_impl_process_buffer_free(&stderr_buf);
+        jik_impl_process_set_error(e, "process::capture: pipe read failed");
+        return NULL;
+    }
+    if (waited < 0) {
+        jik_impl_process_buffer_free(&stdout_buf);
+        jik_impl_process_buffer_free(&stderr_buf);
+        jik_impl_process_set_error(e, "process::capture: wait failed");
+        return NULL;
+    }
+    if (nread > 0) {
+        jik_impl_process_buffer_free(&stdout_buf);
+        jik_impl_process_buffer_free(&stderr_buf);
+        jik_impl_process_set_error(e, "process::capture: could not start process");
+        return NULL;
+    }
+    if (nread < 0) {
+        jik_impl_process_buffer_free(&stdout_buf);
+        jik_impl_process_buffer_free(&stderr_buf);
+        jik_impl_process_set_error(e, "process::capture: pipe read failed");
+        return NULL;
+    }
+
+    jik_impl_process_Result *res = jik_impl_process_result_new(
+        jik_impl_process_exit_code_from_status(status), &stdout_buf, &stderr_buf, out_region);
+    jik_impl_process_buffer_free(&stdout_buf);
+    jik_impl_process_buffer_free(&stderr_buf);
+    return res;
+}
+
+#endif
+
+C_END

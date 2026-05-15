@@ -448,6 +448,21 @@ jik_char_buffer_append(JikCharBuffer *b, const char *str, JikRegion *a)
     b->data[b->size] = '\0';
 }
 
+void
+jik_char_buffer_append_char(JikCharBuffer *b, char ch, JikRegion *a)
+{
+    size_t req_cap = b->size + 2;
+    if (req_cap > b->capacity) {
+        size_t old_cap = b->capacity;
+        while (req_cap > b->capacity) {
+            b->capacity = 2 * b->capacity + 1;
+        }
+        b->data = jik_region_realloc(a, b->data, old_cap, b->capacity);
+    }
+    b->data[b->size++] = ch;
+    b->data[b->size] = '\0';
+}
+
 JikString *
 jik_int_tostr(int value, JikRegion *a)
 {

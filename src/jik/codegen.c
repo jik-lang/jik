@@ -1985,10 +1985,12 @@ jik_codegen_emit_variant_print_function(JikCodeGenerator *cg, JikNode *nd, char 
 }
 
 static void
-jik_codegen_emit_vec_print_function(JikCodeGenerator *cg, JikNode *nd, char *mangled_name)
+jik_codegen_emit_vec_print_function_for_type(JikCodeGenerator *cg,
+                                             JikType          *vec_type,
+                                             char             *mangled_name)
 {
     // TODO: find a nicer way to emit custom function writing
-    assert(nd->type == NODE_EXPR_VECTOR);
+    assert(vec_type->name == TYPE_VECTOR);
     char **entry = TabString_get(cg->print_functions, mangled_name);
     assert(entry);
     char *func_name = *entry;
@@ -2003,7 +2005,7 @@ jik_codegen_emit_vec_print_function(JikCodeGenerator *cg, JikNode *nd, char *man
         &cg->cw, JIK_STRING_NCAT("JikCharBuffer *cb = jik_char_buffer_new(", "\"[\", a);"));
     jik_writer_write_line(&cg->cw, "for (size_t i = 0; i < s->size; i++) {");
     jik_writer_indent(&cg->cw);
-    JikType *elem_type      = nd->jik_type->val_vec.elem_type;
+    JikType *elem_type      = vec_type->val_vec.elem_type;
     char    *elem_type_name = jik_codegen_get_print_type_name(elem_type);
     assert(elem_type_name);
     entry = TabString_get(cg->print_functions, elem_type_name);
@@ -2028,6 +2030,13 @@ jik_codegen_emit_vec_print_function(JikCodeGenerator *cg, JikNode *nd, char *man
     jik_writer_write_line(&cg->cw, "return jik_string_new(cb->data, a);");
     jik_writer_dedent(&cg->cw);
     jik_writer_write_line(&cg->cw, "}");
+}
+
+static void
+jik_codegen_emit_vec_print_function(JikCodeGenerator *cg, JikNode *nd, char *mangled_name)
+{
+    assert(nd->type == NODE_EXPR_VECTOR);
+    jik_codegen_emit_vec_print_function_for_type(cg, nd->jik_type, mangled_name);
 }
 
 static void
@@ -2320,6 +2329,28 @@ jik_codegen_emit_vec_declaration(JikCodeGenerator *cg, JikNode *nd)
 }
 
 static void
+jik_codegen_emit_vec_declaration_for_type(JikCodeGenerator *cg, JikType *t)
+{
+    if (t->name != TYPE_VECTOR) {
+        return;
+    }
+    jik_codegen_emit_vec_declaration_for_type(cg, t->val_vec.elem_type);
+
+    bool *declared = TabBool_get(cg->declared_vec_types, t->mangled_name);
+    if (declared) {
+        return;
+    }
+    jik_writer_write_line(&cg->cw,
+                          JIK_STRING_NCAT("JIK_DECLARE_VEC(",
+                                          t->mangled_name,
+                                          ", ",
+                                          t->val_vec.elem_type->C_name,
+                                          ");"));
+    TabBool_set(cg->declared_vec_types, t->mangled_name, true);
+    jik_codegen_register_print_function(cg, t->mangled_name, NULL);
+}
+
+static void
 jik_codegen_emit_option_declaration(JikCodeGenerator *cg, JikType *opt_type)
 {
     bool *declared = TabBool_get(cg->declared_option_types, opt_type->mangled_name);
@@ -2411,6 +2442,14 @@ jik_codegen_emit_global_declarations(JikCodeGenerator *cg)
         if (nd->type == NODE_EXPR_VECTOR) {
             jik_codegen_emit_vec_declaration(cg, nd);
         }
+        else if (nd->type == NODE_EXTERN_FUNCTION) {
+            jik_codegen_emit_vec_declaration_for_type(cg, nd->jik_type->val_func.ret_type);
+            size_t n = VecJikType_size(nd->jik_type->val_func.param_types);
+            for (size_t j = 0; j < n; j++) {
+                JikType *pt = VecJikType_get(nd->jik_type->val_func.param_types, j);
+                jik_codegen_emit_vec_declaration_for_type(cg, pt);
+            }
+        }
     }
     if (cg->arg_vec) {
         jik_codegen_emit_vec_declaration(cg, cg->arg_vec);
@@ -2476,6 +2515,28 @@ jik_codegen_emit_vec_definition(JikCodeGenerator *cg, JikNode *nd)
 }
 
 static void
+jik_codegen_emit_vec_definition_for_type(JikCodeGenerator *cg, JikType *t)
+{
+    if (t->name != TYPE_VECTOR) {
+        return;
+    }
+    jik_codegen_emit_vec_definition_for_type(cg, t->val_vec.elem_type);
+
+    bool *defined = TabBool_get(cg->defined_vec_types, t->mangled_name);
+    if (defined) {
+        return;
+    }
+    jik_writer_write_line(&cg->cw,
+                          JIK_STRING_NCAT("JIK_DEFINE_VEC(",
+                                          t->mangled_name,
+                                          ", ",
+                                          t->val_vec.elem_type->C_name,
+                                          ");"));
+    TabBool_set(cg->defined_vec_types, t->mangled_name, true);
+    jik_codegen_emit_vec_print_function_for_type(cg, t, t->mangled_name);
+}
+
+static void
 jik_codegen_emit_option_definition(JikCodeGenerator *cg, JikType *opt_type)
 {
     bool *defined = TabBool_get(cg->defined_option_types, opt_type->mangled_name);
@@ -2500,6 +2561,14 @@ jik_codegen_emit_vec_definitions(JikCodeGenerator *cg)
     while (VecJikNode_iter_next(&it, &nd)) {
         if (nd->type == NODE_EXPR_VECTOR) {
             jik_codegen_emit_vec_definition(cg, nd);
+        }
+        else if (nd->type == NODE_EXTERN_FUNCTION) {
+            jik_codegen_emit_vec_definition_for_type(cg, nd->jik_type->val_func.ret_type);
+            size_t n = VecJikType_size(nd->jik_type->val_func.param_types);
+            for (size_t j = 0; j < n; j++) {
+                JikType *pt = VecJikType_get(nd->jik_type->val_func.param_types, j);
+                jik_codegen_emit_vec_definition_for_type(cg, pt);
+            }
         }
     }
     if (cg->arg_vec) {
@@ -2611,7 +2680,7 @@ jik_codegen_prepare_C_names(JikCodeGenerator *cg)
     }
     it = VecJikNode_iter_new(cg->nodes);
     while (VecJikNode_iter_next(&it, &nd)) {
-        if (nd->type == NODE_FUNCTION) {
+        if (nd->type == NODE_FUNCTION || nd->type == NODE_EXTERN_FUNCTION) {
             jik_codegen_prepare_type_name(nd->jik_type->val_func.ret_type);
             size_t n = VecJikType_size(nd->jik_type->val_func.param_types);
             for (size_t i = 0; i < n; i++) {

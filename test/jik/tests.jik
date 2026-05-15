@@ -23,6 +23,7 @@ use "test_jiklib_rand"
 use "test_jiklib_math"
 use "test_jiklib_char"
 use "test_jiklib_sys"
+use "test_jiklib_process"
 use "test_error"
 use "test_forth"
 use "test_dijkstra"
@@ -62,6 +63,7 @@ func main():
     test_jiklib_math::run_tests(ts)
     test_jiklib_char::run_tests(ts)
     test_jiklib_sys::run_tests(ts)
+    test_jiklib_process::run_tests(ts)
     test_error::run_tests(ts)
     test_forth::run_tests(ts)
     test_dijkstra::run_tests(ts)

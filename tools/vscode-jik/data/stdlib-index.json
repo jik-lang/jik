@@ -554,6 +554,38 @@
       }
     ]
   },
+  "process": {
+    "module": "process",
+    "doc": "Shell-free process execution.\n\nThis module provides a small argv-based process API. It does not invoke a\nshell, so arguments are passed as structured values instead of one quoted\ncommand string.",
+    "symbols": [
+      {
+        "name": "Result",
+        "kind": "struct",
+        "signature": "Result",
+        "doc": "Result of a completed captured child process."
+      },
+      {
+        "name": "_Result",
+        "kind": "struct",
+        "signature": "_Result",
+        "doc": ""
+      },
+      {
+        "name": "run",
+        "kind": "function",
+        "signature": "run(program: String, args: Vec[String]) -> int",
+        "doc": "Run a child process with inherited stdio and wait for it.\n\n`program` is the executable name or path. `args` contains only child\narguments, not `argv[0]`.",
+        "throws": true
+      },
+      {
+        "name": "capture",
+        "kind": "function",
+        "signature": "capture(program: String, args: Vec[String], region: Region) -> Result",
+        "doc": "Run a child process, capture stdout and stderr, and wait for it.\n\n`program` is the executable name or path. `args` contains only child\narguments, not `argv[0]`. A nonzero child exit code is returned in the\nresult and is not a thrown error.",
+        "throws": true
+      }
+    ]
+  },
   "rand": {
     "module": "rand",
     "doc": "Pseudo-random number generation.",

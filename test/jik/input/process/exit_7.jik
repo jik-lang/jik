@@ -1,0 +1,5 @@
+use "jik/sys"
+
+func main():
+    sys::exit(7)
+end
