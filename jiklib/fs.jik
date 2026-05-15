@@ -5,16 +5,6 @@
 use "jik/path"
 use "jik/string"
 
-// -------------------------------------------------------------
-//      Helpers
-// -------------------------------------------------------------
-
-func _join_child(foreign dir: String, foreign name: String, r: Region) -> String:
-    parts := [0 of ""][r]
-    push(parts, string::copy(dir, r))
-    push(parts, string::copy(name, r))
-    return path::join(parts, r)
-end
 
 // -------------------------------------------------------------
 //      API
@@ -97,7 +87,7 @@ throws func remove_dir_all(foreign path: String) -> void:
 
     try entries := read_dir(path, _):
         for entry in entries:
-            child := _join_child(path, entry, _)
+            child := path::join([string::copy(path), entry])
             if is_dir(child):
                 try remove_dir_all(child):
                 except:
