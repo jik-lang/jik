@@ -15,6 +15,7 @@ standard library.
 8. `ffi_demo.jik` - calling C functions through Jik's FFI
 9. `testing_demo.jik` - basic use of `jik/testing`
 10. `cl_args.jik` - command-line argument handling
+11. `process_capture.jik` - capture a process and inspect stdout/stderr
 
 The remaining examples are larger demonstrations:
 

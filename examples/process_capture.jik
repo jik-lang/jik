@@ -1,0 +1,20 @@
+// Example: Run a child process and inspect captured stdout/stderr bytes.
+
+use "jik/bytes"
+use "jik/process"
+use "jik/sys"
+
+
+COMPILER := "jik.exe" if sys::platform() == "windows" else "./jik"
+
+func main():
+    res := must process::capture(COMPILER, ["version"], _)
+
+    println("exit code: ", res.code)
+    println("stdout bytes: ", bytes::len(res.out))
+    println("stderr bytes: ", bytes::len(res.err))
+
+    if bytes::len(res.out) > 0:
+        println("stdout text: ", must bytes::to_string_ascii(res.out, _))
+    end
+end
