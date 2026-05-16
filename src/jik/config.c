@@ -109,8 +109,10 @@ JikConfig
 jik_config_make(int argc, char **argv)
 {
     JikConfig conf = {0};
-    jik_diag_fatal_error_if(
-        argc == 1, "input error", "command required. Type \"jik help\" for help.");
+    if (argc == 1) {
+        conf.command = "help_general";
+        return conf;
+    }
     char      *command = NULL;
     JikCommand cmd;
     size_t     argc_sz = (size_t)argc;
