@@ -1,10 +1,13 @@
 use "jik/testing" as test
+use "jik/sys" as sys
 use "support/globals"
 
 
 x := 3
 y := "foo"
 lst := [2 of 0]
+platform := sys::platform()
+prog := "a" if sys::platform() == "windows" else "b"
 
 func foo(ts, y):
     test::suite_assert(ts, y != "foo", site())
@@ -18,6 +21,12 @@ func test_globals_01(ts):
     test::suite_assert(ts, globals::x == 0, site())
     test::suite_assert(ts, globals::VERSION == "1.2.3", site())
     test::suite_assert(ts, len(lst) == 2, site())
+    test::suite_assert(ts, platform == sys::platform(_), site())
+    if sys::platform(_) == "windows":
+        test::suite_assert(ts, prog == "a", site())
+    else:
+        test::suite_assert(ts, prog == "b", site())
+    end
 end
 
 

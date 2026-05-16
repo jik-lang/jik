@@ -174,6 +174,35 @@ jik_prepare_functions(JikNode *ast)
 }
 
 static void
+jik_mark_global_initializer_allocs(JikNode *global_nd)
+{
+    VecJikNode  *nodes       = VecJikNode_new_empty();
+    JikAllocSpec global_spec = {.kind = JIK_ALLOC_GLOBAL, .src = JIK_ALLOC_SRC_FOREIGN};
+    JikNode     *nd;
+
+    jik_collect_nodes(global_nd->val_declare.expr, nodes);
+    VecJikNode_iter it = VecJikNode_iter_new(nodes);
+    while (VecJikNode_iter_next(&it, &nd)) {
+        if (jik_node_is_allocated_literal(nd)) {
+            jik_set_alloc_spec(nd, global_spec);
+        }
+        else if (nd->type == NODE_EXPR_CALL && nd->val_call.auto_region) {
+            nd->val_call.alloc_spec = global_spec;
+        }
+    }
+}
+
+static void
+jik_mark_global_allocs(JikNode *ast)
+{
+    JikNode *nd;
+    for (size_t i = 0; i < VecJikNode_size(ast->val_program.globals); i++) {
+        nd = VecJikNode_get(ast->val_program.globals, i);
+        jik_mark_global_initializer_allocs(nd);
+    }
+}
+
+static void
 jik_mark_function_needs_local_region(JikNode *func_nd)
 {
     func_nd->val_function.info->has_allocs = true;
@@ -889,6 +918,7 @@ void
 jik_check_regions(JikNode *ast)
 {
     jik_prepare_functions(ast);
+    jik_mark_global_allocs(ast);
     jik_check_orphaned_allocations(ast);
     jik_check_region_semantics(ast);
 

@@ -586,7 +586,8 @@ get_callee_args(JikCodeGenerator *cg, JikNode *nd)
     // TODO: duplicate data and free string buffer
     if (nd->val_call.auto_region) {
         char *pfx = n == 0 ? "" : ", ";
-        char_buffer_append(tr, JIK_STRING_NCAT(pfx, JIK_REGION_VAR_NAME));
+        char *region_arg = get_alloc_dest(nd->val_call.alloc_spec);
+        char_buffer_append(tr, JIK_STRING_NCAT(pfx, region_arg));
     }
     return tr->data;
 }
