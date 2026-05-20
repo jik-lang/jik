@@ -28,6 +28,9 @@ jik_check_builtin_pop(JikNode *nd)
     size_t n = VecJikNode_size(nd->val_call.args);
     jik_diag_fatal_error_if(
         n != 1, "expected one argument", jik_token_to_text(nd->val_call.name->token));
+    JikNode *vec  = VecJikNode_get(nd->val_call.args, 0);
+    jik_diag_fatal_error_if(
+        vec->jik_type->name != TYPE_VECTOR, "expected vector", jik_token_to_text(vec->token));
 }
 
 static void
@@ -396,7 +399,7 @@ jik_check_types(VecJikNode *nodes)
             else if (nd->val_subscript_get.node->jik_type->name == TYPE_DICT) {
                 jik_diag_fatal_error_if(
                     !jik_type_equal(nd->val_subscript_get.expr->jik_type, &JIK_TYPE_STRING),
-                    "expected expression of integer type",
+                    "expected expression of string type",
                     jik_token_to_text(nd->val_subscript_get.expr->token));
             }
         }
