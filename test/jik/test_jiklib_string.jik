@@ -66,6 +66,13 @@ func test_string_join(ts):
 
     parts2 := ["", "x", ""]
     test::suite_assert(ts, string::join(parts2, ",", _) == ",x,", site())
+
+    test::suite_assert(ts, _join_foreign_parts("foreign", _) == "foreign-local", site())
+end
+
+func _join_foreign_parts(foreign prefix: String, r: Region) -> String:
+    suffix := "local"
+    return string::join([prefix, suffix], "-", r)
 end
 
 func test_string_find(ts):

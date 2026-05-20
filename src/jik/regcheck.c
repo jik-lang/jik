@@ -361,6 +361,65 @@ is_func_param_foreign(JikNode *func_nd, size_t idx)
     jik_diag_fatal_error("internal error: invalid function node in is_func_param_foreign", "");
 }
 
+static JikNode *
+unwrap_grouping(JikNode *nd)
+{
+    while (nd && nd->type == NODE_EXPR_GROUPING) {
+        nd = nd->val_grouping;
+    }
+    return nd;
+}
+
+static bool
+is_foreign_container_literal_arg(JikNode *func_nd, size_t idx, JikNode *arg)
+{
+    JikNode      *base = unwrap_grouping(arg);
+    JikAllocSpec spec;
+    if (!is_func_param_foreign(func_nd, idx)) {
+        return false;
+    }
+    if (!base || (base->type != NODE_EXPR_VECTOR && base->type != NODE_EXPR_DICT)) {
+        return false;
+    }
+    spec = jik_get_alloc_spec(base);
+    return spec.kind == JIK_ALLOC_LOCAL && spec.src == JIK_ALLOC_SRC_LOCAL;
+}
+
+static void
+mark_foreign_container_literal_spec(JikNode *arg)
+{
+    JikNode      *base = unwrap_grouping(arg);
+    JikAllocSpec spec = jik_get_alloc_spec(base);
+    spec.src          = JIK_ALLOC_SRC_CROSS;
+
+    if (base->type == NODE_EXPR_VECTOR) {
+        base->val_vector.alloc_spec = spec;
+    }
+    else if (base->type == NODE_EXPR_DICT) {
+        base->val_dict.alloc_spec = spec;
+    }
+}
+
+static void
+mark_foreign_container_literal_args_specs(JikNode *nd)
+{
+    assert(nd->type == NODE_EXPR_CALL);
+
+    JikNode *func = jik_scope_get_function(nd->context,
+                                           nd->val_call.name->val_id.name,
+                                           nd->val_call.name->val_id.mod_alias,
+                                           nd->token->mod_alias);
+    assert(func);
+
+    size_t n = VecJikNode_size(nd->val_call.args);
+    for (size_t i = 0; i < n; i++) {
+        JikNode *arg = VecJikNode_get(nd->val_call.args, i);
+        if (is_foreign_container_literal_arg(func, i, arg)) {
+            mark_foreign_container_literal_spec(arg);
+        }
+    }
+}
+
 VecJikNode *
 get_allocated_args(JikNode *nd)
 {
@@ -698,7 +757,7 @@ jik_check_region_integrity(JikNode *ast)
                 if (is_region_safe_function_call(nd)) {
                     continue;
                 }
-
+                mark_foreign_container_literal_args_specs(nd);
                 VecJikNode *allocd_args = get_allocated_args(nd);
                 size_t      n           = VecJikNode_size(allocd_args);
                 if (VecJikNode_size(allocd_args) == 0) {
@@ -818,6 +877,10 @@ check_literal_child_region(JikNode        *parent,
         return;
     }
     JikAllocSpec parent_spec = get_expression_alloc_spec(parent, spec_tab);
+    if (parent_spec.src == JIK_ALLOC_SRC_CROSS &&
+        (parent->type == NODE_EXPR_VECTOR || parent->type == NODE_EXPR_DICT)) {
+        return;
+    }
     JikAllocSpec child_spec  = get_expression_alloc_spec(child, spec_tab);
     jik_diag_fatal_error_if(!jik_alloc_sources_match(parent_spec, child_spec),
                             msg,

@@ -150,6 +150,24 @@ end
         "all vector elements should belong to same region as vector"
     )
 
+    // Mixed-region vector literal may only be borrowed as a default local temporary
+    utils::assert_compile_fail_source(ts,
+"""
+func foo(foreign v: Vec[String]) -> void:
+end
+
+func bar(path: String, r: Region):
+    x := "aaa"
+    foo([path, x][r])
+end
+
+func main():
+    bar("abc", _)
+end
+""",
+        "all vector elements should belong to same region as vector"
+    )
+
     // Dictionary value allocated in local region but dictionary allocated in caller-owned region
     utils::assert_compile_fail_source(ts,
 """
