@@ -446,13 +446,13 @@ get_builtin_call_site(JikCodeGenerator *cg, JikNode *nd)
 }
 
 char *
+get_callee_args(JikCodeGenerator *cg, JikNode *nd);
+
+char *
 get_builtin_call_site_file(JikCodeGenerator *cg, JikNode *nd)
 {
-    JikNode *s    = VecJikNode_get(nd->val_call.args, 0);
-    JikNode *reg  = VecJikNode_get(nd->val_call.args, 1);
-    char    *s_tr = jik_codegen_emit_expression(cg, s);
-    char    *r_tr = jik_codegen_emit_expression(cg, reg);
-    return JIK_STRING_NCAT("jik_site_file(", s_tr, ", ", r_tr, ")");
+    char    *args      = get_callee_args(cg, nd);
+    return JIK_STRING_NCAT("jik_site_file(", args, ")");
 }
 
 char *
@@ -466,11 +466,8 @@ get_builtin_call_site_line(JikCodeGenerator *cg, JikNode *nd)
 char *
 get_builtin_call_site_code(JikCodeGenerator *cg, JikNode *nd)
 {
-    JikNode *s    = VecJikNode_get(nd->val_call.args, 0);
-    JikNode *reg  = VecJikNode_get(nd->val_call.args, 1);
-    char    *s_tr = jik_codegen_emit_expression(cg, s);
-    char    *r_tr = jik_codegen_emit_expression(cg, reg);
-    return JIK_STRING_NCAT("jik_site_code(", s_tr, ", ", r_tr, ")");
+    char    *args      = get_callee_args(cg, nd);
+    return JIK_STRING_NCAT("jik_site_code(", args, ")");
 }
 
 char *
