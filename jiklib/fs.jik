@@ -229,6 +229,24 @@ jik_impl_fs_get_attrs(const char *path, DWORD *attrs_out)
 }
 
 static bool
+jik_impl_fs_clear_readonly(const char *path)
+{
+    DWORD attrs;
+    DWORD new_attrs;
+    if (!jik_impl_fs_get_attrs(path, &attrs)) {
+        return false;
+    }
+    if (!(attrs & FILE_ATTRIBUTE_READONLY)) {
+        return true;
+    }
+    new_attrs = attrs & ~FILE_ATTRIBUTE_READONLY;
+    if (new_attrs == 0) {
+        new_attrs = FILE_ATTRIBUTE_NORMAL;
+    }
+    return SetFileAttributesA(path, new_attrs) != 0;
+}
+
+static bool
 jik_impl_fs_exists_cstr(const char *path)
 {
     return jik_impl_fs_get_attrs(path, NULL);
@@ -364,6 +382,10 @@ jik_impl_fs_remove_file(JikString *path, JikError *e)
         return;
     }
 #ifdef _WIN32
+    if (!jik_impl_fs_clear_readonly(path->data)) {
+        jik_error_set(e, 1, "fs::remove_file: could not remove file");
+        return;
+    }
     if (!DeleteFileA(path->data)) {
         jik_error_set(e, 1, "fs::remove_file: could not remove file");
     }
@@ -390,6 +412,10 @@ jik_impl_fs_remove_dir(JikString *path, JikError *e)
         return;
     }
 #ifdef _WIN32
+    if (!jik_impl_fs_clear_readonly(path->data)) {
+        jik_error_set(e, 1, "fs::remove_dir: could not remove directory");
+        return;
+    }
     if (!RemoveDirectoryA(path->data)) {
         jik_error_set(e, 1, "fs::remove_dir: could not remove directory");
     }
@@ -445,6 +471,13 @@ jik_impl_fs_copy_file(JikString *src_path, JikString *dst_path, JikError *e)
         jik_error_set(e, 1, "fs::copy_file: source and destination are the same file");
         return;
     }
+
+#ifdef _WIN32
+    if (jik_impl_fs_is_file_cstr(dst_path->data) && !jik_impl_fs_clear_readonly(dst_path->data)) {
+        jik_error_set(e, 1, "fs::copy_file: could not copy file");
+        return;
+    }
+#endif
 
     src = fopen(src_path->data, "rb");
     if (!src) {
