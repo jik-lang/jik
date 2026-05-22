@@ -8,6 +8,7 @@ _A readable language with region-based memory management that compiles to C._
 
 <p align="center">
   <a href="https://github.com/jik-lang/jik/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jik-lang/jik/actions/workflows/ci.yml/badge.svg?branch=main&event=push"></a>
+  <a href="https://jik-lang.org"><img alt="Website" src="https://img.shields.io/badge/website-jik--lang.org-111827"></a>
   <img alt="Status" src="https://img.shields.io/badge/status-alpha-b45309">
   <img alt="Backend" src="https://img.shields.io/badge/backend-C-2563eb">
   <img alt="Memory" src="https://img.shields.io/badge/memory-region--based-0f766e">
