@@ -2,8 +2,8 @@
 
 # 8. Memory management in Jik
 
-Jik manages composite values with **regions**. A region is an arena-like allocation area:
-composite values are allocated into it, and the whole region is reclaimed together.
+Jik manages composite values with **regions**. A region is an arena-like allocation area
+into which composite values are allocated.
 
 The key point for day-to-day programming is simple:
 
@@ -12,52 +12,73 @@ The key point for day-to-day programming is simple:
 
 ### 8.1 The local region
 
-Every function that allocates composite values has a local region, written as `_`.
+Every function that allocates composite values has a local region.
 Composite literals without an explicit allocation target go there by default.
 
 ```jik
 func main():
-    name := "Ana"
+    name := "Alice"
     nums := [1, 2, 3]
 end
 ```
 
 Here both `name` and `nums` are allocated in `main`'s local region.
 
-### 8.2 Choosing an allocation target
+The local region is created at function entry, and destroyed at each return point
+of the function. Because of that, we cannot return locally allocated values from
+a function.
+
+We can pass the local region to another function as an argument referred to as `_`.
+
+Examples:
+
+```jik
+func make_label(r: Region) -> String:
+    return "label"[r]
+end
+
+func main():
+    label := make_label(_)   // allocate returned String in main's local region
+    println(label)
+end
+```
+
+### 8.2 Choosing a non-local allocation target
 
 Composite literals can also be allocated into another region:
 
 ```jik
-p1 := Point{}       // local region
-p2 := Point{}[.p1]  // region of p1
-p3 := Point{}[r]    // explicit region parameter
+p2 := Point{}[.p1]  // region of p1, where p1 is some composite value
+p3 := Point{}[r]    // explicit region parameter r
 ```
 
-Use:
+Specifically, use:
 
-- `_` for the current function's local region
-- `[r]` to allocate into a region parameter
 - `[.x]` to allocate into the same region as an existing composite value `x`
+- `[r]` to allocate into a parameter `r` of type `Region`
 
-Allocation suffixes bind directly to composite literals and type descriptions.
-This means the first trailing `[...]` after a composite literal is reserved for
-allocation syntax such as `[r]` or `[.x]`.
+`[r]` and `[.x]` are called allocation specifiers. Allocation into a local region is only possible
+without a given allocation specifier, so `[_]` is invalid syntax.
 
-Because of this, composite temporaries must be bound to a name before member
-access, subscripting, mutation, or iteration.
+Allocation specifiers syntactically bind to their accompanying composite literal or type description.
+This means the first trailing `[...]` after a composite literal is reserved for allocation syntax
+such as `[r]` or `[.x]`.
 
-For example, this is not allowed:
+Because of this, composite temporaries must be bound to a name before member access, subscripting,
+mutation, or iteration. For example, writing `t := [1, 2][0]` is not allowed.
 
-```jik
-t := [1, 2][0]
-```
-
-Write:
+Example:
 
 ```jik
-tmp := [1, 2]
-t := tmp[0]
+struct Person:
+    name: String
+end
+
+func demo(p: Person):
+    p1 := Person{name = "Alice"}     // locally allocated
+    p2 := Person{name = "Bob"}[.p]   // allocated in region of "p"
+    name := "foo"[.p]                // allocated in region of "p"
+end
 ```
 
 ### 8.3 Returning composite values
@@ -68,107 +89,331 @@ return a composite value allocated in its own local region.
 So functions that return composite values usually take a destination region:
 
 ```jik
+struct Point:
+    x: double
+    y: double
+end
+
+func make_point(x, y, r: Region) -> Point:
+    return Point{x = x, y = y}[r]    // OK: allocated caller-provided region 
+end
+
+func bad_point(x, y) -> Point:
+    return Point{x = x, y = y}     // ERROR: allocated in this function's local region
+end
+
+func main():
+    p1 := make_point(1.2, 0.23, _)
+    p2 := Point{}
+    p3 := make_point(0.01, 0.03, .p2)
+end
+```
+
+This is an important pattern to remember: **the caller chooses where returned composite data lives**.
+
+By convention, the region parameter is usually (but need not be) the last parameter in the function.
+
+
+### 8.4 The same-region rule
+
+#### 8.4.1 Motivation
+
+A region owns all composite values allocated into it. When a region is destroyed,
+all those composite values become invalid. Jik's region checks prevent a composite in one
+region from storing references to composite data in an incompatible region.
+
+In order for the Jik compiler to be able to check memory consistency without tracking
+arbitrary object graphs, it imposes certain restrictions on user code.
+
+
+#### 8.4.2 Same-region rule
+
+For function calls involving composite arguments, Jik enforces the following rule:
+
+- all non-`foreign` composite arguments and all `Region` arguments in one call must be in the same region
+
+This rule is referred to as the **same-region rule**.
+
+As an example, take the following function:
+
+```jik
+func foo(v1: Vec[int], v2: Dict[bool], context: Context, r: Region):
+    // ...
+end
+```
+
+In the function above, no argument is prefixed with the `foreign` keyword so the Jik compiler
+enforces that each call site of that function passes only arguments to it, which are
+all allocated in the same region. This means that `v1`, `v2`, `context` and `r` all need to be
+in the same region.
+
+Note once again that this applies only to composite arguments. Primitive values do not participate
+in region checks and rules.
+
+On the other hand, if the function was defined with:
+
+```jik
+func foo(foreign v1: Vec[int], foreign v2: Dict[bool], context: Context, r: Region):
+    // ...
+end
+```
+
+the only `context` and `r` are required to be in the same region.
+
+Additionally for an argument of type `Region` "to be in a region" simply means that it equals
+that region.
+
+Examples:
+
+```jik
+struct Person:
+    name: String
+end
+
+func rename(p: Person, name: String):
+    p.name = name
+end
+
+func demo(p: Person):
+    local_name := "Local"
+
+    rename(p, local_name)       // ERROR: "p" and "local_name" are in different regions
+    rename(p, "Alice"[.p])      // OK: "Alice" is explicitly allocated in region of "p"
+    rename(p, "Alice")          // OK: compiler automatically allocates "Alice" in region of "p"
+end
+```
+
+
+#### 8.4.3 More about `foreign`
+
+The purpose of `foreign` is to make user code more flexible - we often need to pass composite arguments
+which are only meant to be read from, but which do not participate in any composite store operations.
+
+However, note that this has nothing to do with mutability - as long as the contents of a `foreign` composite
+argument are primitive (e.g. non-composite), they can be freely mutated.
+
+Furthermore, if multiple arguments are marked as `foreign`, stores between them are not allowed, as these
+arguments can in general come from different regions, and this would break memory consistency.
+
+Finally, returning an argument or a value rooted in a `foreign`-marked argument from a function
+is not allowed. The reason for this is implied by a direct consequence of the Same-region rule: the return
+value of a composite function which takes composite arguments, is in the same region as the region
+where the arguments are allocated (since returning a local value is not allowed, this is the only
+possibility).
+
+This allows the Jik compiler to infer in which region class a function call result is allocated -
+allowing `foreign` returns would make this impossible. 
+
+
+#### 8.4.4 Consequences of the same-region rule
+
+The same-region rule allows Jik to treat each composite as belonging to exactly one of 3 allocation
+classes:
+
+- the local class 
+- the argument class
+- the foreign class
+
+It also allows the compiler to safely assume that each composite return value of a function which
+also takes composite values as parameters, belongs to the same region as the region of the parameters.
+
+These consequences allow the compiler to check region consistency in a simpler and robust manner.
+
+
+#### 8.4.5 Examples of store operations
+
+Some examples of good vs. bad store operations:
+
+```jik
+func bad(y: Vec[Vec[int]]):
+    t := [1, 2, 3]
+    push(y, t)      // ERROR: stores local composite data into caller-owned vector
+end
+
+func good(y: Vec[Vec[int]]):
+    t := [1, 2, 3][.y]
+    push(y, t)      // OK, since "y" and "t" are in the same region
+end
+```
+
+No composites between different classes can be mixed through store operations, as this could cause
+memory corruption. In the function `bad`, we would write something stored in `bad`'s local region to
+a region outliving that region (e.g. the region where `y` is allocated), which would be wrong.
+
+In the examples above, the compiler distinguishes between local and argument region classes,
+and prevents illegal stores between them.
+
+Further examples:
+
+```jik
+func bad_store(names: Dict[String]):
+    local_name := "Alice"
+    names["user"] = local_name      // ERROR: local_name is locally allocated
+end
+
+func good_store(names: Dict[String]):
+    names["user"] = "Alice"[.names]     // OK: "Alice" is allocated in region of "names"
+    names["user2"] = "Bob"              // OK: compiler allocates "Bob" automatically in region of "names"
+end
+```
+
+
+### 8.5 Region ergonomics and checking rules
+
+For better ergonomics of everyday code, Jik introduces additional rules that make region programming 
+more pleasant to deal with.
+
+#### 8.5.1 Omitted final `Region` argument
+
+If a function's final parameter has type `Region`, the caller may omit that argument.
+In that case, the compiler automatically inserts `_`, the caller's local region. Since passing the
+local region is a frequent scenario, this rule makes perfect sense.
+
+Inside a global initializer, the omitted region uses the global region for that initializer.
+
+```jik
+func make_label(r: Region) -> String:
+    return "label"[r]
+end
+
+func main():
+    a := make_label()
+    b := make_label(_)
+end
+```
+
+Here `a` and `b` are equivalent.
+
+#### 8.5.2 Literal retargeting
+
+Although composite literals allocate in the local region in absence of a region specifier, Jik may retarget a local literal
+allocation destination when the destination region is obvious. This is what makes common calls and stores manageable.
+For example:
+
+```jik
 struct Person:
     name: String
     age: int
 end
 
-func make_person(name, age, r: Region) -> Person:
-    return Person{name = name, age = age}[r]
-end
-
-func main():
-    p1 := make_person("Ana", 30, _)
-    p2 := Person{}
-    p3 := make_person("Ivo", 40, .p2)
-end
-```
-
-This is the main pattern to remember: **the caller chooses where returned composite data lives**.
-
-### 8.4 The role of `foreign`
-
-Sometimes a function needs to read composite inputs from one region and allocate its result in another.
-That is what `foreign` is for.
-
-```jik
-func concat_names(foreign left: String, foreign right: String, r: Region) -> String:
-    return string::concat(left, right, r)
-end
-```
-
-Here `left` and `right` are read-oriented inputs for region checking, while the result is allocated in `r`.
-
-Many standard-library functions use this shape: take one or more `foreign` inputs and a final destination `Region`.
-
-### 8.5 The same-region rule
-
-For ordinary function calls, Jik enforces a simple rule:
-
-- all non-`foreign` composite arguments and all `Region` arguments in one call must agree on the same region class
-
-In practice, this means you cannot freely mix:
-
-- local composite values from `_`
-- caller-owned composite values
-- destination `Region` arguments
-
-unless some inputs are explicitly marked `foreign`.
-
-This is what prevents composite data from being accidentally written across incompatible lifetimes.
-
-### 8.6 Composite stores cannot mix regions
-
-The same idea applies to storing composite values.
-
-If a destination lives in one region, you cannot store a composite value coming from a different non-matching region into it.
-For example, it is illegal to store a local composite into a container that lives in a caller-owned region.
-
-So, as a rough rule:
-
-- primitive values can be assigned freely
-- composite values can only be stored when source and destination belong to the same writable region class
-
-This is one of the main reasons Jik asks you to be explicit about allocation destinations.
-
-### 8.7 Useful conveniences
-
-Jik applies a few rules to make region use less noisy:
-
-- if a function's last parameter is `Region`, omitting it passes `_`
-- allocated literals in common calls and stores are often placed into the destination region automatically
-
-For example:
-
-```jik
 func set_name(p: Person, name: String):
     p.name = name
 end
 
 func main():
-    p := Person{}
-    set_name(p, "John")
+    p := Person{name = "Alice"}
+
+    set_name(p, "Bob")   // "Bob" is allocated in p's region
+    p.name = "Carol"     // "Carol" is allocated in p's region
+
+    people := {"Alice": Person{}}
+    people["Bob"] = Person{name = "Bob"}     // Person{name = "Bob"} is allocated in people's region
+
+    v := [[1, 2], [3, 4]]
+    push(v, [5, 6])     // [5, 6] is allocated in v's region
+    v[0] = [0, 1, 2]    // [0, 1, 2] is allocated in v's region
 end
 ```
 
-The `"John"` literal is allocated in the region of `p`, so this common pattern works naturally.
+#### 8.5.3 Nested composite literals
 
-These rules do not remove the region checks. They just make common code less noisy, so region-related compiler errors do not come as a surprise only after more complex examples.
+Composite literals that contain other composite values must be internally region-consistent.
+The outer value and the contained composite values must belong to the same region.
 
-### 8.8 Practical restrictions
+This applies to:
 
-The compiler enforces a few important rules:
+- vector elements
+- vector repeated initializers
+- dictionary values
+- struct initializer fields
+- variant payloads
+- `Some` payloads
 
-- a region value cannot be created, aliased, or returned directly
-- a local composite allocation cannot be returned from a function
-- composite globals are immutable
-- recursive struct and variant cycles must pass through `Option[...]`
+For container literals, only an outer region specifier is possible. Hence, if container contents
+are literals, these are automatically retargeted to the destination marked by the container's
+allocation specifier.
 
-If you keep three ideas in mind, most Jik code will feel natural:
+For example:
 
-1. composite values live in regions
-2. `_` is the current function's local region
-3. functions that return composite values usually take a destination `Region`
-4. composite calls and stores cannot freely mix regions unless `foreign` is used appropriately
+```jik
+func foo(v: Vec[String]):
+    a := ["bar", "baz"][.v]   // "bar" and "baz" are automatically allocated in the region of v
 
----
+    x := "local"
+    y := ["foo", x][.v]   // compile error: x is local, but the vector is allocated in v's region
+end
+```
+
+#### 8.5.4 Temporary containers passed to `foreign` parameters
+
+Another rule which makes everyday code look less awkward is as follows: if a composite argument of type `Vec` or `Dict` is passed to
+a function, and if its elements are also composites, then the elements need not be in the same region. For example:
+
+```jik
+use "jik/process"
+
+
+func foo(args: Vec[String], foreign cmd: String):
+    res := must process::capture(cmd, 
+        [
+            "foo",
+            "bar",
+            args[0]
+        ],
+        _
+    )
+end
+```
+
+This works because the signature of `process::capture` is:
+
+```jik
+throws func capture(foreign program: String, foreign args: Vec[String], region: Region) -> Result
+```
+
+Since `args` in `process::capture` is a `foreign` vector, at the call site the elements of the vector literal (e.g. the strings)
+need not be in the same region.
+
+
+#### 8.5.5 Builtins omitting the same-region rule
+
+Some builtins only inspect their composite arguments and do not store them anywhere.
+These calls do not require all composite arguments to share a writable region, and hence the
+Jik compiler omits the same-region rule for these.
+
+The important cases are:
+
+- `print`
+- `println`
+- `concat`
+
+`concat` is still explicit about its destination region: its last argument must be a `Region`, and the returned `String` is allocated there.
+
+```jik
+func show(foreign left: String, right: String, r: Region):
+    println(left, right)
+    joined := concat(left, right, r)
+end
+```
+
+### 8.6 Copying values between regions
+
+Copying values between different regions is currently only supported for values of type `String`,
+through the `jik/string` standard library `copy` function, whose signature is:
+
+`copy(foreign s: String, region: Region) -> String`
+
+It copies the given string (which can be allocated in any region, hence marked as `foreign`) to
+the destination region.
+
+
+### 8.7 Summary
+
+If you keep these rules in mind, the Jik region model is fairly straightforward:
+
+1. Composite values live in regions.
+2. `_` is the current function's local region.
+3. Functions that return composite values usually take a destination `Region`.
+4. Omitting a final `Region` argument means `_`, not "infer from another argument".
+5. Composite calls and stores must preserve region consistency.
+6. Use `foreign` for read-oriented inputs from other regions.
