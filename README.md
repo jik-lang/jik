@@ -212,6 +212,7 @@ Note that MSVC was not tested and is not the default build path in this reposito
 
 ## Further reading
 
+- [Official Jik website](https://jik-lang.org/)
 - [Language overview](docs/overview.md)
 - [Region based memory management](docs/overview/08-memory-management.md)
 - [Standard library documentation](docs/overview/18-standard-library.md)
