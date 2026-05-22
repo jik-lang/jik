@@ -12,9 +12,7 @@ const JikCommand JIK_COMMANDS[] = {
         .help_desc       = "Translate a Jik source code file to C.",
         .help_desc_short = "translate Jik source to C",
         .help_notes      = "Default output path: <input-basename>.c when --out is omitted.\n"
-                           "--unsafe-no-bounds-checks disables generated vector get/set bounds checks.\n"
-                           "--verbose prints translation pipeline steps.\n"
-                           "--format-c formats the generated C file in place.",
+                           "--format-c   formats the generated C file in place.",
         .num_args        = 1,
         .args =
             {
@@ -62,7 +60,6 @@ const JikCommand JIK_COMMANDS[] = {
         .help_desc = "Parse and analyze a Jik source code file without generating C or invoking "
                      "the host compiler.",
         .help_desc_short = "parse and analyze Jik source",
-        .help_notes      = "--verbose prints analysis pipeline steps.",
         .num_args        = 1,
         .args =
             {
@@ -93,10 +90,7 @@ const JikCommand JIK_COMMANDS[] = {
         .help_desc_short = "translate and build Jik source to executable",
         .help_notes = "Compiler selection order: --cc, then JIK_CC, then a host default compiler "
                       "when available.\n"
-                      "--unsafe-no-bounds-checks disables generated vector get/set bounds checks.\n"
-                      "--release builds with release-oriented host compiler flags.\n"
-                      "--verbose prints translation and build pipeline steps.\n"
-                      "Default executable path: <input-basename>.exe when --out is omitted.",
+                      "Default executable path: <input_file>.exe when --out is omitted.",
         .num_args   = 1,
         .args =
             {
@@ -159,10 +153,7 @@ const JikCommand JIK_COMMANDS[] = {
         .help_desc_short = "translate, build and run executable",
         .help_notes = "Compiler selection order: --cc, then JIK_CC, then a host default compiler "
                       "when available.\n"
-                      "--unsafe-no-bounds-checks disables generated vector get/set bounds checks.\n"
-                      "--release builds with release-oriented host compiler flags.\n"
-                      "--verbose prints translation, build, and run pipeline steps.\n"
-                      "The executable is written to <input-basename>.exe, run, and then removed.",
+                      "The executable is written to <input_file>.exe, run, and then removed.",
         .num_args   = 1,
         .args =
             {
