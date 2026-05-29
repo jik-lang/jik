@@ -61,7 +61,7 @@ Join strings from `parts` with `delim` inserted between adjacent elements.
 **Parameters**
 1. `parts: Vec[String]` - Input string parts. Foreign parameter.
 2. `delim: String` - Delimiter string. Foreign parameter.
-3. `r: Region` - Allocation region for the result.
+3. `r: Region` - Allocation region for the joined string.
 
 **Returns**
 - A newly allocated joined string.
@@ -127,7 +127,7 @@ Split a string by a delimiter.
 **Parameters**
 1. `s: String` - Input string. Foreign parameter.
 2. `delim: String` - Delimiter string. Foreign parameter.
-3. `r: Region` - Allocation region for output tokens and slices.
+3. `r: Region` - Allocation region for the output vector.
 
 **Returns**
 - A vector of tokens.

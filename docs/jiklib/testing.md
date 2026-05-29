@@ -24,6 +24,6 @@ Print suite summary and exit non-zero if any test failed.
 Test suite assertion function.
 
 **Parameters**
-1. `suite: TestSuite` - Test suite
-2. `cond: bool` - Assertion expression, boolean
-3. `s: Site` - Site instance
+1. `suite: TestSuite` - Test suite to update.
+2. `cond: bool` - Assertion condition.
+3. `s: Site` - Source location captured for failure reporting.

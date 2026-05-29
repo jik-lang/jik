@@ -24,7 +24,7 @@ E := 2.71828182845904523536028747135266250
 
 /// Compute the absolute value.
 ///
-/// @param1 Value.
+/// @param x Input value.
 /// @returns Absolute value of `x`.
 func abs(x: double) -> double:
     if x < 0.0:
@@ -38,9 +38,9 @@ end
 ///
 /// Returns true if `abs(a - b) <= eps`.
 ///
-/// @param1 First value.
-/// @param2 Second value.
-/// @param3 Non-negative tolerance.
+/// @param a Left-hand value.
+/// @param b Right-hand value.
+/// @param eps Maximum allowed absolute difference.
 /// @returns True if values are within tolerance, else false.
 func approx_eq(a: double, b: double, eps: double) -> bool:
     return abs(a - b) <= eps
@@ -48,8 +48,8 @@ end
 
 /// Return the smaller of two values.
 ///
-/// @param1 First value.
-/// @param2 Second value.
+/// @param a First value to compare.
+/// @param b Second value to compare.
 /// @returns The smaller value.
 func min(a: double, b: double) -> double:
     if a < b:
@@ -60,8 +60,8 @@ end
 
 /// Return the larger of two values.
 ///
-/// @param1 First value.
-/// @param2 Second value.
+/// @param a First value to compare.
+/// @param b Second value to compare.
 /// @returns The larger value.
 func max(a: double, b: double) -> double:
     if a > b:

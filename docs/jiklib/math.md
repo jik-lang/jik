@@ -34,7 +34,7 @@ Euler's number e.
 Compute the absolute value.
 
 **Parameters**
-1. `x: double` - Value.
+1. `x: double` - Input value.
 
 **Returns**
 - Absolute value of `x`.
@@ -46,9 +46,9 @@ Compute the absolute value.
 Check whether two values are equal within a tolerance.
 
 **Parameters**
-1. `a: double` - First value.
-2. `b: double` - Second value.
-3. `eps: double` - Non-negative tolerance.
+1. `a: double` - Left-hand value.
+2. `b: double` - Right-hand value.
+3. `eps: double` - Maximum allowed absolute difference.
 
 **Returns**
 - True if values are within tolerance, else false.
@@ -228,8 +228,8 @@ Test whether the value is NaN.
 Return the larger of two values.
 
 **Parameters**
-1. `a: double` - First value.
-2. `b: double` - Second value.
+1. `a: double` - First value to compare.
+2. `b: double` - Second value to compare.
 
 **Returns**
 - The larger value.
@@ -241,8 +241,8 @@ Return the larger of two values.
 Return the smaller of two values.
 
 **Parameters**
-1. `a: double` - First value.
-2. `b: double` - Second value.
+1. `a: double` - First value to compare.
+2. `b: double` - Second value to compare.
 
 **Returns**
 - The smaller value.

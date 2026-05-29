@@ -11,9 +11,9 @@ end
 
 /// Test suite assertion function.
 ///
-/// @param1 Test suite
-/// @param2 Assertion expression, boolean
-/// @param3 Site instance
+/// @param suite Test suite to update.
+/// @param cond Assertion condition.
+/// @param s Source location captured for failure reporting.
 func suite_assert(suite: TestSuite, cond: bool, s: Site) -> void:
     if not cond:
         print("Test assertion failed in: ",

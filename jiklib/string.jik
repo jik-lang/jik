@@ -171,9 +171,9 @@ end
 
 /// Split a string by a delimiter.
 ///
-/// @param1 Input string.
-/// @param2 Delimiter string.
-/// @param3 Allocation region for output tokens and slices.
+/// @param s Input string.
+/// @param delim Delimiter string.
+/// @param r Allocation region for the output vector.
 /// @returns A vector of tokens.
 func split(foreign s: String, foreign delim: String, r: Region) -> Vec[String]:
     ns := len(s)
@@ -215,9 +215,9 @@ end
 ///
 /// If `parts` is empty, the function returns an empty string.
 ///
-/// @param1 Input string parts.
-/// @param2 Delimiter string.
-/// @param3 Allocation region for the result.
+/// @param parts Input string parts.
+/// @param delim Delimiter string.
+/// @param r Allocation region for the joined string.
 /// @returns A newly allocated joined string.
 func join(foreign parts: Vec[String], foreign delim: String, r: Region) -> String:
     sb := strbuf::new("", r)
