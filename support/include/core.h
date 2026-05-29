@@ -137,6 +137,27 @@ typedef struct JikRegion {
     size_t         total_mem;  // total capacity of all allocated blocks
 } JikRegion;
 
+#ifdef JIK_REGION_STATS
+typedef struct JikRegionStats {
+    size_t regions_created;
+    size_t regions_destroyed;
+    size_t regions_alive;
+    size_t regions_peak_alive;
+
+    size_t blocks_created;
+    size_t blocks_destroyed;
+    size_t blocks_alive;
+
+    size_t block_bytes_allocated;
+    size_t block_bytes_freed;
+    size_t block_bytes_alive;
+    size_t block_bytes_peak_alive;
+} JikRegionStats;
+
+static JikRegionStats jik_region_global_stats = {0};
+static bool           jik_region_global_stats_printed = false;
+#endif
+
 // -------------------------------------------------------------
 // Helpers
 // -------------------------------------------------------------
@@ -147,6 +168,57 @@ jik_region_align_up(size_t n, size_t align)
     return (n + align - 1) & ~(align - 1);
 }
 
+#ifdef JIK_REGION_STATS
+static inline void
+jik_region_stats_record_region_created(void)
+{
+    jik_region_global_stats.regions_created++;
+    jik_region_global_stats.regions_alive++;
+    if (jik_region_global_stats.regions_alive > jik_region_global_stats.regions_peak_alive) {
+        jik_region_global_stats.regions_peak_alive = jik_region_global_stats.regions_alive;
+    }
+}
+
+static inline void
+jik_region_stats_record_region_destroyed(void)
+{
+    jik_region_global_stats.regions_destroyed++;
+    if (jik_region_global_stats.regions_alive > 0) {
+        jik_region_global_stats.regions_alive--;
+    }
+}
+
+static inline void
+jik_region_stats_record_block_created(size_t capacity)
+{
+    jik_region_global_stats.blocks_created++;
+    jik_region_global_stats.blocks_alive++;
+    jik_region_global_stats.block_bytes_allocated += capacity;
+    jik_region_global_stats.block_bytes_alive += capacity;
+    if (jik_region_global_stats.block_bytes_alive >
+        jik_region_global_stats.block_bytes_peak_alive) {
+        jik_region_global_stats.block_bytes_peak_alive =
+            jik_region_global_stats.block_bytes_alive;
+    }
+}
+
+static inline void
+jik_region_stats_record_block_destroyed(size_t capacity)
+{
+    jik_region_global_stats.blocks_destroyed++;
+    if (jik_region_global_stats.blocks_alive > 0) {
+        jik_region_global_stats.blocks_alive--;
+    }
+    jik_region_global_stats.block_bytes_freed += capacity;
+    if (jik_region_global_stats.block_bytes_alive >= capacity) {
+        jik_region_global_stats.block_bytes_alive -= capacity;
+    }
+    else {
+        jik_region_global_stats.block_bytes_alive = 0;
+    }
+}
+#endif
+
 static JikRegionBlock *
 jik_region_new_block(size_t capacity)
 {
@@ -155,12 +227,53 @@ jik_region_new_block(size_t capacity)
     blk->next            = NULL;
     blk->capacity        = capacity;
     blk->used            = 0;
+#ifdef JIK_REGION_STATS
+    jik_region_stats_record_block_created(capacity);
+#endif
     return blk;
 }
 
 // -------------------------------------------------------------
 // Public API
 // -------------------------------------------------------------
+
+void
+jik_region_print_global_stats(void)
+{
+#ifdef JIK_REGION_STATS
+    if (jik_region_global_stats_printed) {
+        return;
+    }
+    jik_region_global_stats_printed = true;
+
+    fprintf(stderr,
+            "\njik: region stats\n"
+            "  regions: created=%zu destroyed=%zu alive=%zu peak_alive=%zu\n"
+            "  blocks: created=%zu destroyed=%zu alive=%zu\n"
+            "  block_bytes: allocated=%zu freed=%zu alive=%zu peak_alive=%zu\n",
+            jik_region_global_stats.regions_created,
+            jik_region_global_stats.regions_destroyed,
+            jik_region_global_stats.regions_alive,
+            jik_region_global_stats.regions_peak_alive,
+            jik_region_global_stats.blocks_created,
+            jik_region_global_stats.blocks_destroyed,
+            jik_region_global_stats.blocks_alive,
+            jik_region_global_stats.block_bytes_allocated,
+            jik_region_global_stats.block_bytes_freed,
+            jik_region_global_stats.block_bytes_alive,
+            jik_region_global_stats.block_bytes_peak_alive);
+#endif
+}
+
+void
+jik_region_register_global_stats_printer(void)
+{
+#ifdef JIK_REGION_STATS
+    if (atexit(jik_region_print_global_stats) != 0) {
+        fprintf(stderr, "jik: warning: failed to register region stats printer\n");
+    }
+#endif
+}
 
 // Allocate a new jik region on the heap.
 // If block_size == 0, REGION_DEFAULT_BLOCK_SIZE is used.
@@ -172,6 +285,9 @@ jik_region_new(size_t block_size)
     a->current    = NULL;
     a->block_size = (block_size == 0) ? REGION_DEFAULT_BLOCK_SIZE : block_size;
     a->total_mem  = 0;
+#ifdef JIK_REGION_STATS
+    jik_region_stats_record_region_created();
+#endif
     return a;
 }
 
@@ -182,6 +298,9 @@ jik_region_free(JikRegion *r)
     JikRegionBlock *blk = r->blocks;
     while (blk) {
         JikRegionBlock *next = blk->next;
+#ifdef JIK_REGION_STATS
+        jik_region_stats_record_block_destroyed(blk->capacity);
+#endif
         free(blk);
         blk = next;
     }
@@ -189,6 +308,9 @@ jik_region_free(JikRegion *r)
     r->blocks    = NULL;
     r->current   = NULL;
     r->total_mem = 0;
+#ifdef JIK_REGION_STATS
+    jik_region_stats_record_region_destroyed();
+#endif
     free(r);
 }
 

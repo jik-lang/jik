@@ -17,6 +17,7 @@ typedef struct JikConfig {
     bool  embed_core;
     bool  format_c;
     bool  release;
+    bool  region_stats;
     bool  unsafe_no_bounds_checks;
     bool  verbose;
 } JikConfig;

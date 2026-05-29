@@ -62,4 +62,3 @@ Print a short region allocator summary to standard output.
 - The printed summary includes the region address together with used bytes,
   total bytes, and block count.
 
----

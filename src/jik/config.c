@@ -141,6 +141,9 @@ jik_config_make(int argc, char **argv)
             else if (strcmp(argv[i], "--release") == 0) {
                 conf.release = true;
             }
+            else if (strcmp(argv[i], "--region-stats") == 0) {
+                conf.region_stats = true;
+            }
             else if (strcmp(argv[i], "--unsafe-no-bounds-checks") == 0) {
                 conf.unsafe_no_bounds_checks = true;
             }

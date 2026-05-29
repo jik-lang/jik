@@ -233,6 +233,9 @@ jik_codegen_emit_main_function(JikCodeGenerator *cg)
     jik_writer_write_line(&cg->cw, C_TYPE_NAME_INTEGER);
     jik_writer_write_line(&cg->cw, "main(int argc, char **argv)");
     jik_writer_begin_block(&cg->cw, "{");
+    if (cg->ctx->conf.region_stats) {
+        jik_writer_write_line(&cg->cw, "jik_region_register_global_stats_printer();");
+    }
     // initialize globals
     bool allocd_globals_defined = jik_any_allocated_globals_defined(cg);
     if (allocd_globals_defined) {
@@ -2727,6 +2730,9 @@ jik_codegen_emit_support_library(JikCodeGenerator *cg)
 {
     if (cg->ctx->conf.unsafe_no_bounds_checks) {
         jik_writer_write_line(&cg->cw, "#define JIK_UNSAFE_NO_BOUNDS_CHECKS");
+    }
+    if (cg->ctx->conf.region_stats) {
+        jik_writer_write_line(&cg->cw, "#define JIK_REGION_STATS");
     }
     if (cg->ctx->conf.embed_core) {
         char *core_content = jik_read_file(cg->ctx->conf.jik_core_h_path);

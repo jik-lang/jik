@@ -18,7 +18,7 @@ const JikCommand JIK_COMMANDS[] = {
             {
                 {.name = "filepath", .help_desc = "Input file"},
             },
-        .num_options = 5,
+        .num_options = 6,
         .options =
             {
                 {
@@ -46,6 +46,11 @@ const JikCommand JIK_COMMANDS[] = {
                     .help_desc =
                         "Disable runtime vector bounds checks for generated get/set operations.",
                     .num_args = 0,
+                },
+                {
+                    .name      = "--region-stats",
+                    .help_desc = "Print runtime region lifecycle statistics at program exit.",
+                    .num_args  = 0,
                 },
                 {
                     .name      = "--verbose",
@@ -96,7 +101,7 @@ const JikCommand JIK_COMMANDS[] = {
             {
                 {.name = "filepath", .help_desc = "Input file"},
             },
-        .num_options = 6,
+        .num_options = 7,
         .options =
             {
                 {
@@ -138,6 +143,11 @@ const JikCommand JIK_COMMANDS[] = {
                     .num_args = 0,
                 },
                 {
+                    .name      = "--region-stats",
+                    .help_desc = "Print runtime region lifecycle statistics at program exit.",
+                    .num_args  = 0,
+                },
+                {
                     .name      = "--verbose",
                     .help_desc = "Print detailed pipeline status information.",
                     .num_args  = 0,
@@ -159,7 +169,7 @@ const JikCommand JIK_COMMANDS[] = {
             {
                 {.name = "filepath", .help_desc = "Input file"},
             },
-        .num_options = 5,
+        .num_options = 6,
         .options =
             {
                 {
@@ -190,6 +200,11 @@ const JikCommand JIK_COMMANDS[] = {
                     .help_desc =
                         "Disable runtime vector bounds checks for generated get/set operations.",
                     .num_args = 0,
+                },
+                {
+                    .name      = "--region-stats",
+                    .help_desc = "Print runtime region lifecycle statistics at program exit.",
+                    .num_args  = 0,
                 },
                 {
                     .name      = "--verbose",
