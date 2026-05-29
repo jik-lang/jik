@@ -17,9 +17,3 @@ func run_tests(ts):
     test_compile_fail_modules_01(ts)
     test_compile_fail_modules_02(ts)
 end
-
-func main():
-    ts := test::TestSuite{}
-    run_tests(ts)
-    print(ts)
-end

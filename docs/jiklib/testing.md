@@ -8,7 +8,22 @@ Testing utilities.
 
 Test suite state.
 
+Fields:
+
+1. `assertions: int` - Total assertion count.
+2. `failed: int` - Failed assertion count.
+3. `passed: int` - Passed assertion count.
+
 ## Functions
+
+### `suite_new(r: Region) -> TestSuite`
+
+Create a new test suite.
+
+**Parameters**
+1. `r: Region` - Allocation region for the test suite
+
+---
 
 ### `suite_finish(suite: TestSuite) -> void`
 

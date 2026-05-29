@@ -4,10 +4,28 @@ use "jik/sys"
 
 /// Test suite state.
 struct TestSuite:
+    assertions: int
     failed: int
     passed: int
 end
 
+
+/// Create a new test suite.
+///
+/// @param r Allocation region for the test suite
+func suite_new(r: Region) -> TestSuite:
+    return TestSuite{}[r]
+end
+
+/// Print suite summary and exit non-zero if any test failed.
+///
+/// @param suite Test suite
+func suite_finish(suite: TestSuite) -> void:
+    println(suite.assertions, " assertions, ", suite.failed, " failed, ", suite.passed, " passed")
+    if suite.failed > 0:
+        sys::exit(1)
+    end
+end
 
 /// Test suite assertion function.
 ///
@@ -15,6 +33,7 @@ end
 /// @param cond Assertion condition.
 /// @param s Source location captured for failure reporting.
 func suite_assert(suite: TestSuite, cond: bool, s: Site) -> void:
+    suite.assertions += 1
     if not cond:
         print("Test assertion failed in: ",
                 site_file(s, _),
@@ -24,18 +43,8 @@ func suite_assert(suite: TestSuite, cond: bool, s: Site) -> void:
                 site_code(s, _),
                 "\n"
             )
-        suite.failed = suite.failed + 1
+        suite.failed += 1
     else:
-        suite.passed = suite.passed + 1
-    end
-end
-
-/// Print suite summary and exit non-zero if any test failed.
-///
-/// @param suite Test suite
-func suite_finish(suite: TestSuite) -> void:
-    print(suite)
-    if suite.failed > 0:
-        sys::exit(1)
+        suite.passed += 1
     end
 end

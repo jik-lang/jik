@@ -36,7 +36,7 @@ use "jik/io"
 use "jik/testing" as test
 
 func main():
-    ts := test::TestSuite{}
+    ts := test::suite_new(_)
     text := must io::read_file("notes.txt", _)
     test::suite_assert(ts, len(text) > 0, site())
 end

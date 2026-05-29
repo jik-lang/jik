@@ -38,7 +38,7 @@ use "test_compile_fail_modules"
 
 
 func main():
-    ts := test::TestSuite{}
+    ts := test::suite_new()
     
     test_fib::run_tests(ts)
     test_tree::run_tests(ts)

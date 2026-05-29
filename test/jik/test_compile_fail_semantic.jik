@@ -215,9 +215,3 @@ func run_tests(ts):
     test_compile_fail_12(ts)
     test_compile_fail_13(ts)
 end
-
-func main():
-    ts := test::TestSuite{}
-    run_tests(ts)
-    print(ts)
-end

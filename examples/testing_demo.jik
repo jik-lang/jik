@@ -7,7 +7,7 @@ func square(x):
 end
 
 func main():
-    ts := test::TestSuite{}
+    ts := test::suite_new()
 
     test::suite_assert(ts, square(0) == 0, site())
     test::suite_assert(ts, square(3) == 9, site())
