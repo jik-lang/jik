@@ -5,6 +5,87 @@
 #include "diag.h"
 #include "utils.h"
 
+#define JIK_ARG_INPUT_FILE                                                                         \
+    {                                                                                              \
+        .name = "filepath", .help_desc = "Input file"                                              \
+    }
+#define JIK_ARG_OUTPUT_FILE                                                                        \
+    {                                                                                              \
+        .name = "filepath", .help_desc = "Output file path."                                       \
+    }
+#define JIK_ARG_COMPILER_NAME                                                                      \
+    {                                                                                              \
+        .name = "compiler_name", .help_desc = "C compiler name."                                   \
+    }
+#define JIK_ARG_CCFLAGS                                                                            \
+    {                                                                                              \
+        .name = "args", .help_desc = "C compiler arguments."                                       \
+    }
+#define JIK_ARG_COMMAND                                                                            \
+    {                                                                                              \
+        .name = "command", .help_desc = "Name of command"                                          \
+    }
+
+#define JIK_OPT_OUT                                                                                \
+    {                                                                                              \
+        .name = "--out", .help_desc = "Write output to file.", .num_args = 1, .args = {            \
+            JIK_ARG_OUTPUT_FILE,                                                                   \
+        }                                                                                          \
+    }
+
+#define JIK_OPT_CC                                                                                 \
+    {                                                                                              \
+        .name = "--cc", .help_desc = "C compiler to use.", .num_args = 1, .args = {                \
+            JIK_ARG_COMPILER_NAME,                                                                 \
+        }                                                                                          \
+    }
+
+#define JIK_OPT_CCFLAGS                                                                            \
+    {                                                                                              \
+        .name = "--ccflags", .help_desc = "C compiler arguments", .num_args = 1, .args = {         \
+            JIK_ARG_CCFLAGS,                                                                       \
+        }                                                                                          \
+    }
+
+#define JIK_OPT_EMBED_CORE                                                                         \
+    {                                                                                              \
+        .name      = "--embed-core",                                                               \
+        .help_desc = "Embed Jik support library (core.h) into the translation.", .num_args = 0,    \
+    }
+
+#define JIK_OPT_FORMAT_C                                                                           \
+    {                                                                                              \
+        .name      = "--format-c",                                                                 \
+        .help_desc = "Format the generated C code using clang-format. Fails if "                   \
+                     "clang-format is not available.",                                             \
+        .num_args  = 0,                                                                            \
+    }
+
+#define JIK_OPT_RELEASE                                                                            \
+    {                                                                                              \
+        .name = "--release", .help_desc = "Build with release-oriented host compiler flags.",      \
+        .num_args = 0,                                                                             \
+    }
+
+#define JIK_OPT_UNSAFE_NO_BOUNDS_CHECKS                                                            \
+    {                                                                                              \
+        .name      = "--unsafe-no-bounds-checks",                                                  \
+        .help_desc = "Disable runtime vector bounds checks for generated get/set operations.",     \
+        .num_args  = 0,                                                                            \
+    }
+
+#define JIK_OPT_REGION_STATS                                                                       \
+    {                                                                                              \
+        .name      = "--region-stats",                                                             \
+        .help_desc = "Print runtime region lifecycle statistics at program exit.", .num_args = 0,  \
+    }
+
+#define JIK_OPT_VERBOSE                                                                            \
+    {                                                                                              \
+        .name = "--verbose", .help_desc = "Print detailed pipeline status information.",           \
+        .num_args = 0,                                                                             \
+    }
+
 const JikCommand JIK_COMMANDS[] = {
     // COMMAND: tran
     {
@@ -16,47 +97,17 @@ const JikCommand JIK_COMMANDS[] = {
         .num_args        = 1,
         .args =
             {
-                {.name = "filepath", .help_desc = "Input file"},
+                JIK_ARG_INPUT_FILE,
             },
         .num_options = 6,
         .options =
             {
-                {
-                    .name      = "--out",
-                    .help_desc = "Write output to file.",
-                    .num_args  = 1,
-                    .args =
-                        {
-                            {.name = "filepath", .help_desc = "Output file path."},
-                        },
-                },
-                {
-                    .name      = "--embed-core",
-                    .help_desc = "Embed Jik support library (core.h) into the translation.",
-                    .num_args  = 0,
-                },
-                {
-                    .name      = "--format-c",
-                    .help_desc = "Format the generated C code using clang-format. Fails if "
-                                 "clang-format is not available.",
-                    .num_args  = 0,
-                },
-                {
-                    .name = "--unsafe-no-bounds-checks",
-                    .help_desc =
-                        "Disable runtime vector bounds checks for generated get/set operations.",
-                    .num_args = 0,
-                },
-                {
-                    .name      = "--region-stats",
-                    .help_desc = "Print runtime region lifecycle statistics at program exit.",
-                    .num_args  = 0,
-                },
-                {
-                    .name      = "--verbose",
-                    .help_desc = "Print detailed pipeline status information.",
-                    .num_args  = 0,
-                },
+                JIK_OPT_OUT,
+                JIK_OPT_EMBED_CORE,
+                JIK_OPT_FORMAT_C,
+                JIK_OPT_UNSAFE_NO_BOUNDS_CHECKS,
+                JIK_OPT_REGION_STATS,
+                JIK_OPT_VERBOSE,
             },
     },
     // COMMAND: check
@@ -68,22 +119,18 @@ const JikCommand JIK_COMMANDS[] = {
         .num_args        = 1,
         .args =
             {
-                {.name = "filepath", .help_desc = "Input file"},
+                JIK_ARG_INPUT_FILE,
             },
         .num_options = 1,
         .options =
             {
-                {
-                    .name      = "--verbose",
-                    .help_desc = "Print detailed pipeline status information.",
-                    .num_args  = 0,
-                },
+                JIK_OPT_VERBOSE,
             },
     },
     // COMMAND: env
     {
-        .name      = "env",
-        .help_desc = "Print resolved Jik configuration values as key=value lines.",
+        .name            = "env",
+        .help_desc       = "Print resolved Jik configuration values as key=value lines.",
         .help_desc_short = "print resolved Jik configuration",
         .num_options     = 0,
     },
@@ -99,59 +146,18 @@ const JikCommand JIK_COMMANDS[] = {
         .num_args   = 1,
         .args =
             {
-                {.name = "filepath", .help_desc = "Input file"},
+                JIK_ARG_INPUT_FILE,
             },
         .num_options = 7,
         .options =
             {
-                {
-                    .name      = "--out",
-                    .help_desc = "Write output to file.",
-                    .num_args  = 1,
-                    .args =
-                        {
-                            {.name = "filepath", .help_desc = "Output file path."},
-                        },
-                },
-                {
-                    .name      = "--cc",
-                    .help_desc = "C compiler to use.",
-                    .num_args  = 1,
-                    .args =
-                        {
-                            {.name = "compiler_name", .help_desc = "C compiler name."},
-                        },
-                },
-                {
-                    .name      = "--ccflags",
-                    .help_desc = "C compiler arguments",
-                    .num_args  = 1,
-                    .args =
-                        {
-                            {.name = "args", .help_desc = "C compiler arguments."},
-                        },
-                },
-                {
-                    .name      = "--release",
-                    .help_desc = "Build with release-oriented host compiler flags.",
-                    .num_args  = 0,
-                },
-                {
-                    .name = "--unsafe-no-bounds-checks",
-                    .help_desc =
-                        "Disable runtime vector bounds checks for generated get/set operations.",
-                    .num_args = 0,
-                },
-                {
-                    .name      = "--region-stats",
-                    .help_desc = "Print runtime region lifecycle statistics at program exit.",
-                    .num_args  = 0,
-                },
-                {
-                    .name      = "--verbose",
-                    .help_desc = "Print detailed pipeline status information.",
-                    .num_args  = 0,
-                },
+                JIK_OPT_OUT,
+                JIK_OPT_CC,
+                JIK_OPT_CCFLAGS,
+                JIK_OPT_RELEASE,
+                JIK_OPT_UNSAFE_NO_BOUNDS_CHECKS,
+                JIK_OPT_REGION_STATS,
+                JIK_OPT_VERBOSE,
             },
     },
     // COMMAND: run
@@ -167,50 +173,17 @@ const JikCommand JIK_COMMANDS[] = {
         .num_args   = 1,
         .args =
             {
-                {.name = "filepath", .help_desc = "Input file"},
+                JIK_ARG_INPUT_FILE,
             },
         .num_options = 6,
         .options =
             {
-                {
-                    .name      = "--cc",
-                    .help_desc = "C compiler to use.",
-                    .num_args  = 1,
-                    .args =
-                        {
-                            {.name = "compiler_name", .help_desc = "C compiler name."},
-                        },
-                },
-                {
-                    .name      = "--ccflags",
-                    .help_desc = "C compiler arguments",
-                    .num_args  = 1,
-                    .args =
-                        {
-                            {.name = "args", .help_desc = "C compiler arguments."},
-                        },
-                },
-                {
-                    .name      = "--release",
-                    .help_desc = "Build with release-oriented host compiler flags.",
-                    .num_args  = 0,
-                },
-                {
-                    .name = "--unsafe-no-bounds-checks",
-                    .help_desc =
-                        "Disable runtime vector bounds checks for generated get/set operations.",
-                    .num_args = 0,
-                },
-                {
-                    .name      = "--region-stats",
-                    .help_desc = "Print runtime region lifecycle statistics at program exit.",
-                    .num_args  = 0,
-                },
-                {
-                    .name      = "--verbose",
-                    .help_desc = "Print detailed pipeline status information.",
-                    .num_args  = 0,
-                },
+                JIK_OPT_CC,
+                JIK_OPT_CCFLAGS,
+                JIK_OPT_RELEASE,
+                JIK_OPT_UNSAFE_NO_BOUNDS_CHECKS,
+                JIK_OPT_REGION_STATS,
+                JIK_OPT_VERBOSE,
             },
     },
     // COMMAND: memchk
@@ -225,20 +198,12 @@ const JikCommand JIK_COMMANDS[] = {
         .num_args   = 1,
         .args =
             {
-                {.name = "filepath", .help_desc = "Input file"},
+                JIK_ARG_INPUT_FILE,
             },
         .num_options = 1,
         .options =
             {
-                {
-                    .name      = "--cc",
-                    .help_desc = "C compiler to use.",
-                    .num_args  = 1,
-                    .args =
-                        {
-                            {.name = "compiler_name", .help_desc = "C compiler name."},
-                        },
-                },
+                JIK_OPT_CC,
             },
     },
     // COMMAND: help
@@ -249,7 +214,7 @@ const JikCommand JIK_COMMANDS[] = {
         .num_args        = 1,
         .args =
             {
-                {.name = "command", .help_desc = "Name of command"},
+                JIK_ARG_COMMAND,
             },
     },
     // COMMAND: version
