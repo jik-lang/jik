@@ -39,5 +39,5 @@ Some examples are interactive or terminal-dependent:
 - `forth.jik` starts a REPL
 - `game_of_life.jik` redraws the terminal repeatedly
 
-Most examples are self-contained. The `modules/` example intentionally spans multiple files to show
+Most examples are self-contained. The `modules/` example contains multiple files to show
 how Jik modules are organized and imported.
