@@ -6,7 +6,7 @@ This document lists implementation limitations and known technical issues in the
 ## Current status
 
 Jik is currently in alpha. The language is stabilizing, but some implementation details are still
-being hardened and some portability work is intentionally deferred.
+being refined, and some portability work remains to be completed.
 
 ## Known limitations
 
@@ -20,7 +20,7 @@ being hardened and some portability work is intentionally deferred.
 
 ## Known runtime issues under review
 
-- Region allocator arithmetic is not fully hardened against extreme allocation-size overflow yet.
+- Region allocator arithmetic does not yet fully guard against overflow for extremely large allocation sizes.
 - Region allocator alignment is not yet guaranteed to match alignof(max_align_t) on all host ABIs, especially for some FFI-defined C types.
 
 ### Scope note
