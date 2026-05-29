@@ -50,4 +50,6 @@ To get a list of commands and help for each one:
 jik help
 ```
 
+For a full list of commands and options, see the [Jik CLI reference](../cli.md).
+
 ---
