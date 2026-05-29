@@ -414,6 +414,6 @@ If you keep these rules in mind, the Jik region model is fairly straightforward:
 1. Composite values live in regions.
 2. `_` is the current function's local region.
 3. Functions that return composite values usually take a destination `Region`.
-4. Omitting a final `Region` argument means `_`, not "infer from another argument".
+4. Calls to functions whose final parameter has type `Region` may omit that argument. When omitted, the caller’s local region is passed automatically.
 5. Composite calls and stores must preserve region consistency.
 6. Use `foreign` for read-oriented inputs from other regions.
