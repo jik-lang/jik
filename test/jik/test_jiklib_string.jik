@@ -194,10 +194,14 @@ func test_string_to_int(ts):
     _ok_str_to_int(ts, "0", 0)
     _ok_str_to_int(ts, "123", 123)
     _ok_str_to_int(ts, "  -42\t", -42)
+    _ok_str_to_int(ts, "2147483647", 2147483647)
+    _ok_str_to_int(ts, "-2147483648", -2147483648)
     _fail_str_to_int(ts, "")
     _fail_str_to_int(ts, "  ")
     _fail_str_to_int(ts, "12.3")
     _fail_str_to_int(ts, "1x")
+    _fail_str_to_int(ts, "2147483648")
+    _fail_str_to_int(ts, "-2147483649")
 end
 
 

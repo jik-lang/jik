@@ -268,6 +268,7 @@ jik_impl_string_to_int(JikString *s, JikError *e)
         str++;
     }
 
+    errno = 0;
     value = strtol(str, &endptr, 10);
 
     if (str == endptr) {
@@ -284,8 +285,12 @@ jik_impl_string_to_int(JikString *s, JikError *e)
         return 0;
     }
 
-    // TODO: Check for overflow/underflow
-    return (int)value;
+    if (errno == ERANGE || value < INT32_MIN || value > INT32_MAX) {
+        jik_error_set(e, 1, "string::to_int: value out of range");
+        return 0;
+    }
+
+    return (int32_t)value;
 }
 
 double
