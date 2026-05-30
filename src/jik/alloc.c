@@ -61,8 +61,6 @@ jik_arena_init(void)
 char *
 jik_alloc(size_t size)
 {
-    // TODO: this assertion fails, check why
-    // assert(size > 0);
     const size_t A = alignof(max_align_t); // safe for any fundamental type
     JikChunk    *c = jik_arena.head;
 
@@ -76,12 +74,9 @@ jik_alloc(size_t size)
         n->next        = c;
         jik_arena.head = n;
         c              = n;
-
-        // Fresh chunk: used = 0, so off is simply 0 (and aligned).
         off = align_up(c->used, A);
     }
 
-    // Hand out aligned pointer and bump the used watermark.
     char *p = c->data + off;
     c->used = off + size;
 
