@@ -39,7 +39,7 @@ These examples provide a quick tour of common Jik features.
 <summary><strong>Parsing a config</strong></summary>
 
 ```jik
-use "jik/string" as string
+use "jik/string"
 
 func main():
     text := "host = localhost\nport = 8080\nmode = dev\n"
@@ -134,7 +134,7 @@ end
 <summary><strong>Newton method</strong></summary>
 
 ```jik
-use "jik/math" as math
+use "jik/math"
 
 struct NewtonResult:
     root: double
