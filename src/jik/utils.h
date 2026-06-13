@@ -18,6 +18,8 @@ bool
 jik_identifier_has_reserved_prefix(const char *name);
 bool
 system_has_tool(const char *tool_name, const char *probe_arg);
+char *
+jik_get_env_var_value(const char *name);
 
 // TODO: given this, we may not need jik_string_cat at all
 #define JIK_STRING_NCAT(...) jik_string_ncat((char *[]){__VA_ARGS__, NULL})

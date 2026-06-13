@@ -109,8 +109,8 @@ jik memchk hello.jik --cc gcc
 ### `jik env`
 
 Print resolved Jik configuration values as `key=value` lines, including the Jik
-version, platform, root directory, `jiklib` path, support header path, and
-selected C compiler.
+version, platform, root directory, `jiklib` path, package path, support header
+path, and selected C compiler.
 
 Example:
 
@@ -149,6 +149,27 @@ Commands that compile generated C select the host C compiler in this order:
 
 If no compiler is found, `jik run`, `jik build`, and `jik memchk` fail before
 compilation.
+
+## Package Imports
+
+Imports under `pkg/...` are resolved from the directory configured by the
+`JIK_PKG_PATH` environment variable.
+
+For example:
+
+```jik
+use "pkg/csv"
+```
+
+resolves to:
+
+```text
+<JIK_PKG_PATH>/packages/csv/src/csv.jik
+```
+
+Use `jik env` to check the currently resolved value. It is printed as
+`pkg_path=<path>`. If `JIK_PKG_PATH` is not set and a program imports
+`pkg/...`, compilation fails with a package path error.
 
 ## Common Workflows
 

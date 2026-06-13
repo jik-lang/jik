@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include "alloc.h"
 
@@ -156,4 +157,12 @@ system_has_tool(const char *tool_name, const char *probe_arg)
 
     status = system(cmd);
     return status == 0;
+}
+
+char *
+jik_get_env_var_value(const char *name)
+{
+    assert(name);
+    char *v = getenv(name);
+    return (v && *v) ? v : NULL;
 }

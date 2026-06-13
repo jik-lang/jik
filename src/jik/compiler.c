@@ -51,6 +51,26 @@ jik_module_path_is_stdlib(char *path)
     return strncmp(path, "jik/", 4) == 0;
 }
 
+static bool
+jik_module_path_is_package(char *path)
+{
+    return strncmp(path, "pkg/", 4) == 0;
+}
+
+static char *
+trim_jik_ext(char *path)
+{
+    size_t len = strlen(path);
+    size_t suffix_len = strlen(".jik");
+    if (len >= 4 && strcmp(path + len - suffix_len, ".jik") == 0) {
+        char *res = jik_alloc(len - suffix_len + 1);
+        strncpy(res, path, len - suffix_len);
+        res[len - suffix_len] = '\0';
+        return res;
+    }
+    return path;
+}
+
 // Check if path is stdlib path
 static char *
 get_proper_path(char *path, JikContext *ctx)
@@ -61,6 +81,12 @@ get_proper_path(char *path, JikContext *ctx)
             ctx->math_used = true;
         }
         return JIK_STRING_NCAT(ctx->conf.jiklib_path, tail);
+    }
+    else if (jik_module_path_is_package(path)) {
+        jik_diag_fatal_error_if(!ctx->conf.jik_pkg_path, "jik package path not set", "set the environment variable JIK_PKG_PATH to the packages directory");
+        char *tail = strdup(path + 4);
+        char *pkg_name = trim_jik_ext(tail);
+        return JIK_STRING_NCAT(ctx->conf.jik_pkg_path, "/packages/", pkg_name, "/src/", pkg_name, ".jik");
     }
     return path;
 }
@@ -92,7 +118,7 @@ jik_module_path_is_absolute(char *path)
 static char *
 jik_module_resolve_use_path(char *use_path, char *current_source_path)
 {
-    if (jik_module_path_is_stdlib(use_path) || jik_module_path_is_absolute(use_path)) {
+    if (jik_module_path_is_stdlib(use_path) || jik_module_path_is_package(use_path) || jik_module_path_is_absolute(use_path)) {
         return use_path;
     }
 
@@ -384,13 +410,6 @@ jik_compiler_run_binary(char *bin_fp)
 }
 
 static char *
-get_jik_cc_env()
-{
-    char *v = getenv("JIK_CC"); // returns NULL if not set
-    return (v && *v) ? v : NULL;
-}
-
-static char *
 jik_get_compiler_from_conf(JikConfig *conf)
 {
     char *compiler = NULL;
@@ -398,7 +417,7 @@ jik_get_compiler_from_conf(JikConfig *conf)
         compiler = conf->cc;
     }
     else {
-        char *jik_cc = get_jik_cc_env();
+        char *jik_cc = jik_get_env_var_value("JIK_CC");
         compiler     = jik_cc;
         // Usability fallback: if no explicit compiler is configured, try the
         // system default C compiler.
@@ -427,6 +446,7 @@ jik_compiler_env(JikConfig *conf)
 #endif
     printf("root=%s\n", conf->jik_root_dir);
     printf("jiklib=%s\n", conf->jiklib_path);
+    printf("pkg_path=%s\n", conf->jik_pkg_path ? conf->jik_pkg_path : "");
     printf("core=%s\n", conf->jik_core_h_path);
     printf("cc=%s\n", compiler ? compiler : "");
 }
