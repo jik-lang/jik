@@ -1,0 +1,47 @@
+use "jik/bytes" as bytes
+use "jik/process"
+use "jik/testing" as test
+use "utils"
+
+
+func _check_example(ts, foreign path: String):
+    res := must process::capture(utils::compiler_command(_), ["check", path], _)
+    if res.code != 0:
+        println("example check failed: ", path)
+        if bytes::len(res.out) > 0:
+            println(must bytes::to_string_ascii(res.out, _))
+        end
+        if bytes::len(res.err) > 0:
+            println(must bytes::to_string_ascii(res.err, _))
+        end
+    end
+    test::suite_assert(ts, res.code == 0, site())
+end
+
+func test_examples_check(ts):
+    examples := [
+        "examples/cl_args.jik",
+        "examples/dijkstra.jik",
+        "examples/error_handling.jik",
+        "examples/ffi_demo.jik",
+        "examples/fib.jik",
+        "examples/forth.jik",
+        "examples/game_of_life.jik",
+        "examples/hello.jik",
+        "examples/newton.jik",
+        "examples/primes.jik",
+        "examples/process_capture.jik",
+        "examples/testing_demo.jik",
+        "examples/variants.jik",
+        "examples/word_count.jik",
+        "examples/modules/main.jik"
+    ]
+
+    for path in examples:
+        _check_example(ts, path)
+    end
+end
+
+func run_tests(ts):
+    test_examples_check(ts)
+end
