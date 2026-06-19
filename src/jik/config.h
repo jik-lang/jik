@@ -13,6 +13,7 @@ typedef struct JikConfig {
     char *help_topic;
     char *jik_root_dir;
     char *jiklib_path;
+    char *jik_core_include_path;
     char *jik_core_h_path;
     char *jik_pkg_path;
     bool  embed_core;

@@ -447,7 +447,7 @@ jik_compiler_env(JikConfig *conf)
     printf("root=%s\n", conf->jik_root_dir);
     printf("jiklib=%s\n", conf->jiklib_path);
     printf("pkg_path=%s\n", conf->jik_pkg_path ? conf->jik_pkg_path : "");
-    printf("core=%s\n", conf->jik_core_h_path);
+    printf("core_include=%s\n", conf->jik_core_include_path);
     printf("cc=%s\n", compiler ? compiler : "");
 }
 
@@ -487,8 +487,18 @@ jik_compiler_build(JikContext *ctx, bool run)
         *user_cc_flags ? JIK_STRING_NCAT(base_cc_flags, " ", user_cc_flags) : base_cc_flags;
     char *linker_args    = jik_get_linker_args(ctx);
     char *quoted_out_bin = shell_quote_arg(out_bin);
+    char *quoted_include = shell_quote_arg(ctx->conf.jik_core_include_path);
     cmd                  = JIK_STRING_NCAT(
-        compiler, " -x c ", cc_flags, " -o ", quoted_out_bin, " -", " ", linker_args);
+        compiler,
+        " -x c ",
+        cc_flags,
+        " -I ",
+        quoted_include,
+        " -o ",
+        quoted_out_bin,
+        " -",
+        " ",
+        linker_args);
     jik_compiler_verbose(&ctx->conf, "compile", cmd);
     FILE *cc_pipe = POPEN(cmd, "w");
     jik_diag_fatal_error_if(cc_pipe == NULL, "error opening CC", "");
@@ -515,7 +525,13 @@ jik_compiler_memchk(JikContext *ctx)
         !compiler, "no compiler found, either set using JIK_CC or with --cc flag", "");
     char *out_bin        = jik_string_cat(ctx->conf.target_name, OUT_EXT);
     char *quoted_out_bin = shell_quote_arg(out_bin);
-    char *cmd            = JIK_STRING_NCAT(compiler, " -g -O0 -x c -o ", quoted_out_bin, " -");
+    char *quoted_include = shell_quote_arg(ctx->conf.jik_core_include_path);
+    char *cmd            = JIK_STRING_NCAT(compiler,
+                                           " -g -O0 -x c -I ",
+                                           quoted_include,
+                                           " -o ",
+                                           quoted_out_bin,
+                                           " -");
     jik_compiler_verbose(&ctx->conf, "compile", cmd);
     FILE *cc_pipe = POPEN(cmd, "w");
     jik_diag_fatal_error_if(cc_pipe == NULL, "error opening CC", "");

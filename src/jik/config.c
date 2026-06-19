@@ -209,9 +209,10 @@ jik_config_make(int argc, char **argv)
     }
     conf.jik_root_dir = get_program_dir();
     assert(conf.jik_root_dir);
-    conf.jiklib_path     = JIK_STRING_NCAT(conf.jik_root_dir, PATH_SEP, "jiklib", PATH_SEP);
-    conf.jik_core_h_path = JIK_STRING_NCAT(
-        conf.jik_root_dir, PATH_SEP, "support", PATH_SEP, "include", PATH_SEP, "core.h");
+    conf.jiklib_path = JIK_STRING_NCAT(conf.jik_root_dir, PATH_SEP, "jiklib", PATH_SEP);
+    conf.jik_core_include_path =
+        JIK_STRING_NCAT(conf.jik_root_dir, PATH_SEP, "support", PATH_SEP, "include");
+    conf.jik_core_h_path = JIK_STRING_NCAT(conf.jik_core_include_path, PATH_SEP, "core.h");
     conf.jik_pkg_path = jik_get_env_var_value("JIK_PKG_PATH");
     return conf;
 }

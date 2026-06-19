@@ -93,6 +93,8 @@ const JikCommand JIK_COMMANDS[] = {
         .help_desc       = "Translate a Jik source code file to C.",
         .help_desc_short = "translate Jik source to C",
         .help_notes      = "Default output path: <input-basename>.c when --out is omitted.\n"
+                           "Generated C includes core.h; use core_include from `jik env` when "
+                           "compiling it manually.\n"
                            "--format-c   formats the generated C file in place.",
         .num_args        = 1,
         .args =

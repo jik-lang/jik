@@ -2740,8 +2740,7 @@ jik_codegen_emit_support_library(JikCodeGenerator *cg)
         jik_writer_write_section(&cg->cw, "JIK TRANSLATION");
     }
     else {
-        jik_writer_write_line(&cg->cw,
-                              JIK_STRING_NCAT("#include \"", cg->ctx->conf.jik_core_h_path, "\""));
+        jik_writer_write_line(&cg->cw, "#include \"core.h\"");
     }
 }
 

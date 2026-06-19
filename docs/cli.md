@@ -71,6 +71,10 @@ Options:
 - `--region-stats`: Print runtime region statistics at program exit.
 - `--verbose`: Print detailed pipeline status information.
 
+Generated C includes the Jik support header as `#include "core.h"`. For manual compilation,
+include the support include directory from `jik env`'s `core_include=<path>` value,
+or use `--embed-core` to write a self-contained C translation.
+
 Example:
 
 ```sh
@@ -109,7 +113,7 @@ jik memchk hello.jik --cc gcc
 ### `jik env`
 
 Print resolved Jik configuration values as `key=value` lines, including the Jik
-version, platform, root directory, `jiklib` path, package path, support header
+version, platform, root directory, `jiklib` path, package path, support include
 path, and selected C compiler.
 
 Example:
