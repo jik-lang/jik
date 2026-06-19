@@ -7,8 +7,8 @@ programs. Usage is:
 jik <command> [<args>...] [--<option> [<value>]]...
 ```
 
-Run `jik help` to list available commands, or `jik help <command>` to show help
-for one command.
+Run `jik help` to list available commands, or `jik help <topic>` to show help
+for a command, language topic, or standard library entry.
 
 Command arguments come before command options. For example, use
 `jik run hello.jik --cc clang`.
@@ -132,16 +132,23 @@ Example:
 jik version
 ```
 
-### `jik help [command]`
+### `jik help [topic]`
 
-Show general CLI help, or help for a specific command.
+Show general CLI help, or help for a command, language topic, standard library
+module, or standard library member.
 
 Examples:
 
 ```sh
 jik help
 jik help run
+jik help vector
+jik help jik/string
+jik help jik/io
 ```
+
+Documentation topic keys are defined in `docs/help-index.txt`. `jik help topics`
+prints the available documentation keys.
 
 ## Compiler Selection
 

@@ -568,7 +568,7 @@ jik_compiler_run(JikConfig conf)
         return;
     }
     if (strcmp(conf.command, "help") == 0) {
-        printf("%s", jik_get_help(conf.help_topic));
+        printf("%s", jik_get_help(conf.help_topic, conf.jik_root_dir));
         return;
     }
 

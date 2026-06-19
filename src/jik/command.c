@@ -23,7 +23,7 @@
     }
 #define JIK_ARG_COMMAND                                                                            \
     {                                                                                              \
-        .name = "command", .help_desc = "Name of command"                                          \
+        .name = "topic", .help_desc = "Name of command or documentation topic"                    \
     }
 
 #define JIK_OPT_OUT                                                                                \
@@ -211,8 +211,8 @@ const JikCommand JIK_COMMANDS[] = {
     // COMMAND: help
     {
         .name            = "help",
-        .help_desc       = "Show help for a specific command.",
-        .help_desc_short = "show help for command",
+        .help_desc       = "Show help for a command or documentation topic.",
+        .help_desc_short = "show help for command or topic",
         .num_args        = 1,
         .args =
             {

@@ -5,6 +5,6 @@ char *
 jik_get_help_general(void);
 
 char *
-jik_get_help(char *topic);
+jik_get_help(char *topic, char *jik_root_dir);
 
 #endif
