@@ -17,13 +17,13 @@ Opaque string buffer allocated in a `Region`.
 
 ## Functions
 
-### `append(buf: StrBuf, text: String) -> void`
+### `append(buf: StrBuf, foreign text: String) -> void`
 
 Append a string to the end of the buffer.
 
 **Parameters**
 1. `buf: StrBuf` - Buffer.
-2. `text: String` - String to append. Foreign parameter.
+2. `foreign text: String` - String to append.
 
 ---
 
@@ -61,12 +61,12 @@ Get the length of the buffer in bytes.
 
 ---
 
-### `new(text: String, region: Region) -> StrBuf`
+### `new(foreign text: String, region: Region) -> StrBuf`
 
 Create a new buffer from initial content.
 
 **Parameters**
-1. `text: String` - Initial content. Foreign parameter.
+1. `foreign text: String` - Initial content.
 2. `region: Region` - Allocation region.
 
 **Returns**
@@ -95,12 +95,12 @@ Prints the buffer.
 
 ---
 
-### `to_string(buf: StrBuf, region: Region) -> String`
+### `to_string(foreign buf: StrBuf, region: Region) -> String`
 
 Converts the buffer contents to a String.
 
 **Parameters**
-1. `buf: StrBuf` - Buffer. Foreign parameter.
+1. `foreign buf: StrBuf` - Buffer.
 2. `region: Region` - Region to allocate the String.
 
 **Returns**

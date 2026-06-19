@@ -34,7 +34,7 @@ Return the current working directory.
 Get an environment variable value.
 
 **Parameters**
-1. `name: String` - Environment variable name. Foreign parameter.
+1. `name: String` - Environment variable name.
 2. `region: Region`
 
 **Returns**

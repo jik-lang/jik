@@ -59,7 +59,7 @@ Generate a non-negative random integer.
 
 ---
 
-### `range_int(rng: Rng, lo: int, hi: int) -> int`
+### `throws range_int(rng: Rng, lo: int, hi: int) -> int`
 
 Generate a random integer in a half-open interval.
 

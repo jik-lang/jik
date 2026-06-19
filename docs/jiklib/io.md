@@ -14,7 +14,7 @@ Opaque file handle.
 
 ## Functions
 
-### `close(file: File) -> void`
+### `throws close(file: File) -> void`
 
 Close an open file.
 
@@ -26,7 +26,7 @@ Close an open file.
 
 ---
 
-### `open(path: String, mode: String, region: Region) -> File`
+### `throws open(foreign path: String, foreign mode: String, region: Region) -> File`
 
 Open a file.
 
@@ -34,8 +34,8 @@ Open a file.
 - Throws on failure.
 
 **Parameters**
-1. `path: String` - File path. Foreign parameter.
-2. `mode: String` - File open mode. Foreign parameter.
+1. `foreign path: String` - File path.
+2. `foreign mode: String` - File open mode.
 3. `region: Region` - Allocation region for file handle state.
 
 **Returns**
@@ -46,7 +46,7 @@ Open a file.
 
 ---
 
-### `read(file: File, region: Region) -> String`
+### `throws read(foreign file: File, region: Region) -> String`
 
 Read the full contents of a file.
 
@@ -54,7 +54,7 @@ Read the full contents of a file.
 - Throws on failure.
 
 **Parameters**
-1. `file: File` - File handle. Foreign parameter.
+1. `foreign file: File` - File handle.
 2. `region: Region` - Allocation region for the returned string.
 
 **Returns**
@@ -65,7 +65,7 @@ Read the full contents of a file.
 
 ---
 
-### `read_file(path: String, region: Region) -> String`
+### `throws read_file(foreign path: String, region: Region) -> String`
 
 Read an entire file by path.
 
@@ -73,7 +73,7 @@ Read an entire file by path.
 - Throws on failure.
 
 **Parameters**
-1. `path: String` - File path. Foreign parameter.
+1. `foreign path: String` - File path.
 2. `region: Region` - Allocation region for file handle state and the returned string.
 
 **Returns**
@@ -81,7 +81,7 @@ Read an entire file by path.
 
 ---
 
-### `write(file: File, text: String) -> void`
+### `throws write(file: File, foreign text: String) -> void`
 
 Write a string to a file.
 
@@ -90,14 +90,14 @@ Write a string to a file.
 
 **Parameters**
 1. `file: File` - File handle.
-2. `text: String` - String to write. Foreign parameter.
+2. `foreign text: String` - String to write.
 
 **Notes**
 - The file must have been opened in write or append mode.
 
 ---
 
-### `write_file(path: String, text: String, region: Region) -> void`
+### `throws write_file(foreign path: String, foreign text: String, region: Region) -> void`
 
 Write a string to a file by path, truncating existing contents.
 
@@ -105,8 +105,8 @@ Write a string to a file by path, truncating existing contents.
 - Throws on failure.
 
 **Parameters**
-1. `path: String` - File path. Foreign parameter.
-2. `text: String` - String to write. Foreign parameter.
+1. `foreign path: String` - File path.
+2. `foreign text: String` - String to write.
 3. `region: Region` - Allocation region for file handle state.
 
 ---

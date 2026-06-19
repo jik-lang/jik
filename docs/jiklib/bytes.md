@@ -38,13 +38,13 @@ Append all bytes from an immutable byte sequence.
 
 ---
 
-### `buf_append_string(buf: ByteBuf, text: String) -> void`
+### `buf_append_string(buf: ByteBuf, foreign text: String) -> void`
 
 Append a string's exact bytes.
 
 **Parameters**
 1. `buf: ByteBuf` - Byte buffer.
-2. `text: String` - String to append. Foreign parameter.
+2. `foreign text: String` - String to append.
 
 ---
 
@@ -57,12 +57,12 @@ Clear a byte buffer without reclaiming region memory.
 
 ---
 
-### `buf_from_string(text: String, region: Region) -> ByteBuf`
+### `buf_from_string(foreign text: String, region: Region) -> ByteBuf`
 
 Create a byte buffer initialized from a string's exact bytes.
 
 **Parameters**
-1. `text: String` - Source string. Foreign parameter.
+1. `foreign text: String` - Source string.
 2. `region: Region` - Allocation region.
 
 **Returns**
@@ -118,7 +118,7 @@ Append one byte.
 
 ---
 
-### `buf_push_int(buf: ByteBuf, byte: int) -> void`
+### `throws buf_push_int(buf: ByteBuf, byte: int) -> void`
 
 Append one integer value after validating it is a byte.
 
@@ -144,12 +144,12 @@ Return whether two byte sequences have identical contents.
 
 ---
 
-### `from_string(text: String, region: Region) -> Bytes`
+### `from_string(foreign text: String, region: Region) -> Bytes`
 
 Copy a string's exact bytes into a byte sequence.
 
 **Parameters**
-1. `text: String` - Source string. Foreign parameter.
+1. `foreign text: String` - Source string.
 2. `region: Region` - Allocation region.
 
 **Returns**
@@ -236,7 +236,7 @@ Convert bytes to lowercase hexadecimal text.
 
 ---
 
-### `to_string_ascii(bytes: Bytes, region: Region) -> String`
+### `throws to_string_ascii(bytes: Bytes, region: Region) -> String`
 
 Convert known ASCII text bytes to a `String`.
 

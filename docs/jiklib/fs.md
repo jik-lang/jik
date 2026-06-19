@@ -10,43 +10,43 @@ _None._
 
 ## Functions
 
-### `exists(path: String) -> bool`
+### `exists(foreign path: String) -> bool`
 
 Return whether a filesystem path exists.
 
 **Parameters**
-1. `path: String` - Filesystem path. Foreign parameter.
+1. `foreign path: String` - Filesystem path.
 
 **Returns**
 - `true` if the path exists, otherwise `false`.
 
 ---
 
-### `is_file(path: String) -> bool`
+### `is_file(foreign path: String) -> bool`
 
 Return whether a filesystem path refers to a regular file.
 
 **Parameters**
-1. `path: String` - Filesystem path. Foreign parameter.
+1. `foreign path: String` - Filesystem path.
 
 **Returns**
 - `true` only for regular files.
 
 ---
 
-### `is_dir(path: String) -> bool`
+### `is_dir(foreign path: String) -> bool`
 
 Return whether a filesystem path refers to a directory.
 
 **Parameters**
-1. `path: String` - Filesystem path. Foreign parameter.
+1. `foreign path: String` - Filesystem path.
 
 **Returns**
 - `true` only for directories.
 
 ---
 
-### `mkdir(path: String) -> void`
+### `throws mkdir(foreign path: String) -> void`
 
 Create a directory.
 
@@ -54,11 +54,11 @@ Create a directory.
 - Throws on failure.
 
 **Parameters**
-1. `path: String` - Directory path. Foreign parameter.
+1. `foreign path: String` - Directory path.
 
 ---
 
-### `mkdir_all(path: String) -> void`
+### `throws mkdir_all(foreign path: String) -> void`
 
 Create a directory path and any missing parents.
 
@@ -66,11 +66,11 @@ Create a directory path and any missing parents.
 - Throws on failure.
 
 **Parameters**
-1. `path: String` - Directory path. Foreign parameter.
+1. `foreign path: String` - Directory path.
 
 ---
 
-### `remove_file(path: String) -> void`
+### `throws remove_file(foreign path: String) -> void`
 
 Remove a file.
 
@@ -78,11 +78,11 @@ Remove a file.
 - Throws on failure.
 
 **Parameters**
-1. `path: String` - File path. Foreign parameter.
+1. `foreign path: String` - File path.
 
 ---
 
-### `remove_dir(path: String) -> void`
+### `throws remove_dir(foreign path: String) -> void`
 
 Remove an empty directory.
 
@@ -90,11 +90,11 @@ Remove an empty directory.
 - Throws on failure.
 
 **Parameters**
-1. `path: String` - Directory path. Foreign parameter.
+1. `foreign path: String` - Directory path.
 
 ---
 
-### `remove_dir_all(path: String) -> void`
+### `throws remove_dir_all(foreign path: String) -> void`
 
 Remove a directory tree recursively.
 
@@ -102,7 +102,7 @@ Remove a directory tree recursively.
 - Throws on failure.
 
 **Parameters**
-1. `path: String` - Directory path. Foreign parameter.
+1. `foreign path: String` - Directory path.
 
 **Notes**
 - Implemented in Jik by composing `read_dir`, predicates, and removal primitives.
@@ -110,7 +110,7 @@ Remove a directory tree recursively.
 
 ---
 
-### `rename(old_path: String, new_path: String) -> void`
+### `throws rename(foreign old_path: String, foreign new_path: String) -> void`
 
 Rename or move a filesystem object.
 
@@ -118,12 +118,12 @@ Rename or move a filesystem object.
 - Throws on failure.
 
 **Parameters**
-1. `old_path: String` - Source path. Foreign parameter.
-2. `new_path: String` - Destination path. Foreign parameter.
+1. `foreign old_path: String` - Source path.
+2. `foreign new_path: String` - Destination path.
 
 ---
 
-### `copy_file(src_path: String, dst_path: String) -> void`
+### `throws copy_file(foreign src_path: String, foreign dst_path: String) -> void`
 
 Copy a file.
 
@@ -131,12 +131,12 @@ Copy a file.
 - Throws on failure.
 
 **Parameters**
-1. `src_path: String` - Source path. Foreign parameter.
-2. `dst_path: String` - Destination path. Foreign parameter.
+1. `foreign src_path: String` - Source path.
+2. `foreign dst_path: String` - Destination path.
 
 ---
 
-### `read_dir(path: String, region: Region) -> Vec[String]`
+### `throws read_dir(foreign path: String, region: Region) -> Vec[String]`
 
 Return the names of entries directly inside a directory.
 
@@ -144,7 +144,7 @@ Return the names of entries directly inside a directory.
 - Throws on failure.
 
 **Parameters**
-1. `path: String` - Directory path. Foreign parameter.
+1. `foreign path: String` - Directory path.
 2. `region: Region` - Allocation region for the returned vector and strings.
 
 **Returns**

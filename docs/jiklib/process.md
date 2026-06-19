@@ -20,7 +20,7 @@ Fields:
 
 ## Functions
 
-### `run(program: String, args: Vec[String]) -> int`
+### `throws run(foreign program: String, foreign args: Vec[String]) -> int`
 
 Run a child process with inherited stdio and wait for it.
 
@@ -30,8 +30,8 @@ Run a child process with inherited stdio and wait for it.
 - No shell is invoked.
 
 **Parameters**
-1. `program: String` - Executable name or path. Foreign parameter.
-2. `args: Vec[String]` - Child process arguments. Foreign parameter.
+1. `foreign program: String` - Executable name or path.
+2. `foreign args: Vec[String]` - Child process arguments.
 
 **Returns**
 - Child exit code.
@@ -41,7 +41,7 @@ Run a child process with inherited stdio and wait for it.
 
 ---
 
-### `capture(program: String, args: Vec[String], region: Region) -> Result`
+### `throws capture(foreign program: String, foreign args: Vec[String], region: Region) -> Result`
 
 Run a child process, capture stdout and stderr, and wait for it.
 
@@ -54,8 +54,8 @@ Run a child process, capture stdout and stderr, and wait for it.
 - Stdin is inherited from the parent process.
 
 **Parameters**
-1. `program: String` - Executable name or path. Foreign parameter.
-2. `args: Vec[String]` - Child process arguments. Foreign parameter.
+1. `foreign program: String` - Executable name or path.
+2. `foreign args: Vec[String]` - Child process arguments.
 3. `region: Region` - Allocation region for the returned result and captured bytes.
 
 **Returns**

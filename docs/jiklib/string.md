@@ -11,13 +11,13 @@ _None._
 
 ## Functions
 
-### `concat(left: String, right: String, region: Region) -> String`
+### `concat(foreign left: String, foreign right: String, region: Region) -> String`
 
 Concatenate two strings.
 
 **Parameters**
-1. `left: String` - Left string. Foreign parameter.
-2. `right: String` - Right string. Foreign parameter.
+1. `foreign left: String` - Left string.
+2. `foreign right: String` - Right string.
 3. `region: Region` - Allocation region for the result.
 
 **Returns**
@@ -25,26 +25,26 @@ Concatenate two strings.
 
 ---
 
-### `ends_with(s: String, suffix: String) -> bool`
+### `ends_with(foreign s: String, foreign suffix: String) -> bool`
 
 Return whether `s` ends with `suffix`.
 
 **Parameters**
-1. `s: String` - Source string. Foreign parameter.
-2. `suffix: String` - Suffix to check. Foreign parameter.
+1. `foreign s: String` - Source string.
+2. `foreign suffix: String` - Suffix to check.
 
 **Returns**
 - `true` if `s` ends with `suffix`, otherwise `false`.
 
 ---
 
-### `find(s: String, needle: String) -> int`
+### `find(foreign s: String, foreign needle: String) -> int`
 
 Find the first occurrence of `needle` in `s`.
 
 **Parameters**
-1. `s: String` - Source string. Foreign parameter.
-2. `needle: String` - Substring to search for. Foreign parameter.
+1. `foreign s: String` - Source string.
+2. `foreign needle: String` - Substring to search for.
 
 **Returns**
 - First match byte index or `-1`.
@@ -54,13 +54,13 @@ Find the first occurrence of `needle` in `s`.
 
 ---
 
-### `join(parts: Vec[String], delim: String, r: Region) -> String`
+### `join(foreign parts: Vec[String], foreign delim: String, r: Region) -> String`
 
 Join strings from `parts` with `delim` inserted between adjacent elements.
 
 **Parameters**
-1. `parts: Vec[String]` - Input string parts. Foreign parameter.
-2. `delim: String` - Delimiter string. Foreign parameter.
+1. `foreign parts: Vec[String]` - Input string parts.
+2. `foreign delim: String` - Delimiter string.
 3. `r: Region` - Allocation region for the joined string.
 
 **Returns**
@@ -71,14 +71,14 @@ Join strings from `parts` with `delim` inserted between adjacent elements.
 
 ---
 
-### `replace(s: String, needle: String, repl: String, region: Region) -> String`
+### `replace(foreign s: String, foreign needle: String, foreign repl: String, region: Region) -> String`
 
 Replace all occurrences of `needle` in `s` with `repl`.
 
 **Parameters**
-1. `s: String` - Source string. Foreign parameter.
-2. `needle: String` - Substring to replace. Foreign parameter.
-3. `repl: String` - Replacement substring. Foreign parameter.
+1. `foreign s: String` - Source string.
+2. `foreign needle: String` - Substring to replace.
+3. `foreign repl: String` - Replacement substring.
 4. `region: Region` - Allocation region for the result.
 
 **Returns**
@@ -89,12 +89,12 @@ Replace all occurrences of `needle` in `s` with `repl`.
 
 ---
 
-### `copy(s: String, region: Region) -> String`
+### `copy(foreign s: String, region: Region) -> String`
 
 Copy a string into a different allocation region.
 
 **Parameters**
-1. `s: String` - Source string. Foreign parameter.
+1. `foreign s: String` - Source string.
 2. `region: Region` - Allocation region for the result.
 
 **Returns**
@@ -102,7 +102,7 @@ Copy a string into a different allocation region.
 
 ---
 
-### `slice(s: String, from: int, to: int, region: Region) -> String`
+### `throws slice(foreign s: String, from: int, to: int, region: Region) -> String`
 
 Return a substring of `s` from byte index `start` (inclusive) to byte index `end` (exclusive).
 
@@ -110,7 +110,7 @@ Return a substring of `s` from byte index `start` (inclusive) to byte index `end
 - Throws on failure.
 
 **Parameters**
-1. `s: String` - Source string. Foreign parameter.
+1. `foreign s: String` - Source string.
 2. `from: int` - Start byte index (inclusive).
 3. `to: int` - End byte index (exclusive).
 4. `region: Region` - Allocation region for the result.
@@ -120,13 +120,13 @@ Return a substring of `s` from byte index `start` (inclusive) to byte index `end
 
 ---
 
-### `split(s: String, delim: String, r: Region) -> Vec[String]`
+### `split(foreign s: String, foreign delim: String, r: Region) -> Vec[String]`
 
 Split a string by a delimiter.
 
 **Parameters**
-1. `s: String` - Input string. Foreign parameter.
-2. `delim: String` - Delimiter string. Foreign parameter.
+1. `foreign s: String` - Input string.
+2. `foreign delim: String` - Delimiter string.
 3. `r: Region` - Allocation region for the output vector.
 
 **Returns**
@@ -134,20 +134,20 @@ Split a string by a delimiter.
 
 ---
 
-### `starts_with(s: String, prefix: String) -> bool`
+### `starts_with(foreign s: String, foreign prefix: String) -> bool`
 
 Return whether `s` starts with `prefix`.
 
 **Parameters**
-1. `s: String` - Source string. Foreign parameter.
-2. `prefix: String` - Prefix to check. Foreign parameter.
+1. `foreign s: String` - Source string.
+2. `foreign prefix: String` - Prefix to check.
 
 **Returns**
 - `true` if `s` starts with `prefix`, otherwise `false`.
 
 ---
 
-### `to_double(s: String) -> double`
+### `throws to_double(s: String) -> double`
 
 Convert a string to a double.
 
@@ -162,7 +162,7 @@ Convert a string to a double.
 
 ---
 
-### `to_int(s: String) -> int`
+### `throws to_int(s: String) -> int`
 
 Convert a string to an integer.
 
@@ -177,12 +177,12 @@ Convert a string to an integer.
 
 ---
 
-### `trim(s: String, region: Region) -> String`
+### `trim(foreign s: String, region: Region) -> String`
 
 Return a copy of `s` with leading and trailing whitespace removed.
 
 **Parameters**
-1. `s: String` - Source string. Foreign parameter.
+1. `foreign s: String` - Source string.
 2. `region: Region` - Allocation region for the result.
 
 **Returns**

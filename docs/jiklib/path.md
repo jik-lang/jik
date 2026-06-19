@@ -8,13 +8,13 @@ _None._
 
 ## Functions
 
-### `join(parts: Vec[String], region: Region) -> String`
+### `join(foreign parts: Vec[String], r: Region) -> String`
 
 Join path segments using the platform separator.
 
 **Parameters**
-1. `parts: Vec[String]` - Path segments to join. Foreign parameter.
-2. `region: Region` - Allocation region for the result.
+1. `foreign parts: Vec[String]` - Path segments to join.
+2. `r: Region` - Allocation region for the result.
 
 **Returns**
 - Combined path string.
@@ -24,26 +24,26 @@ Join path segments using the platform separator.
 
 ---
 
-### `basename(path: String, region: Region) -> String`
+### `basename(foreign path: String, r: Region) -> String`
 
 Return the last path component.
 
 **Parameters**
-1. `path: String` - Input path. Foreign parameter.
-2. `region: Region` - Allocation region for the result.
+1. `foreign path: String` - Input path.
+2. `r: Region` - Allocation region for the result.
 
 **Returns**
 - Last path component, or an empty string for root-like inputs.
 
 ---
 
-### `dirname(path: String, region: Region) -> String`
+### `dirname(foreign path: String, r: Region) -> String`
 
 Return the parent directory.
 
 **Parameters**
-1. `path: String` - Input path. Foreign parameter.
-2. `region: Region` - Allocation region for the result.
+1. `foreign path: String` - Input path.
+2. `r: Region` - Allocation region for the result.
 
 **Returns**
 - Parent directory path.
@@ -54,25 +54,25 @@ Return the parent directory.
 
 ---
 
-### `extname(path: String, region: Region) -> String`
+### `extname(foreign path: String, r: Region) -> String`
 
 Return the extension of the last path component.
 
 **Parameters**
-1. `path: String` - Input path. Foreign parameter.
-2. `region: Region` - Allocation region for the result.
+1. `foreign path: String` - Input path.
+2. `r: Region` - Allocation region for the result.
 
 **Returns**
 - Extension text including the leading dot, or `""` when no extension exists.
 
 ---
 
-### `is_absolute(path: String) -> bool`
+### `is_absolute(foreign path: String) -> bool`
 
 Return whether `path` is absolute.
 
 **Parameters**
-1. `path: String` - Input path. Foreign parameter.
+1. `foreign path: String` - Input path.
 
 **Returns**
 - `true` if the path is absolute, otherwise `false`.
