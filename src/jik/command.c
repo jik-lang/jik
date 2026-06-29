@@ -213,6 +213,7 @@ const JikCommand JIK_COMMANDS[] = {
         .name            = "help",
         .help_desc       = "Show help for a command or documentation topic.",
         .help_desc_short = "show help for command or topic",
+        .help_notes = " Use `jik help topics` to list all available help topics.",
         .num_args        = 1,
         .args =
             {
