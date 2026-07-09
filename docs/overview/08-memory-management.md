@@ -409,6 +409,17 @@ copy(value, region) -> T
 copy(value)         -> T  // allocated in the local region
 ```
 
+A concrete example:
+
+```jik
+func foo(v: Vec[int]):
+    x := [1, 2, 3]
+    x_new = copy(x, .v)   // copy x to the region of v
+    v_new = copy(v, _)    // copy v to the local region
+    return x_new
+end
+```
+
 Supported copyable types are:
 
 - `String`
