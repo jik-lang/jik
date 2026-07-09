@@ -26,6 +26,7 @@ typedef struct JikCodeGenerator {
     TabBool    *defined_vec_types;
     TabBool    *defined_dict_types;
     TabBool    *defined_option_types;
+    TabBool    *defined_copy_types;
     JikNode    *arg_vec;
 } JikCodeGenerator;
 

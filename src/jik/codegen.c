@@ -79,6 +79,7 @@ jik_codegen_init(JikCodeGenerator *cg, JikContext *ctx)
     cg->declared_option_struct_types = TabBool_new();
     cg->defined_dict_types           = TabBool_new();
     cg->defined_option_types         = TabBool_new();
+    cg->defined_copy_types           = TabBool_new();
     cg->arg_vec = ctx->args_type ? jik_codegen_make_console_arg_vec(ctx) : NULL;
     jik_writer_init(&cg->cw);
 }
@@ -383,6 +384,34 @@ get_builtin_call_concat(JikCodeGenerator *cg, JikNode *nd)
                            ")");
 }
 
+static char *
+jik_codegen_get_copy_function_name(JikType *t)
+{
+    assert(t->name != TYPE_STRING);
+    assert(t->mangled_name);
+    return JIK_STRING_NCAT(t->mangled_name, "_copy");
+}
+
+char *
+get_builtin_call_copy(JikCodeGenerator *cg, JikNode *nd)
+{
+    JikNode *value      = VecJikNode_get(nd->val_call.args, 0);
+    char    *value_expr = jik_codegen_emit_expression(cg, value);
+    char    *reg_expr;
+    if (VecJikNode_size(nd->val_call.args) == 2) {
+        JikNode *reg = VecJikNode_get(nd->val_call.args, 1);
+        reg_expr     = jik_codegen_emit_expression(cg, reg);
+    }
+    else {
+        reg_expr = get_alloc_dest(nd->val_call.alloc_spec);
+    }
+    if (value->jik_type->name == TYPE_STRING) {
+        return JIK_STRING_NCAT("jik_string_new(", value_expr, "->data, ", reg_expr, ")");
+    }
+    return JIK_STRING_NCAT(
+        jik_codegen_get_copy_function_name(value->jik_type), "(", value_expr, ", ", reg_expr, ")");
+}
+
 char *
 get_builtin_call_assert(JikCodeGenerator *cg, JikNode *nd)
 {
@@ -518,6 +547,9 @@ get_builtin_call(JikCodeGenerator *cg, JikNode *nd)
     }
     else if (strcmp(nd->val_call.name->val_id.name, "concat") == 0) {
         return get_builtin_call_concat(cg, nd);
+    }
+    else if (strcmp(nd->val_call.name->val_id.name, "copy") == 0) {
+        return get_builtin_call_copy(cg, nd);
     }
     else if (strcmp(nd->val_call.name->val_id.name, "assert") == 0) {
         return get_builtin_call_assert(cg, nd);
@@ -2034,17 +2066,12 @@ jik_codegen_emit_vec_print_function_for_type(JikCodeGenerator *cg,
 }
 
 static void
-jik_codegen_emit_vec_print_function(JikCodeGenerator *cg, JikNode *nd, char *mangled_name)
-{
-    assert(nd->type == NODE_EXPR_VECTOR);
-    jik_codegen_emit_vec_print_function_for_type(cg, nd->jik_type, mangled_name);
-}
-
-static void
-jik_codegen_emit_dict_print_function(JikCodeGenerator *cg, JikNode *nd, char *mangled_name)
+jik_codegen_emit_dict_print_function_for_type(JikCodeGenerator *cg,
+                                              JikType          *dict_type,
+                                              char             *mangled_name)
 {
     // TODO: find a nicer way to emit custom function writing
-    assert(nd->type == NODE_EXPR_DICT);
+    assert(dict_type->name == TYPE_DICT);
     char **entry = TabString_get(cg->print_functions, mangled_name);
     assert(entry);
     char *func_name = *entry;
@@ -2059,7 +2086,7 @@ jik_codegen_emit_dict_print_function(JikCodeGenerator *cg, JikNode *nd, char *ma
         &cg->cw, JIK_STRING_NCAT("JikCharBuffer *cb = jik_char_buffer_new(", "\"{\", a);"));
     jik_writer_write_line(&cg->cw, "for (size_t i = 0; i < s->capacity; i++) {");
     jik_writer_indent(&cg->cw);
-    JikType *elem_type = nd->jik_type->val_dict.elem_type;
+    JikType *elem_type = dict_type->val_dict.elem_type;
 
     // char *elem_type_name = jik_type_is_primitive(elem_type) ? elem_type->C_name :
     // get_type_name(elem_type);
@@ -2303,31 +2330,16 @@ jik_codegen_emit_container_struct_declaration(JikCodeGenerator *cg,
 }
 
 static JikType *
-jik_codegen_make_dict_option_type(JikNode *dict_nd)
+jik_codegen_make_dict_option_type_for_type(JikType *dict_type)
 {
-    assert(dict_nd->type == NODE_EXPR_DICT);
-    JikType *opt_type = jik_type_new_option(dict_nd->val_dict.elem_expr->jik_type);
+    assert(dict_type->name == TYPE_DICT);
+    JikType *opt_type = jik_type_new_option(dict_type->val_dict.elem_type);
     jik_codegen_prepare_type_name(opt_type);
     return opt_type;
 }
 
-// TODO: also separate this into functions for other types
 static void
-jik_codegen_emit_vec_declaration(JikCodeGenerator *cg, JikNode *nd)
-{
-    bool *declared = TabBool_get(cg->declared_vec_types, nd->jik_type->mangled_name);
-    if (declared) {
-        return;
-    }
-    jik_writer_write_line(&cg->cw,
-                          JIK_STRING_NCAT("JIK_DECLARE_VEC(",
-                                          nd->jik_type->mangled_name,
-                                          ", ",
-                                          nd->val_vector.elem_expr->jik_type->C_name,
-                                          ");"));
-    TabBool_set(cg->declared_vec_types, nd->jik_type->mangled_name, true);
-    jik_codegen_register_print_function(cg, nd->jik_type->mangled_name, NULL);
-}
+jik_codegen_emit_type_declaration(JikCodeGenerator *cg, JikType *t);
 
 static void
 jik_codegen_emit_vec_declaration_for_type(JikCodeGenerator *cg, JikType *t)
@@ -2335,7 +2347,6 @@ jik_codegen_emit_vec_declaration_for_type(JikCodeGenerator *cg, JikType *t)
     if (t->name != TYPE_VECTOR) {
         return;
     }
-    jik_codegen_emit_vec_declaration_for_type(cg, t->val_vec.elem_type);
 
     bool *declared = TabBool_get(cg->declared_vec_types, t->mangled_name);
     if (declared) {
@@ -2366,6 +2377,67 @@ jik_codegen_emit_option_declaration(JikCodeGenerator *cg, JikType *opt_type)
                                           ");"));
     TabBool_set(cg->declared_option_types, opt_type->mangled_name, true);
     jik_codegen_register_print_function(cg, opt_type->mangled_name, NULL);
+}
+
+static void
+jik_codegen_emit_dict_declaration_for_type(JikCodeGenerator *cg, JikType *dict_type)
+{
+    if (dict_type->name != TYPE_DICT) {
+        return;
+    }
+
+    bool *declared = TabBool_get(cg->declared_dict_types, dict_type->mangled_name);
+    if (declared) {
+        return;
+    }
+    JikType *opt_type = jik_codegen_make_dict_option_type_for_type(dict_type);
+    jik_codegen_emit_option_declaration(cg, opt_type);
+    jik_writer_write_line(&cg->cw,
+                          JIK_STRING_NCAT("JIK_DECLARE_DICT(",
+                                          dict_type->mangled_name,
+                                          ", ",
+                                          dict_type->val_dict.elem_type->C_name,
+                                          ", ",
+                                          opt_type->mangled_name,
+                                          ");"));
+    TabBool_set(cg->declared_dict_types, dict_type->mangled_name, true);
+    jik_codegen_register_print_function(cg, dict_type->mangled_name, NULL);
+}
+
+static void
+jik_codegen_emit_type_declaration(JikCodeGenerator *cg, JikType *t)
+{
+    if (t->name == TYPE_VECTOR) {
+        jik_codegen_emit_type_declaration(cg, t->val_vec.elem_type);
+        jik_codegen_emit_vec_declaration_for_type(cg, t);
+    }
+    else if (t->name == TYPE_DICT) {
+        jik_codegen_emit_type_declaration(cg, t->val_dict.elem_type);
+        jik_codegen_emit_dict_declaration_for_type(cg, t);
+    }
+    else if (t->name == TYPE_OPTION) {
+        jik_codegen_emit_type_declaration(cg, t->val_option.elem_type);
+        jik_codegen_emit_option_declaration(cg, t);
+    }
+}
+
+static void
+jik_codegen_emit_function_type_declarations(JikCodeGenerator *cg, JikNode *nd)
+{
+    assert(nd->type == NODE_FUNCTION || nd->type == NODE_EXTERN_FUNCTION);
+    jik_codegen_emit_type_declaration(cg, nd->jik_type->val_func.ret_type);
+    size_t n = VecJikType_size(nd->jik_type->val_func.param_types);
+    for (size_t i = 0; i < n; i++) {
+        JikType *pt = VecJikType_get(nd->jik_type->val_func.param_types, i);
+        jik_codegen_emit_type_declaration(cg, pt);
+    }
+}
+
+static bool
+jik_codegen_node_is_copy_call(JikNode *nd)
+{
+    return nd->type == NODE_EXPR_CALL && nd->val_call.builtin &&
+           strcmp(nd->val_call.name->val_id.name, "copy") == 0;
 }
 
 static void
@@ -2441,41 +2513,27 @@ jik_codegen_emit_global_declarations(JikCodeGenerator *cg)
     it = VecJikNode_iter_new(cg->nodes);
     while (VecJikNode_iter_next(&it, &nd)) {
         if (nd->type == NODE_EXPR_VECTOR) {
-            jik_codegen_emit_vec_declaration(cg, nd);
-        }
-        else if (nd->type == NODE_EXTERN_FUNCTION) {
-            jik_codegen_emit_vec_declaration_for_type(cg, nd->jik_type->val_func.ret_type);
-            size_t n = VecJikType_size(nd->jik_type->val_func.param_types);
-            for (size_t j = 0; j < n; j++) {
-                JikType *pt = VecJikType_get(nd->jik_type->val_func.param_types, j);
-                jik_codegen_emit_vec_declaration_for_type(cg, pt);
-            }
+            jik_codegen_emit_type_declaration(cg, nd->jik_type);
         }
     }
     if (cg->arg_vec) {
-        jik_codegen_emit_vec_declaration(cg, cg->arg_vec);
+        jik_codegen_emit_type_declaration(cg, cg->arg_vec->jik_type);
     }
     // Dicts
     it = VecJikNode_iter_new(cg->nodes);
     while (VecJikNode_iter_next(&it, &nd)) {
         if (nd->type == NODE_EXPR_DICT) {
-            bool *declared = TabBool_get(cg->declared_dict_types, nd->jik_type->mangled_name);
-            if (declared) {
-                continue;
-            }
-            JikType *opt_type = jik_codegen_make_dict_option_type(nd);
-            jik_codegen_emit_option_declaration(cg, opt_type);
-            jik_writer_write_line(&cg->cw,
-                                  JIK_STRING_NCAT("JIK_DECLARE_DICT(",
-                                                  nd->jik_type->mangled_name,
-                                                  ", ",
-                                                  nd->val_dict.elem_expr->jik_type->C_name,
-                                                  ", ",
-                                                  opt_type->mangled_name,
-                                                  ");"));
-            TabBool_set(cg->declared_dict_types, nd->jik_type->mangled_name, true);
-            jik_codegen_register_print_function(cg, nd->jik_type->mangled_name, NULL);
+            jik_codegen_emit_type_declaration(cg, nd->jik_type);
         }
+    }
+    // Function signatures can mention container types without any corresponding literal node.
+    for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.functions); i++) {
+        nd = VecJikNode_get(cg->ast->val_program.functions, i);
+        jik_codegen_emit_function_type_declarations(cg, nd);
+    }
+    for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.extern_functions); i++) {
+        nd = VecJikNode_get(cg->ast->val_program.extern_functions, i);
+        jik_codegen_emit_function_type_declarations(cg, nd);
     }
     // Functions
     for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.functions); i++) {
@@ -2499,29 +2557,11 @@ jik_codegen_emit_global_declarations(JikCodeGenerator *cg)
 }
 
 static void
-jik_codegen_emit_vec_definition(JikCodeGenerator *cg, JikNode *nd)
-{
-    bool *defined = TabBool_get(cg->defined_vec_types, nd->jik_type->mangled_name);
-    if (defined) {
-        return;
-    }
-    jik_writer_write_line(&cg->cw,
-                          JIK_STRING_NCAT("JIK_DEFINE_VEC(",
-                                          nd->jik_type->mangled_name,
-                                          ", ",
-                                          nd->val_vector.elem_expr->jik_type->C_name,
-                                          ");"));
-    TabBool_set(cg->defined_vec_types, nd->jik_type->mangled_name, true);
-    jik_codegen_emit_vec_print_function(cg, nd, nd->jik_type->mangled_name);
-}
-
-static void
 jik_codegen_emit_vec_definition_for_type(JikCodeGenerator *cg, JikType *t)
 {
     if (t->name != TYPE_VECTOR) {
         return;
     }
-    jik_codegen_emit_vec_definition_for_type(cg, t->val_vec.elem_type);
 
     bool *defined = TabBool_get(cg->defined_vec_types, t->mangled_name);
     if (defined) {
@@ -2555,25 +2595,28 @@ jik_codegen_emit_option_definition(JikCodeGenerator *cg, JikType *opt_type)
 }
 
 static void
+jik_codegen_emit_type_definition(JikCodeGenerator *cg, JikType *t);
+
+static void
 jik_codegen_emit_vec_definitions(JikCodeGenerator *cg)
 {
     JikNode        *nd;
     VecJikNode_iter it = VecJikNode_iter_new(cg->nodes);
     while (VecJikNode_iter_next(&it, &nd)) {
         if (nd->type == NODE_EXPR_VECTOR) {
-            jik_codegen_emit_vec_definition(cg, nd);
+            jik_codegen_emit_type_definition(cg, nd->jik_type);
         }
         else if (nd->type == NODE_EXTERN_FUNCTION) {
-            jik_codegen_emit_vec_definition_for_type(cg, nd->jik_type->val_func.ret_type);
+            jik_codegen_emit_type_definition(cg, nd->jik_type->val_func.ret_type);
             size_t n = VecJikType_size(nd->jik_type->val_func.param_types);
             for (size_t j = 0; j < n; j++) {
                 JikType *pt = VecJikType_get(nd->jik_type->val_func.param_types, j);
-                jik_codegen_emit_vec_definition_for_type(cg, pt);
+                jik_codegen_emit_type_definition(cg, pt);
             }
         }
     }
     if (cg->arg_vec) {
-        jik_codegen_emit_vec_definition(cg, cg->arg_vec);
+        jik_codegen_emit_type_definition(cg, cg->arg_vec->jik_type);
     }
 }
 
@@ -2590,22 +2633,273 @@ jik_codegen_emit_dict_definitions(JikCodeGenerator *cg)
     it = VecJikNode_iter_new(cg->nodes);
     while (VecJikNode_iter_next(&it, &nd)) {
         if (nd->type == NODE_EXPR_DICT) {
-            bool *defined = TabBool_get(cg->defined_dict_types, nd->jik_type->mangled_name);
-            if (defined) {
-                continue;
-            }
-            JikType *opt_type = jik_codegen_make_dict_option_type(nd);
-            jik_codegen_emit_option_definition(cg, opt_type);
-            jik_writer_write_line(&cg->cw,
-                                  JIK_STRING_NCAT("JIK_DEFINE_DICT(",
-                                                  nd->jik_type->mangled_name,
-                                                  ", ",
-                                                  nd->val_dict.elem_expr->jik_type->C_name,
-                                                  ", ",
-                                                  opt_type->mangled_name,
-                                                  ");"));
-            TabBool_set(cg->defined_dict_types, nd->jik_type->mangled_name, true);
-            jik_codegen_emit_dict_print_function(cg, nd, nd->jik_type->mangled_name);
+            jik_codegen_emit_type_definition(cg, nd->jik_type);
+        }
+    }
+}
+
+static void
+jik_codegen_emit_dict_definition_for_type(JikCodeGenerator *cg, JikType *dict_type)
+{
+    if (dict_type->name != TYPE_DICT) {
+        return;
+    }
+    bool *defined = TabBool_get(cg->defined_dict_types, dict_type->mangled_name);
+    if (defined) {
+        return;
+    }
+    JikType *opt_type = jik_codegen_make_dict_option_type_for_type(dict_type);
+    jik_codegen_emit_option_definition(cg, opt_type);
+    jik_writer_write_line(&cg->cw,
+                          JIK_STRING_NCAT("JIK_DEFINE_DICT(",
+                                          dict_type->mangled_name,
+                                          ", ",
+                                          dict_type->val_dict.elem_type->C_name,
+                                          ", ",
+                                          opt_type->mangled_name,
+                                          ");"));
+    TabBool_set(cg->defined_dict_types, dict_type->mangled_name, true);
+    jik_codegen_emit_dict_print_function_for_type(cg, dict_type, dict_type->mangled_name);
+}
+
+static void
+jik_codegen_emit_type_definition(JikCodeGenerator *cg, JikType *t)
+{
+    if (t->name == TYPE_VECTOR) {
+        jik_codegen_emit_type_definition(cg, t->val_vec.elem_type);
+        jik_codegen_emit_vec_definition_for_type(cg, t);
+    }
+    else if (t->name == TYPE_DICT) {
+        jik_codegen_emit_type_definition(cg, t->val_dict.elem_type);
+        jik_codegen_emit_dict_definition_for_type(cg, t);
+    }
+    else if (t->name == TYPE_OPTION) {
+        jik_codegen_emit_type_definition(cg, t->val_option.elem_type);
+        jik_codegen_emit_option_definition(cg, t);
+    }
+}
+
+static void
+jik_codegen_emit_function_type_definitions(JikCodeGenerator *cg, JikNode *nd)
+{
+    assert(nd->type == NODE_FUNCTION || nd->type == NODE_EXTERN_FUNCTION);
+    jik_codegen_emit_type_definition(cg, nd->jik_type->val_func.ret_type);
+    size_t n = VecJikType_size(nd->jik_type->val_func.param_types);
+    for (size_t i = 0; i < n; i++) {
+        JikType *pt = VecJikType_get(nd->jik_type->val_func.param_types, i);
+        jik_codegen_emit_type_definition(cg, pt);
+    }
+}
+
+static void
+jik_codegen_emit_signature_type_definitions(JikCodeGenerator *cg)
+{
+    JikNode *nd;
+    for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.functions); i++) {
+        nd = VecJikNode_get(cg->ast->val_program.functions, i);
+        jik_codegen_emit_function_type_definitions(cg, nd);
+    }
+    for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.extern_functions); i++) {
+        nd = VecJikNode_get(cg->ast->val_program.extern_functions, i);
+        jik_codegen_emit_function_type_definitions(cg, nd);
+    }
+}
+
+static char *
+jik_codegen_copy_atom_expr(JikType *t, char *expr, char *region_expr)
+{
+    assert(jik_type_is_copyable_atom(t));
+    if (t->name == TYPE_STRING) {
+        return JIK_STRING_NCAT("jik_string_new(", expr, "->data, ", region_expr, ")");
+    }
+    return expr;
+}
+
+static void
+jik_codegen_emit_vec_copy_function(JikCodeGenerator *cg, JikType *vec_type)
+{
+    JikType *elem_type = vec_type->val_vec.elem_type;
+    char    *mn        = vec_type->mangled_name;
+
+    jik_writer_write_line(&cg->cw, vec_type->C_name);
+    jik_writer_write_line(&cg->cw,
+                          JIK_STRING_NCAT(mn, "_copy(", vec_type->C_name, " src, JikRegion *a)"));
+    jik_writer_begin_block(&cg->cw, "{");
+    jik_writer_write_line(&cg->cw,
+                          JIK_STRING_NCAT(vec_type->C_name, " dst = ", mn, "_new(a, src->size);"));
+    jik_writer_write_line(&cg->cw, "for (size_t i = 0; i < src->size; i++) {");
+    jik_writer_indent(&cg->cw);
+    jik_writer_write_line(
+        &cg->cw,
+        JIK_STRING_NCAT(
+            "dst->data[i] = ", jik_codegen_copy_atom_expr(elem_type, "src->data[i]", "a"), ";"));
+    jik_writer_dedent(&cg->cw);
+    jik_writer_write_line(&cg->cw, "}");
+    jik_writer_write_line(&cg->cw, "return dst;");
+    jik_writer_end_block(&cg->cw);
+}
+
+static void
+jik_codegen_emit_dict_copy_function(JikCodeGenerator *cg, JikType *dict_type)
+{
+    JikType *elem_type = dict_type->val_dict.elem_type;
+    char    *mn        = dict_type->mangled_name;
+
+    jik_writer_write_line(&cg->cw, dict_type->C_name);
+    jik_writer_write_line(&cg->cw,
+                          JIK_STRING_NCAT(mn, "_copy(", dict_type->C_name, " src, JikRegion *a)"));
+    jik_writer_begin_block(&cg->cw, "{");
+    jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(dict_type->C_name, " dst = ", mn, "_new(a);"));
+    jik_writer_write_line(&cg->cw, "for (size_t i = 0; i < src->capacity; i++) {");
+    jik_writer_indent(&cg->cw);
+    jik_writer_write_line(&cg->cw, "if (src->items[i].key == NULL) { continue; }");
+    jik_writer_write_line(
+        &cg->cw,
+        JIK_STRING_NCAT(mn,
+                        "_set(dst, src->items[i].key, ",
+                        jik_codegen_copy_atom_expr(elem_type, "src->items[i].val", "a"),
+                        ", NULL);"));
+    jik_writer_dedent(&cg->cw);
+    jik_writer_write_line(&cg->cw, "}");
+    jik_writer_write_line(&cg->cw, "return dst;");
+    jik_writer_end_block(&cg->cw);
+}
+
+static void
+jik_codegen_emit_option_copy_function(JikCodeGenerator *cg, JikType *opt_type)
+{
+    JikType *elem_type = opt_type->val_option.elem_type;
+    char    *mn        = opt_type->mangled_name;
+
+    jik_writer_write_line(&cg->cw, opt_type->C_name);
+    jik_writer_write_line(&cg->cw,
+                          JIK_STRING_NCAT(mn, "_copy(", opt_type->C_name, " src, JikRegion *a)"));
+    jik_writer_begin_block(&cg->cw, "{");
+    jik_writer_write_line(&cg->cw, "if (!src->is_some) {");
+    jik_writer_indent(&cg->cw);
+    jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("return ", mn, "_none(a);"));
+    jik_writer_dedent(&cg->cw);
+    jik_writer_write_line(&cg->cw, "}");
+    jik_writer_write_line(&cg->cw,
+                          JIK_STRING_NCAT("return ",
+                                          mn,
+                                          "_some(",
+                                          jik_codegen_copy_atom_expr(elem_type, "src->val", "a"),
+                                          ", a);"));
+    jik_writer_end_block(&cg->cw);
+}
+
+static void
+jik_codegen_emit_struct_copy_function(JikCodeGenerator *cg, JikType *struct_type)
+{
+    char *mn = struct_type->mangled_name;
+
+    jik_writer_write_line(&cg->cw, struct_type->C_name);
+    jik_writer_write_line(
+        &cg->cw, JIK_STRING_NCAT(mn, "_copy(", struct_type->C_name, " src, JikRegion *a)"));
+    jik_writer_begin_block(&cg->cw, "{");
+    jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("return ", mn, "_new(a, &(struct ", mn, "){"));
+    jik_writer_indent(&cg->cw);
+
+    TabJikType_iter it = TabJikType_iter_new(struct_type->val_struct.field_types);
+    TabJikType_item item;
+    while (TabJikType_iter_next(&it, &item)) {
+        char *src_field = JIK_STRING_NCAT("src->", item.key);
+        jik_writer_write_line(
+            &cg->cw,
+            JIK_STRING_NCAT(".",
+                            item.key,
+                            " = ",
+                            jik_codegen_copy_atom_expr(item.value, src_field, "a"),
+                            ","));
+    }
+
+    jik_writer_dedent(&cg->cw);
+    jik_writer_write_line(&cg->cw, "});");
+    jik_writer_end_block(&cg->cw);
+}
+
+static void
+jik_codegen_emit_variant_copy_function(JikCodeGenerator *cg, JikType *variant_type)
+{
+    char *mn = variant_type->mangled_name;
+    assert(variant_type->val_variant.enum_type);
+    char *enum_mn = variant_type->val_variant.enum_type->mangled_name;
+
+    jik_writer_write_line(&cg->cw, variant_type->C_name);
+    jik_writer_write_line(
+        &cg->cw, JIK_STRING_NCAT(mn, "_copy(", variant_type->C_name, " src, JikRegion *a)"));
+    jik_writer_begin_block(&cg->cw, "{");
+    jik_writer_write_line(&cg->cw, "switch (src->tag) {");
+    jik_writer_indent(&cg->cw);
+
+    TabJikType_iter it = TabJikType_iter_new(variant_type->val_variant.variant_types);
+    TabJikType_item item;
+    while (TabJikType_iter_next(&it, &item)) {
+        char *tag_name = JIK_STRING_NCAT(enum_mn, "_", item.key);
+        jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("case ", tag_name, ":"));
+        jik_writer_indent(&cg->cw);
+        jik_writer_write_line(
+            &cg->cw,
+            JIK_STRING_NCAT(
+                "return ",
+                mn,
+                "_new(a, &(struct ",
+                mn,
+                "){.tag = ",
+                tag_name,
+                ", .val.",
+                item.key,
+                " = ",
+                jik_codegen_copy_atom_expr(item.value, JIK_STRING_NCAT("src->val.", item.key), "a"),
+                "});"));
+        jik_writer_dedent(&cg->cw);
+    }
+    jik_writer_write_line(&cg->cw, "default: break;");
+    jik_writer_dedent(&cg->cw);
+    jik_writer_write_line(&cg->cw, "}");
+    jik_writer_write_line(&cg->cw, "jik_die(\"invalid variant tag during copy\");");
+    jik_writer_write_line(&cg->cw, "return NULL;");
+    jik_writer_end_block(&cg->cw);
+}
+
+static void
+jik_codegen_emit_copy_function_for_type(JikCodeGenerator *cg, JikType *t)
+{
+    if (t->name == TYPE_STRING) {
+        return;
+    }
+    char *func_name = jik_codegen_get_copy_function_name(t);
+    if (TabBool_get(cg->defined_copy_types, func_name)) {
+        return;
+    }
+    TabBool_set(cg->defined_copy_types, func_name, true);
+
+    if (t->name == TYPE_VECTOR) {
+        jik_codegen_emit_vec_copy_function(cg, t);
+    }
+    else if (t->name == TYPE_DICT) {
+        jik_codegen_emit_dict_copy_function(cg, t);
+    }
+    else if (t->name == TYPE_OPTION) {
+        jik_codegen_emit_option_copy_function(cg, t);
+    }
+    else if (t->name == TYPE_STRUCT) {
+        jik_codegen_emit_struct_copy_function(cg, t);
+    }
+    else if (t->name == TYPE_VARIANT) {
+        jik_codegen_emit_variant_copy_function(cg, t);
+    }
+}
+
+static void
+jik_codegen_emit_copy_functions(JikCodeGenerator *cg)
+{
+    JikNode        *nd;
+    VecJikNode_iter it = VecJikNode_iter_new(cg->nodes);
+    while (VecJikNode_iter_next(&it, &nd)) {
+        if (jik_codegen_node_is_copy_call(nd)) {
+            jik_codegen_emit_copy_function_for_type(cg, nd->jik_type);
         }
     }
 }
@@ -2654,6 +2948,7 @@ jik_codegen_prepare_C_names(JikCodeGenerator *cg)
         assert(enum_nd);
         jik_codegen_prepare_named_enum_type(
             enum_nd->jik_type, enum_nd->token->mod_alias, enum_nd->val_enum.name);
+        nd->jik_type->val_variant.enum_type = enum_nd->jik_type;
     }
     for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.extern_structs); i++) {
         nd = VecJikNode_get(cg->ast->val_program.extern_structs, i);
@@ -2756,9 +3051,11 @@ jik_codegen_run(JikCodeGenerator *cg)
     jik_codegen_emit_global_declarations(cg);
     jik_codegen_emit_dict_definitions(cg);
     jik_codegen_emit_vec_definitions(cg);
+    jik_codegen_emit_signature_type_definitions(cg);
     jik_writer_set_buffer_functions(&cg->cw);
     jik_codegen_emit_variants(cg);
     jik_codegen_emit_structs(cg);
+    jik_codegen_emit_copy_functions(cg);
     jik_codegen_emit_functions(cg);
     jik_codegen_emit_main_function(cg);
 

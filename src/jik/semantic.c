@@ -641,6 +641,19 @@ infer_type_builtin_pop(JikSemanticAnalyzer *sa, JikNode *nd)
 }
 
 static void
+infer_type_builtin_copy(JikSemanticAnalyzer *sa, JikNode *nd)
+{
+    if (VecJikNode_size(nd->val_call.args) < 1) {
+        return;
+    }
+    JikNode *obj = VecJikNode_get(nd->val_call.args, 0);
+    jik_semantic_infer_type(sa, obj);
+    if (jik_type_is_inferred(obj->jik_type)) {
+        nd->jik_type = obj->jik_type;
+    }
+}
+
+static void
 jik_semantic_apply_option_context(JikNode *expr, JikType *expected_type)
 {
     if (!expr || !expected_type) {
@@ -993,6 +1006,9 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
             else if (strcmp(nd->val_call.name->val_id.name, "pop") == 0) {
                 infer_type_builtin_pop(sa, nd);
             }
+            else if (strcmp(nd->val_call.name->val_id.name, "copy") == 0) {
+                infer_type_builtin_copy(sa, nd);
+            }
             else {
                 return;
             }
@@ -1057,16 +1073,13 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
         nd->val_variant.inferring = false;
     }
     else if (nd->type == NODE_EXPR_STRUCT_NEW) {
-        JikNode *st  = jik_scope_get_symbol(nd->context,
+        JikNode *st = jik_scope_get_symbol(nd->context,
                                            nd->val_struct_new.name->val_id.name,
                                            nd->val_struct_new.name->val_id.mod_alias,
                                            nd->token->mod_alias);
         if (st->val_struct.is_extern) {
             JikNode *call = jik_make_init_call_for_extern_struct(
-                st->jik_type,
-                nd->val_struct_new.name->val_id.mod_alias,
-                nd->context,
-                nd->token);
+                st->jik_type, nd->val_struct_new.name->val_id.mod_alias, nd->context, nd->token);
             *nd                 = *call;
             sa->needs_recollect = true;
             return;
@@ -1664,14 +1677,14 @@ jik_make_init_call_for_extern_struct(JikType  *t,
             jik_token_to_text(token));
     }
 
-    JikNode *func      = t->init_func;
-    mod_alias          = mod_alias ? mod_alias : func->token->mod_alias;
-    JikNode *name      = jik_node_new_identifier(
-        func->val_extern_function.name, mod_alias, context, token);
+    JikNode *func = t->init_func;
+    mod_alias     = mod_alias ? mod_alias : func->token->mod_alias;
+    JikNode *name =
+        jik_node_new_identifier(func->val_extern_function.name, mod_alias, context, token);
     VecJikNode *args = VecJikNode_new_empty();
     VecJikNode_push(args, jik_node_new_local_region(context, token));
 
-    JikNode *call = jik_node_new_call(name, args, context, token);
+    JikNode *call              = jik_node_new_call(name, args, context, token);
     call->val_call.extern_name = func->val_extern_function.C_func_name;
     call->jik_type             = t;
     return call;
@@ -1680,10 +1693,8 @@ jik_make_init_call_for_extern_struct(JikType  *t,
 static JikNode *
 jik_get_default_initializer_for_extern_struct(JikNode *type_desc, JikType *t)
 {
-    return jik_make_init_call_for_extern_struct(t,
-                                               type_desc->val_type_desc.name->val_id.mod_alias,
-                                               type_desc->context,
-                                               type_desc->token);
+    return jik_make_init_call_for_extern_struct(
+        t, type_desc->val_type_desc.name->val_id.mod_alias, type_desc->context, type_desc->token);
 }
 
 static JikNode *

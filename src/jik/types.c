@@ -292,6 +292,56 @@ jik_type_is_primitive(JikType *t)
 }
 
 bool
+jik_type_is_copyable_atom(JikType *t)
+{
+    return jik_type_is_one_of(
+        t,
+        (JikTypeName[]){
+            TYPE_INTEGER, TYPE_FLOAT, TYPE_BOOL, TYPE_CHAR, TYPE_STRING, TYPE_ENUM, TYPE_NOTYPE});
+}
+
+bool
+jik_type_is_copyable(JikType *t)
+{
+    if (t->name == TYPE_STRING) {
+        return true;
+    }
+    if (t->name == TYPE_VECTOR) {
+        return jik_type_is_copyable_atom(t->val_vec.elem_type);
+    }
+    if (t->name == TYPE_DICT) {
+        return jik_type_is_copyable_atom(t->val_dict.elem_type);
+    }
+    if (t->name == TYPE_OPTION) {
+        return jik_type_is_copyable_atom(t->val_option.elem_type);
+    }
+    if (t->name == TYPE_STRUCT) {
+        if (t->is_extern) {
+            return false;
+        }
+        TabJikType_iter it = TabJikType_iter_new(t->val_struct.field_types);
+        TabJikType_item item;
+        while (TabJikType_iter_next(&it, &item)) {
+            if (!jik_type_is_copyable_atom(item.value)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (t->name == TYPE_VARIANT) {
+        TabJikType_iter it = TabJikType_iter_new(t->val_variant.variant_types);
+        TabJikType_item item;
+        while (TabJikType_iter_next(&it, &item)) {
+            if (!jik_type_is_copyable_atom(item.value)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+bool
 jik_type_is_allocated(JikType *t)
 {
     return jik_type_is_one_of(t,

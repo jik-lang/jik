@@ -28,7 +28,7 @@ jik_check_builtin_pop(JikNode *nd)
     size_t n = VecJikNode_size(nd->val_call.args);
     jik_diag_fatal_error_if(
         n != 1, "expected one argument", jik_token_to_text(nd->val_call.name->token));
-    JikNode *vec  = VecJikNode_get(nd->val_call.args, 0);
+    JikNode *vec = VecJikNode_get(nd->val_call.args, 0);
     jik_diag_fatal_error_if(
         vec->jik_type->name != TYPE_VECTOR, "expected vector", jik_token_to_text(vec->token));
 }
@@ -85,6 +85,50 @@ jik_check_builtin_concat(JikNode *nd)
                                             ", got ",
                                             jik_type_pretty_name(reg->jik_type)),
                             jik_token_to_text(reg->token));
+}
+
+static void
+jik_check_builtin_copy(JikNode *nd)
+{
+    size_t n = VecJikNode_size(nd->val_call.args);
+    jik_diag_fatal_error_if(n != 1 && n != 2,
+                            JIK_STRING_NCAT("expected 1 or 2 arguments, got ", size_t_to_string(n)),
+                            jik_token_to_text(nd->val_call.name->token));
+
+    JikNode *value = VecJikNode_get(nd->val_call.args, 0);
+    if (!jik_type_is_copyable(value->jik_type)) {
+        char *type_name = jik_type_pretty_name(value->jik_type);
+        if (jik_type_is_copyable_atom(value->jik_type) && value->jik_type->name != TYPE_STRING) {
+            jik_diag_fatal_error(JIK_STRING_NCAT("cannot copy value of type ", type_name),
+                                 JIK_STRING_NCAT("copy can be used only for composite values\n",
+                                                 jik_token_to_text(value->token)));
+        }
+        jik_diag_fatal_error(
+            JIK_STRING_NCAT("cannot copy value of type ", type_name),
+            JIK_STRING_NCAT("copy currently supports String, structs whose fields are "
+                            "primitive-like, and Vec/Dict/Option/variant values whose payloads "
+                            "are primitive-like\n",
+                            jik_token_to_text(value->token)));
+    }
+
+    if (n == 2) {
+        JikNode *reg = VecJikNode_get(nd->val_call.args, 1);
+        jik_diag_fatal_error_if(!jik_type_equal(reg->jik_type, &JIK_TYPE_REGION),
+                                JIK_STRING_NCAT("type mismatch: required ",
+                                                jik_type_pretty_name(&JIK_TYPE_REGION),
+                                                ", got ",
+                                                jik_type_pretty_name(reg->jik_type)),
+                                jik_token_to_text(reg->token));
+    }
+    else {
+        jik_diag_fatal_error_if(!nd->val_call.auto_region,
+                                "copy expects a destination Region",
+                                jik_token_to_text(nd->val_call.name->token));
+    }
+
+    jik_diag_fatal_error_if(!jik_type_equal(nd->jik_type, value->jik_type),
+                            "copy result type must match source type",
+                            jik_token_to_text(nd->val_call.name->token));
 }
 
 static void
@@ -251,6 +295,9 @@ jik_check_types(VecJikNode *nodes)
                 }
                 else if (strcmp(nd->val_call.name->val_id.name, "concat") == 0) {
                     jik_check_builtin_concat(nd);
+                }
+                else if (strcmp(nd->val_call.name->val_id.name, "copy") == 0) {
+                    jik_check_builtin_copy(nd);
                 }
                 else if (strcmp(nd->val_call.name->val_id.name, "fail") == 0) {
                     jik_check_builtin_fail(nd);

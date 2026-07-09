@@ -386,25 +386,51 @@ The important cases are:
 - `print`
 - `println`
 - `concat`
+- `copy`
 
 `concat` is still explicit about its destination region: its last argument must be a `Region`, and the returned `String` is allocated there.
+`copy` is also explicit about its destination region, but unlike ordinary calls its source value may come from any region.
 
 ```jik
 func show(foreign left: String, right: String, r: Region):
     println(left, right)
     joined := concat(left, right, r)
+    left_copy := copy(left, r)
 end
 ```
 
 ### 8.6 Copying values between regions
 
-Copying values between different regions is currently only supported for values of type `String`,
-through the `jik/string` standard library `copy` function, whose signature is:
+Use the builtin `copy` to explicitly copy specific composite values into a chosen destination
+region:
 
-`copy(foreign s: String, region: Region) -> String`
+```jik
+copy(value, region) -> T
+copy(value)         -> T  // allocated in the local region
+```
 
-It copies the given string (which can be allocated in any region, hence marked as `foreign`) to
-the destination region.
+Supported copyable types are:
+
+- `String`
+- `Vec[P]`
+- `Dict[P]`
+- `Option[P]`
+- structs whose fields are all `P`
+- variants whose every payload type is `P`
+
+Here `P` means `int`, `double`, `bool`, `char`, `String`, or an enum type. Strings are
+primitive-like for this rule, but copied strings are freshly allocated in the destination
+region.
+
+Top-level primitives and enums are rejected because they are not composite:
+
+```jik
+copy(12, _)       // compile error
+copy(State.ON, _) // compile error
+```
+
+Extern structs and nested composites such as `Vec[Vec[int]]` or a struct field of type
+`Vec[String]` are not supported.
 
 
 ### 8.7 Summary
@@ -414,6 +440,6 @@ If you keep these rules in mind, the Jik region model is fairly straightforward:
 1. Composite values live in regions.
 2. `_` is the current function's local region.
 3. Functions that return composite values usually take a destination `Region`.
-4. Calls to functions whose final parameter has type `Region` may omit that argument. When omitted, the caller’s local region is passed automatically.
+4. Calls to functions whose final parameter has type `Region` may omit that argument. When omitted, the caller's local region is passed automatically.
 5. Composite calls and stores must preserve region consistency.
 6. Use `foreign` for read-oriented inputs from other regions.

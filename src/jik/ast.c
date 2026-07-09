@@ -1545,6 +1545,10 @@ jik_node_has_alloc_spec(JikNode *nd)
         strcmp(nd->val_call.name->val_id.name, "concat") == 0) {
         return true;
     }
+    if (nd->type == NODE_EXPR_CALL && nd->val_call.builtin &&
+        strcmp(nd->val_call.name->val_id.name, "copy") == 0) {
+        return true;
+    }
     if (nd->type == NODE_EXPR_CALL && !nd->val_call.builtin && !nd->val_call.extern_name) {
         return jik_type_is_allocated(nd->jik_type);
     }

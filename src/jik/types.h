@@ -145,6 +145,10 @@ jik_type_is_numeric(JikType *t);
 bool
 jik_type_is_primitive(JikType *t);
 bool
+jik_type_is_copyable_atom(JikType *t);
+bool
+jik_type_is_copyable(JikType *t);
+bool
 jik_type_is_allocated(JikType *t);
 bool
 jik_type_is_subscriptable(JikType *t);

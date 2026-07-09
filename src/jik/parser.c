@@ -1459,6 +1459,12 @@ jik_parser_add_builtins(JikParser *p)
         p, "push", make_builtin_function_type(-1, &JIK_TYPE_VOID, (JikType *[]){NULL}));
     jik_parser_add_builtin(
         p, "pop", make_builtin_function_type(-1, jik_type_new(TYPE_UNKNOWN), (JikType *[]){NULL}));
+    jik_parser_add_builtin(p,
+                           "copy",
+                           make_builtin_function_type(
+                               2,
+                               jik_type_new(TYPE_UNKNOWN),
+                               (JikType *[]){jik_type_new(TYPE_UNKNOWN), &JIK_TYPE_REGION, NULL}));
     jik_parser_add_builtin(
         p, "len", make_builtin_function_type(-1, &JIK_TYPE_INT, (JikType *[]){NULL}));
     jik_parser_add_builtin(

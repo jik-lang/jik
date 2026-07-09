@@ -31,6 +31,7 @@ use "test_option"
 use "test_module_interop"
 use "test_module_type_interop"
 use "test_type_constructors"
+use "test_copy"
 use "test_examples"
 use "test_compile_fail_semantic"
 use "test_compile_fail_operators"
@@ -72,6 +73,7 @@ func main():
     test_module_interop::run_tests(ts)
     test_module_type_interop::run_tests(ts)
     test_type_constructors::run_tests(ts)
+    test_copy::run_tests(ts)
     test_examples::run_tests(ts)
     test_compile_fail_semantic::run_tests(ts)
     test_compile_fail_operators::run_tests(ts)

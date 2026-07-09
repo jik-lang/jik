@@ -209,6 +209,13 @@ jik_mark_function_needs_local_region(JikNode *func_nd)
 }
 
 static bool
+jik_is_builtin_call_named(JikNode *nd, char *name)
+{
+    return nd->type == NODE_EXPR_CALL && nd->val_call.builtin &&
+           strcmp(nd->val_call.name->val_id.name, name) == 0;
+}
+
+static bool
 node_needs_local_region(JikNode *nd)
 {
     if (jik_node_is_allocated_literal(nd)) {
@@ -373,7 +380,7 @@ unwrap_grouping(JikNode *nd)
 static bool
 is_foreign_container_literal_arg(JikNode *func_nd, size_t idx, JikNode *arg)
 {
-    JikNode      *base = unwrap_grouping(arg);
+    JikNode     *base = unwrap_grouping(arg);
     JikAllocSpec spec;
     if (!is_func_param_foreign(func_nd, idx)) {
         return false;
@@ -388,7 +395,7 @@ is_foreign_container_literal_arg(JikNode *func_nd, size_t idx, JikNode *arg)
 static void
 mark_foreign_container_literal_spec(JikNode *arg)
 {
-    JikNode      *base = unwrap_grouping(arg);
+    JikNode     *base = unwrap_grouping(arg);
     JikAllocSpec spec = jik_get_alloc_spec(base);
     spec.src          = JIK_ALLOC_SRC_CROSS;
 
@@ -465,11 +472,12 @@ get_first_non_literal_allocd_arg(VecJikNode *args)
 }
 
 static bool
-can_retarget_literal(JikNode* literal, JikAllocSpec req_spec)
+can_retarget_literal(JikNode *literal, JikAllocSpec req_spec)
 {
     assert(jik_node_is_allocated_literal(literal));
     JikAllocSpec arg_src = jik_get_alloc_spec(literal);
-    return arg_src.src == JIK_ALLOC_SRC_LOCAL && req_spec.src != JIK_ALLOC_SRC_LOCAL && req_spec.src != JIK_ALLOC_SRC_CROSS;
+    return arg_src.src == JIK_ALLOC_SRC_LOCAL && req_spec.src != JIK_ALLOC_SRC_LOCAL &&
+           req_spec.src != JIK_ALLOC_SRC_CROSS;
 }
 
 static void
@@ -745,10 +753,24 @@ jik_check_region_integrity(JikNode *ast)
             }
             // else if (nd->type == NODE_EXPR_CALL && !nd->val_call.builtin) {
             else if (nd->type == NODE_EXPR_CALL) {
-                if (nd->val_call.builtin && strcmp(nd->val_call.name->val_id.name, "concat") == 0) {
+                if (jik_is_builtin_call_named(nd, "concat")) {
                     size_t       n       = VecJikNode_size(nd->val_call.args);
                     JikNode     *reg_arg = VecJikNode_get(nd->val_call.args, n - 1);
                     JikAllocSpec spec    = get_expression_alloc_spec(reg_arg, spec_tab);
+                    if (jik_alloc_spec_complete(spec)) {
+                        nd->val_call.alloc_spec = spec;
+                    }
+                    continue;
+                }
+                if (jik_is_builtin_call_named(nd, "copy")) {
+                    JikAllocSpec spec;
+                    if (VecJikNode_size(nd->val_call.args) == 2) {
+                        JikNode *reg_arg = VecJikNode_get(nd->val_call.args, 1);
+                        spec             = get_expression_alloc_spec(reg_arg, spec_tab);
+                    }
+                    else {
+                        spec = (JikAllocSpec){.kind = JIK_ALLOC_LOCAL, .src = JIK_ALLOC_SRC_LOCAL};
+                    }
                     if (jik_alloc_spec_complete(spec)) {
                         nd->val_call.alloc_spec = spec;
                     }
@@ -779,9 +801,10 @@ jik_check_region_integrity(JikNode *ast)
                     if (jik_both_alloc_sources_known(arg_src, req_spec)) {
                         // We force local literals into same region as other args for better
                         // ergonomics
-                        if (jik_node_is_allocated_literal(arg) && can_retarget_literal(arg, req_spec)) {
+                        if (jik_node_is_allocated_literal(arg) &&
+                            can_retarget_literal(arg, req_spec)) {
                             jik_set_alloc_spec(arg, req_spec);
-                            continue;                            
+                            continue;
                         }
                         jik_diag_fatal_error_if(!jik_alloc_sources_match(arg_src, req_spec),
                                                 "all arguments should belong to same region",
@@ -868,10 +891,7 @@ jik_check_region_integrity(JikNode *ast)
 }
 
 static void
-check_literal_child_region(JikNode        *parent,
-                           JikNode        *child,
-                           TabJikAllocSpec *spec_tab,
-                           char           *msg)
+check_literal_child_region(JikNode *parent, JikNode *child, TabJikAllocSpec *spec_tab, char *msg)
 {
     if (!jik_type_is_allocated(child->jik_type)) {
         return;
@@ -881,10 +901,9 @@ check_literal_child_region(JikNode        *parent,
         (parent->type == NODE_EXPR_VECTOR || parent->type == NODE_EXPR_DICT)) {
         return;
     }
-    JikAllocSpec child_spec  = get_expression_alloc_spec(child, spec_tab);
-    jik_diag_fatal_error_if(!jik_alloc_sources_match(parent_spec, child_spec),
-                            msg,
-                            jik_token_to_text(child->token));
+    JikAllocSpec child_spec = get_expression_alloc_spec(child, spec_tab);
+    jik_diag_fatal_error_if(
+        !jik_alloc_sources_match(parent_spec, child_spec), msg, jik_token_to_text(child->token));
 }
 
 static void
@@ -895,7 +914,10 @@ check_nested_literal_consistency(JikNode *nd, TabJikAllocSpec *spec_tab)
             for (size_t i = 0; i < VecJikNode_size(nd->val_vector.init_elems); i++) {
                 JikNode *elem = VecJikNode_get(nd->val_vector.init_elems, i);
                 check_literal_child_region(
-                    nd, elem, spec_tab, "all vector elements should belong to same region as vector");
+                    nd,
+                    elem,
+                    spec_tab,
+                    "all vector elements should belong to same region as vector");
             }
         }
         else {
@@ -910,17 +932,21 @@ check_nested_literal_consistency(JikNode *nd, TabJikAllocSpec *spec_tab)
         for (size_t i = 0; i < VecJikNode_size(nd->val_dict.init_values); i++) {
             JikNode *elem = VecJikNode_get(nd->val_dict.init_values, i);
             check_literal_child_region(
-                nd, elem, spec_tab, "all dictionary values should belong to same region as dictionary");
+                nd,
+                elem,
+                spec_tab,
+                "all dictionary values should belong to same region as dictionary");
         }
     }
     else if (nd->type == NODE_EXPR_STRUCT_NEW) {
-        TabJikNode_iter it          = TabJikNode_iter_new(nd->val_struct_new.init_vals);
+        TabJikNode_iter it = TabJikNode_iter_new(nd->val_struct_new.init_vals);
         TabJikNode_item item;
         while (TabJikNode_iter_next(&it, &item)) {
-            check_literal_child_region(nd,
-                                       item.value,
-                                       spec_tab,
-                                       "all struct initializer values should belong to same region");
+            check_literal_child_region(
+                nd,
+                item.value,
+                spec_tab,
+                "all struct initializer values should belong to same region");
         }
     }
     else if (nd->type == NODE_EXPR_VARIANT_NEW && nd->val_variant_new.init_expr) {
@@ -952,6 +978,9 @@ jik_post_check_region_integrity(JikNode *ast)
                 check_nested_literal_consistency(nd, spec_tab);
             }
             else if (nd->type == NODE_EXPR_CALL) {
+                if (jik_is_builtin_call_named(nd, "copy")) {
+                    continue;
+                }
                 if (is_region_safe_function_call(nd)) {
                     continue;
                 }
