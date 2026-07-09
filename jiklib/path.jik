@@ -32,12 +32,12 @@ func _is_sep(ch: char, windows: bool) -> bool:
 end
 
 /// Return whether `path` has a Windows drive prefix like `C:`.
-func _has_drive_prefix(foreign path: String) -> bool:
+func _has_drive_prefix(path: String) -> bool:
     return len(path) >= 2 and char::isalpha(path[0]) and path[1] == ':'
 end
 
 /// Trim trailing separators and return the new exclusive end index.
-func _trim_trailing_seps(foreign path: String, windows: bool) -> int:
+func _trim_trailing_seps(path: String, windows: bool) -> int:
     stop := len(path)
     while stop > 1 and _is_sep(path[stop - 1], windows):
         stop -= 1
@@ -205,12 +205,12 @@ end
 
 /// Return whether `path` is absolute.
 ///
-/// @param path Input path. Foreign parameter.
+/// @param path Input path.
 /// @returns `true` if the path is absolute, otherwise `false`.
 ///
 /// Windows paths accept both `\` and `/` separators.
 /// Drive-root forms such as `C:\foo` are treated as absolute.
-func is_absolute(foreign path: String) -> bool:
+func is_absolute(path: String) -> bool:
     windows := _is_windows()
     n := len(path)
     if n == 0:

@@ -67,12 +67,12 @@ Return the extension of the last path component.
 
 ---
 
-### `is_absolute(foreign path: String) -> bool`
+### `is_absolute(path: String) -> bool`
 
 Return whether `path` is absolute.
 
 **Parameters**
-1. `foreign path: String` - Input path.
+1. `path: String` - Input path.
 
 **Returns**
 - `true` if the path is absolute, otherwise `false`.

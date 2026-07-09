@@ -15,32 +15,32 @@ use "jik/string"
 /// @param path Filesystem path.
 /// @returns `true` if the path exists, otherwise `false`.
 extern func jik_impl_fs_exists as
-    exists(foreign path: String) -> bool
+    exists(path: String) -> bool
 
 /// Return whether a filesystem path refers to a regular file.
 ///
 /// @param path Filesystem path.
 /// @returns `true` only for regular files.
 extern func jik_impl_fs_is_file as
-    is_file(foreign path: String) -> bool
+    is_file(path: String) -> bool
 
 /// Return whether a filesystem path refers to a directory.
 ///
 /// @param path Filesystem path.
 /// @returns `true` only for directories.
 extern func jik_impl_fs_is_dir as
-    is_dir(foreign path: String) -> bool
+    is_dir(path: String) -> bool
 
 /// Create a directory.
 ///
 /// @param path Directory path.
 extern throws func jik_impl_fs_mkdir as
-    mkdir(foreign path: String) -> void
+    mkdir(path: String) -> void
 
 /// Create a directory path and any missing parents.
 ///
 /// @param path Directory path.
-throws func mkdir_all(foreign path: String) -> void:
+throws func mkdir_all(path: String) -> void:
     if is_dir(path):
         return
     end
@@ -66,18 +66,18 @@ end
 ///
 /// @param path File path.
 extern throws func jik_impl_fs_remove_file as
-    remove_file(foreign path: String) -> void
+    remove_file(path: String) -> void
 
 /// Remove an empty directory.
 ///
 /// @param path Directory path.
 extern throws func jik_impl_fs_remove_dir as
-    remove_dir(foreign path: String) -> void
+    remove_dir(path: String) -> void
 
 /// Remove a directory tree recursively.
 ///
 /// @param path Directory path.
-throws func remove_dir_all(foreign path: String) -> void:
+throws func remove_dir_all(path: String) -> void:
     if not exists(path):
         fail("fs::remove_dir_all: could not remove directory")
     end

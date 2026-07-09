@@ -10,43 +10,43 @@ _None._
 
 ## Functions
 
-### `exists(foreign path: String) -> bool`
+### `exists(path: String) -> bool`
 
 Return whether a filesystem path exists.
 
 **Parameters**
-1. `foreign path: String` - Filesystem path.
+1. `path: String` - Filesystem path.
 
 **Returns**
 - `true` if the path exists, otherwise `false`.
 
 ---
 
-### `is_file(foreign path: String) -> bool`
+### `is_file(path: String) -> bool`
 
 Return whether a filesystem path refers to a regular file.
 
 **Parameters**
-1. `foreign path: String` - Filesystem path.
+1. `path: String` - Filesystem path.
 
 **Returns**
 - `true` only for regular files.
 
 ---
 
-### `is_dir(foreign path: String) -> bool`
+### `is_dir(path: String) -> bool`
 
 Return whether a filesystem path refers to a directory.
 
 **Parameters**
-1. `foreign path: String` - Filesystem path.
+1. `path: String` - Filesystem path.
 
 **Returns**
 - `true` only for directories.
 
 ---
 
-### `throws mkdir(foreign path: String) -> void`
+### `throws mkdir(path: String) -> void`
 
 Create a directory.
 
@@ -54,11 +54,11 @@ Create a directory.
 - Throws on failure.
 
 **Parameters**
-1. `foreign path: String` - Directory path.
+1. `path: String` - Directory path.
 
 ---
 
-### `throws mkdir_all(foreign path: String) -> void`
+### `throws mkdir_all(path: String) -> void`
 
 Create a directory path and any missing parents.
 
@@ -66,11 +66,11 @@ Create a directory path and any missing parents.
 - Throws on failure.
 
 **Parameters**
-1. `foreign path: String` - Directory path.
+1. `path: String` - Directory path.
 
 ---
 
-### `throws remove_file(foreign path: String) -> void`
+### `throws remove_file(path: String) -> void`
 
 Remove a file.
 
@@ -78,11 +78,11 @@ Remove a file.
 - Throws on failure.
 
 **Parameters**
-1. `foreign path: String` - File path.
+1. `path: String` - File path.
 
 ---
 
-### `throws remove_dir(foreign path: String) -> void`
+### `throws remove_dir(path: String) -> void`
 
 Remove an empty directory.
 
@@ -90,11 +90,11 @@ Remove an empty directory.
 - Throws on failure.
 
 **Parameters**
-1. `foreign path: String` - Directory path.
+1. `path: String` - Directory path.
 
 ---
 
-### `throws remove_dir_all(foreign path: String) -> void`
+### `throws remove_dir_all(path: String) -> void`
 
 Remove a directory tree recursively.
 
@@ -102,7 +102,7 @@ Remove a directory tree recursively.
 - Throws on failure.
 
 **Parameters**
-1. `foreign path: String` - Directory path.
+1. `path: String` - Directory path.
 
 **Notes**
 - Implemented in Jik by composing `read_dir`, predicates, and removal primitives.
