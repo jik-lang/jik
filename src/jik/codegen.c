@@ -2702,7 +2702,7 @@ jik_codegen_emit_embedded_code(JikCodeGenerator *cg)
     JikNode *nd;
     for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.embedded_C); i++) {
         nd = VecJikNode_get(cg->ast->val_program.embedded_C, i);
-        jik_writer_write(&cg->cw, JIK_STRING_NCAT("// --- embed ", nd->token->filepath));
+        jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("// --- embed ", nd->token->filepath));
         jik_writer_write(&cg->cw, nd->val_code);
         jik_writer_write_line(&cg->cw, "// --- end ");
     }
