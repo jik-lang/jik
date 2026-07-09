@@ -60,7 +60,7 @@ jik_module_path_is_package(char *path)
 static char *
 trim_jik_ext(char *path)
 {
-    size_t len = strlen(path);
+    size_t len        = strlen(path);
     size_t suffix_len = strlen(".jik");
     if (len >= 4 && strcmp(path + len - suffix_len, ".jik") == 0) {
         char *res = jik_alloc(len - suffix_len + 1);
@@ -83,10 +83,14 @@ get_proper_path(char *path, JikContext *ctx)
         return JIK_STRING_NCAT(ctx->conf.jiklib_path, tail);
     }
     else if (jik_module_path_is_package(path)) {
-        jik_diag_fatal_error_if(!ctx->conf.jik_pkg_path, "jik package path not set", "set the environment variable JIK_PKG_PATH to the packages directory");
-        char *tail = strdup(path + 4);
+        jik_diag_fatal_error_if(
+            !ctx->conf.jik_pkg_path,
+            "jik package path not set",
+            "set the environment variable JIK_PKG_PATH to the packages directory");
+        char *tail     = strdup(path + 4);
         char *pkg_name = trim_jik_ext(tail);
-        return JIK_STRING_NCAT(ctx->conf.jik_pkg_path, "/packages/", pkg_name, "/src/", pkg_name, ".jik");
+        return JIK_STRING_NCAT(
+            ctx->conf.jik_pkg_path, "/packages/", pkg_name, "/src/", pkg_name, ".jik");
     }
     return path;
 }
@@ -118,7 +122,8 @@ jik_module_path_is_absolute(char *path)
 static char *
 jik_module_resolve_use_path(char *use_path, char *current_source_path)
 {
-    if (jik_module_path_is_stdlib(use_path) || jik_module_path_is_package(use_path) || jik_module_path_is_absolute(use_path)) {
+    if (jik_module_path_is_stdlib(use_path) || jik_module_path_is_package(use_path) ||
+        jik_module_path_is_absolute(use_path)) {
         return use_path;
     }
 
@@ -488,17 +493,16 @@ jik_compiler_build(JikContext *ctx, bool run)
     char *linker_args    = jik_get_linker_args(ctx);
     char *quoted_out_bin = shell_quote_arg(out_bin);
     char *quoted_include = shell_quote_arg(ctx->conf.jik_core_include_path);
-    cmd                  = JIK_STRING_NCAT(
-        compiler,
-        " -x c ",
-        cc_flags,
-        " -I ",
-        quoted_include,
-        " -o ",
-        quoted_out_bin,
-        " -",
-        " ",
-        linker_args);
+    cmd                  = JIK_STRING_NCAT(compiler,
+                          " -x c ",
+                          cc_flags,
+                          " -I ",
+                          quoted_include,
+                          " -o ",
+                          quoted_out_bin,
+                          " -",
+                          " ",
+                          linker_args);
     jik_compiler_verbose(&ctx->conf, "compile", cmd);
     FILE *cc_pipe = POPEN(cmd, "w");
     jik_diag_fatal_error_if(cc_pipe == NULL, "error opening CC", "");
@@ -526,12 +530,8 @@ jik_compiler_memchk(JikContext *ctx)
     char *out_bin        = jik_string_cat(ctx->conf.target_name, OUT_EXT);
     char *quoted_out_bin = shell_quote_arg(out_bin);
     char *quoted_include = shell_quote_arg(ctx->conf.jik_core_include_path);
-    char *cmd            = JIK_STRING_NCAT(compiler,
-                                           " -g -O0 -x c -I ",
-                                           quoted_include,
-                                           " -o ",
-                                           quoted_out_bin,
-                                           " -");
+    char *cmd =
+        JIK_STRING_NCAT(compiler, " -g -O0 -x c -I ", quoted_include, " -o ", quoted_out_bin, " -");
     jik_compiler_verbose(&ctx->conf, "compile", cmd);
     FILE *cc_pipe = POPEN(cmd, "w");
     jik_diag_fatal_error_if(cc_pipe == NULL, "error opening CC", "");

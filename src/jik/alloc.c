@@ -74,7 +74,7 @@ jik_alloc(size_t size)
         n->next        = c;
         jik_arena.head = n;
         c              = n;
-        off = align_up(c->used, A);
+        off            = align_up(c->used, A);
     }
 
     char *p = c->data + off;

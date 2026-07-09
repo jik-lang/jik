@@ -198,9 +198,8 @@ jik_lexer_decode_escape(JikLexer *lex, JikToken *tok, bool allow_nul)
     case 'x': {
         int hi = jik_lexer_hex_digit_value(jik_lexer_peek_char(lex, 1));
         int lo = jik_lexer_hex_digit_value(jik_lexer_peek_char(lex, 2));
-        jik_diag_fatal_error_if(hi < 0 || lo < 0,
-                                "syntax error: invalid hex escape sequence",
-                                jik_token_to_text(tok));
+        jik_diag_fatal_error_if(
+            hi < 0 || lo < 0, "syntax error: invalid hex escape sequence", jik_token_to_text(tok));
         char value = (char)((hi << 4) | lo);
         if (!allow_nul && value == '\0') {
             jik_diag_fatal_error("syntax error: \\x00 is not supported in string literals",

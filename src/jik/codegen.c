@@ -483,7 +483,7 @@ get_callee_args(JikCodeGenerator *cg, JikNode *nd);
 char *
 get_builtin_call_site_file(JikCodeGenerator *cg, JikNode *nd)
 {
-    char    *args      = get_callee_args(cg, nd);
+    char *args = get_callee_args(cg, nd);
     return JIK_STRING_NCAT("jik_site_file(", args, ")");
 }
 
@@ -498,7 +498,7 @@ get_builtin_call_site_line(JikCodeGenerator *cg, JikNode *nd)
 char *
 get_builtin_call_site_code(JikCodeGenerator *cg, JikNode *nd)
 {
-    char    *args      = get_callee_args(cg, nd);
+    char *args = get_callee_args(cg, nd);
     return JIK_STRING_NCAT("jik_site_code(", args, ")");
 }
 
@@ -617,7 +617,7 @@ get_callee_args(JikCodeGenerator *cg, JikNode *nd)
     }
     // TODO: duplicate data and free string buffer
     if (nd->val_call.auto_region) {
-        char *pfx = n == 0 ? "" : ", ";
+        char *pfx        = n == 0 ? "" : ", ";
         char *region_arg = get_alloc_dest(nd->val_call.alloc_spec);
         char_buffer_append(tr, JIK_STRING_NCAT(pfx, region_arg));
     }
@@ -2352,12 +2352,10 @@ jik_codegen_emit_vec_declaration_for_type(JikCodeGenerator *cg, JikType *t)
     if (declared) {
         return;
     }
-    jik_writer_write_line(&cg->cw,
-                          JIK_STRING_NCAT("JIK_DECLARE_VEC(",
-                                          t->mangled_name,
-                                          ", ",
-                                          t->val_vec.elem_type->C_name,
-                                          ");"));
+    jik_writer_write_line(
+        &cg->cw,
+        JIK_STRING_NCAT(
+            "JIK_DECLARE_VEC(", t->mangled_name, ", ", t->val_vec.elem_type->C_name, ");"));
     TabBool_set(cg->declared_vec_types, t->mangled_name, true);
     jik_codegen_register_print_function(cg, t->mangled_name, NULL);
 }
@@ -2567,12 +2565,10 @@ jik_codegen_emit_vec_definition_for_type(JikCodeGenerator *cg, JikType *t)
     if (defined) {
         return;
     }
-    jik_writer_write_line(&cg->cw,
-                          JIK_STRING_NCAT("JIK_DEFINE_VEC(",
-                                          t->mangled_name,
-                                          ", ",
-                                          t->val_vec.elem_type->C_name,
-                                          ");"));
+    jik_writer_write_line(
+        &cg->cw,
+        JIK_STRING_NCAT(
+            "JIK_DEFINE_VEC(", t->mangled_name, ", ", t->val_vec.elem_type->C_name, ");"));
     TabBool_set(cg->defined_vec_types, t->mangled_name, true);
     jik_codegen_emit_vec_print_function_for_type(cg, t, t->mangled_name);
 }
@@ -2807,11 +2803,8 @@ jik_codegen_emit_struct_copy_function(JikCodeGenerator *cg, JikType *struct_type
         char *src_field = JIK_STRING_NCAT("src->", item.key);
         jik_writer_write_line(
             &cg->cw,
-            JIK_STRING_NCAT(".",
-                            item.key,
-                            " = ",
-                            jik_codegen_copy_atom_expr(item.value, src_field, "a"),
-                            ","));
+            JIK_STRING_NCAT(
+                ".", item.key, " = ", jik_codegen_copy_atom_expr(item.value, src_field, "a"), ","));
     }
 
     jik_writer_dedent(&cg->cw);
