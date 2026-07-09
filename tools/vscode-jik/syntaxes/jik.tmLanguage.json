@@ -92,7 +92,7 @@
     "builtin-functions": {
       "patterns": [
         {
-          "match": "\\b(print|println|concat|assert|push|pop|len|clear|site|site_file|site_line|site_code|fail|error_msg|error_code)\\b(?=\\s*\\()",
+          "match": "\\b(print|println|concat|copy|assert|push|pop|len|clear|site|site_file|site_line|site_code|fail|error_msg|error_code)\\b(?=\\s*\\()",
           "name": "support.function.builtin.jik"
         }
       ]
