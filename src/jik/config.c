@@ -138,6 +138,9 @@ jik_config_make(int argc, char **argv)
             else if (strcmp(argv[i], "--format-c") == 0) {
                 conf.format_c = true;
             }
+            else if (strcmp(argv[i], "--preview") == 0) {
+                conf.preview = true;
+            }
             else if (strcmp(argv[i], "--release") == 0) {
                 conf.release = true;
             }

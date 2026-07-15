@@ -504,6 +504,10 @@ jik_compiler_build(JikContext *ctx, bool run)
                           " ",
                           linker_args);
     jik_compiler_verbose(&ctx->conf, "compile", cmd);
+    if (ctx->conf.preview) {
+        printf("%s\n", cmd);
+        return;
+    }
     FILE *cc_pipe = POPEN(cmd, "w");
     jik_diag_fatal_error_if(cc_pipe == NULL, "error opening CC", "");
     fputs(ctx->translation, cc_pipe);

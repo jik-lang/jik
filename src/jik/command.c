@@ -67,6 +67,12 @@
         .num_args = 0,                                                                             \
     }
 
+#define JIK_OPT_PREVIEW                                                                            \
+    {                                                                                              \
+        .name = "--preview", .help_desc = "Print the compiler command without running it.",         \
+        .num_args = 0,                                                                             \
+    }
+
 #define JIK_OPT_UNSAFE_NO_BOUNDS_CHECKS                                                            \
     {                                                                                              \
         .name      = "--unsafe-no-bounds-checks",                                                  \
@@ -150,12 +156,13 @@ const JikCommand JIK_COMMANDS[] = {
             {
                 JIK_ARG_INPUT_FILE,
             },
-        .num_options = 7,
+        .num_options = 8,
         .options =
             {
                 JIK_OPT_OUT,
                 JIK_OPT_CC,
                 JIK_OPT_CCFLAGS,
+                JIK_OPT_PREVIEW,
                 JIK_OPT_RELEASE,
                 JIK_OPT_UNSAFE_NO_BOUNDS_CHECKS,
                 JIK_OPT_REGION_STATS,

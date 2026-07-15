@@ -46,6 +46,8 @@ Options:
   Linux.
 - `--cc <compiler_name>`: C compiler to use.
 - `--ccflags <args>`: Extra C compiler arguments.
+- `--preview`: Print the compiler command without running it or creating an
+  executable.
 - `--release`: Build with release-oriented host compiler flags.
 - `--unsafe-no-bounds-checks`: Disable runtime vector bounds checks
 - `--region-stats`: Print runtime region statistics at program exit.
@@ -55,6 +57,12 @@ Example:
 
 ```sh
 jik build hello.jik --release
+```
+
+To inspect the compiler command without running it:
+
+```sh
+jik build hello.jik --preview
 ```
 
 ### `jik tran <filepath>`

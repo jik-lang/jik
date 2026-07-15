@@ -18,6 +18,7 @@ typedef struct JikConfig {
     char *jik_pkg_path;
     bool  embed_core;
     bool  format_c;
+    bool  preview;
     bool  release;
     bool  region_stats;
     bool  unsafe_no_bounds_checks;
