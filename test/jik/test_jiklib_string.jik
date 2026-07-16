@@ -16,6 +16,15 @@ func test_string(ts):
     test::suite_assert(ts, s4 == s1, site())
 end
 
+func test_string_from_primitives(ts):
+    test::suite_assert(ts, string::from_int(42, _) == "42", site())
+    test::suite_assert(ts, string::from_int(-42, _) == "-42", site())
+    test::suite_assert(ts, string::from_double(3.14, _) == "3.1400000000000001", site())
+    test::suite_assert(ts, string::from_bool(true, _) == "true", site())
+    test::suite_assert(ts, string::from_bool(false, _) == "false", site())
+    test::suite_assert(ts, string::from_char('x', _) == "x", site())
+end
+
 
 func test_string_split(ts):
     s := "foo bar baz"
@@ -207,6 +216,7 @@ end
 
 func run_tests(ts):
     test_string(ts)
+    test_string_from_primitives(ts)
     test_string_split(ts)
     test_string_join(ts)
     test_string_find(ts)

@@ -10,6 +10,38 @@ use "jik/strbuf"
 //      API
 // -------------------------------------------------------------
 
+/// Convert an integer to a string.
+///
+/// @param value Integer value.
+/// @param region Allocation region for the result.
+/// @returns A newly allocated decimal string.
+extern func jik_int_tostr as
+    from_int(value: int, region: Region) -> String
+
+/// Convert a double to a string.
+///
+/// @param value Double value.
+/// @param region Allocation region for the result.
+/// @returns A newly allocated string representation of the double.
+extern func jik_double_tostr as
+    from_double(value: double, region: Region) -> String
+
+/// Convert a boolean to a string.
+///
+/// @param value Boolean value.
+/// @param region Allocation region for the result.
+/// @returns `"true"` or `"false"`.
+extern func jik_bool_tostr as
+    from_bool(value: bool, region: Region) -> String
+
+/// Convert a character to a string.
+///
+/// @param value Character value.
+/// @param region Allocation region for the result.
+/// @returns A newly allocated one-byte string.
+extern func jik_char_tostr as
+    from_char(value: char, region: Region) -> String
+
 /// Return a substring of `s` from index `start` (inclusive) to `end` (exclusive).
 ///
 /// @param s Source string.

@@ -11,6 +11,58 @@ _None._
 
 ## Functions
 
+### `from_int(value: int, region: Region) -> String`
+
+Convert an integer to a string.
+
+**Parameters**
+1. `value: int` - Integer value.
+2. `region: Region` - Allocation region for the result.
+
+**Returns**
+- A newly allocated decimal string.
+
+---
+
+### `from_double(value: double, region: Region) -> String`
+
+Convert a double to a string.
+
+**Parameters**
+1. `value: double` - Double value.
+2. `region: Region` - Allocation region for the result.
+
+**Returns**
+- A newly allocated string representation of the double.
+
+---
+
+### `from_bool(value: bool, region: Region) -> String`
+
+Convert a boolean to a string.
+
+**Parameters**
+1. `value: bool` - Boolean value.
+2. `region: Region` - Allocation region for the result.
+
+**Returns**
+- `"true"` or `"false"`.
+
+---
+
+### `from_char(value: char, region: Region) -> String`
+
+Convert a character to a string.
+
+**Parameters**
+1. `value: char` - Character value.
+2. `region: Region` - Allocation region for the result.
+
+**Returns**
+- A newly allocated one-byte string.
+
+---
+
 ### `concat(foreign left: String, foreign right: String, region: Region) -> String`
 
 Concatenate two strings.
