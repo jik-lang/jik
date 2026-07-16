@@ -194,6 +194,16 @@ jik_token_type_pretty_name(JikTokenType type)
         return ".";
     case TOK_QMARK:
         return "?";
+    case TOK_DIRECTIVE_PLATFORM:
+        return "@platform";
+    case TOK_DIRECTIVE_INCLUDEDIR:
+        return "@includedir";
+    case TOK_DIRECTIVE_LIBDIR:
+        return "@libdir";
+    case TOK_DIRECTIVE_LINK:
+        return "@link";
+    case TOK_DIRECTIVE_COPY:
+        return "@copy";
     case TOK_EMBEDDED_C:
         return "embedded C block";
     case TOK_EOF:

@@ -648,6 +648,32 @@ jik_lexer_tokenize(JikLexer *lex)
             tok = jik_lexer_make_token(lex, TOK_ERROR, "");
             jik_diag_fatal_error("syntax error", jik_token_to_text(&tok));
         }
+        else if (strncmp(jik_lexer_current_ptr(lex), "@platform", (int)strlen("@platform")) == 0) {
+            tok = jik_lexer_make_token(lex, TOK_DIRECTIVE_PLATFORM, "@platform");
+            VecJikToken_push(tokens, tok);
+            jik_lexer_advance_by(lex, strlen("@platform"));
+        }
+        else if (strncmp(jik_lexer_current_ptr(lex), "@includedir", (int)strlen("@includedir")) ==
+                 0) {
+            tok = jik_lexer_make_token(lex, TOK_DIRECTIVE_INCLUDEDIR, "@includedir");
+            VecJikToken_push(tokens, tok);
+            jik_lexer_advance_by(lex, strlen("@includedir"));
+        }
+        else if (strncmp(jik_lexer_current_ptr(lex), "@libdir", (int)strlen("@libdir")) == 0) {
+            tok = jik_lexer_make_token(lex, TOK_DIRECTIVE_LIBDIR, "@libdir");
+            VecJikToken_push(tokens, tok);
+            jik_lexer_advance_by(lex, strlen("@libdir"));
+        }
+        else if (strncmp(jik_lexer_current_ptr(lex), "@link", (int)strlen("@link")) == 0) {
+            tok = jik_lexer_make_token(lex, TOK_DIRECTIVE_LINK, "@link");
+            VecJikToken_push(tokens, tok);
+            jik_lexer_advance_by(lex, strlen("@link"));
+        }
+        else if (strncmp(jik_lexer_current_ptr(lex), "@copy", (int)strlen("@copy")) == 0) {
+            tok = jik_lexer_make_token(lex, TOK_DIRECTIVE_COPY, "@copy");
+            VecJikToken_push(tokens, tok);
+            jik_lexer_advance_by(lex, strlen("@copy"));
+        }
         // TODO: refactor into two-char token helper
         else if (strncmp(jik_lexer_current_ptr(lex), "::", 2) == 0) {
             jik_lexer_advance_by(lex, 2);

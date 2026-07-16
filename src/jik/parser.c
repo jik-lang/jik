@@ -25,6 +25,8 @@ jik_parser_init(JikParser *p, JikContext *ctx)
     VecJikScope_push(p->contexts, jik_scope_new(NULL));
     p->parsing_struct  = false;
     p->container_depth = 0;
+    p->build_platform  = JIK_BUILD_PLATFORM_ALL;
+    p->build_filepath  = NULL;
 }
 
 static JikToken *
@@ -1341,12 +1343,99 @@ jik_parser_parse_decl_prefix(JikParser *p)
     return px;
 }
 
+static bool
+jik_parser_is_build_directive(JikTokenType type)
+{
+    return type == TOK_DIRECTIVE_INCLUDEDIR || type == TOK_DIRECTIVE_LIBDIR ||
+           type == TOK_DIRECTIVE_LINK || type == TOK_DIRECTIVE_COPY;
+}
+
+static void
+jik_parser_parse_platform_directive(JikParser *p)
+{
+    jik_parser_eat_token(p, TOK_DIRECTIVE_PLATFORM);
+    jik_parser_eat_token(p, TOK_LPAREN);
+    JikToken *platform = jik_parser_eat_token(p, TOK_ID);
+
+    if (strcmp(platform->lexeme, "all") == 0) {
+        p->build_platform = JIK_BUILD_PLATFORM_ALL;
+    }
+    else if (strcmp(platform->lexeme, "windows") == 0) {
+        p->build_platform = JIK_BUILD_PLATFORM_WINDOWS;
+    }
+    else if (strcmp(platform->lexeme, "linux") == 0) {
+        p->build_platform = JIK_BUILD_PLATFORM_LINUX;
+    }
+    else {
+        jik_diag_fatal_error(JIK_STRING_NCAT("unknown build platform: ", platform->lexeme),
+                             jik_token_to_text(platform));
+    }
+
+    jik_parser_eat_token(p, TOK_RPAREN);
+    jik_parser_eat_newlines(p);
+}
+
+static JikBuildDirectiveKind
+jik_parser_build_directive_kind(JikTokenType type)
+{
+    switch (type) {
+    case TOK_DIRECTIVE_INCLUDEDIR:
+        return JIK_BUILD_INCLUDE_DIR;
+    case TOK_DIRECTIVE_LIBDIR:
+        return JIK_BUILD_LIB_DIR;
+    case TOK_DIRECTIVE_LINK:
+        return JIK_BUILD_LINK;
+    case TOK_DIRECTIVE_COPY:
+        return JIK_BUILD_COPY;
+    default:
+        assert(false);
+        return JIK_BUILD_INCLUDE_DIR;
+    }
+}
+
+static void
+jik_parser_parse_build_directive(JikParser *p)
+{
+    JikToken             *directive = jik_parser_current_token(p);
+    JikBuildDirectiveKind kind      = jik_parser_build_directive_kind(directive->type);
+    jik_parser_eat_token(p, directive->type);
+    jik_parser_eat_token(p, TOK_LPAREN);
+
+    VecString *args = VecString_new_empty();
+    JikToken  *next = jik_parser_current_token(p);
+    jik_diag_fatal_error_if(next == NULL || next->type == TOK_RPAREN,
+                            "build directive requires at least one argument",
+                            jik_token_to_text(directive));
+
+    while (true) {
+        JikToken *arg = jik_parser_eat_token(p, TOK_STRING);
+        VecString_push(args, arg->lexeme);
+        next = jik_parser_current_token(p);
+        if (next == NULL || next->type != TOK_COMMA) {
+            break;
+        }
+        jik_parser_eat_token(p, TOK_COMMA);
+    }
+
+    jik_parser_eat_token(p, TOK_RPAREN);
+    jik_parser_eat_newlines(p);
+    VecJikBuildDirective_push(
+        p->ctx->build_directives,
+        (JikBuildDirective){
+            .kind = kind, .platform = p->build_platform, .args = args, .token = directive});
+}
+
 static void
 jik_parser_parse(JikParser *p)
 {
     JikToken *tok;
     JikNode  *nd;
     while ((tok = jik_parser_current_token(p)) != NULL) {
+        // Each new parsed module starts with build platform "all"
+        if (p->build_filepath == NULL || strcmp(p->build_filepath, tok->filepath) != 0) {
+            p->build_filepath = tok->filepath;
+            p->build_platform = JIK_BUILD_PLATFORM_ALL;
+        }
         if (tok->type == TOK_NEWLINE) {
             jik_parser_eat_token(p, TOK_NEWLINE);
             continue;
@@ -1409,6 +1498,12 @@ jik_parser_parse(JikParser *p)
         }
         else if (tok->type == TOK_KWD_USE) {
             jik_parser_skip_usage(p);
+        }
+        else if (tok->type == TOK_DIRECTIVE_PLATFORM) {
+            jik_parser_parse_platform_directive(p);
+        }
+        else if (jik_parser_is_build_directive(tok->type)) {
+            jik_parser_parse_build_directive(p);
         }
         else if (tok->type == TOK_EMBEDDED_C) {
             nd = jik_node_new_embedded_C(tok->lexeme, NULL, tok);

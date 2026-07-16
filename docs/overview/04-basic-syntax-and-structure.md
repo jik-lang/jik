@@ -10,6 +10,7 @@ A Jik module may consist of the following top-level entities:
 - global declarations written with `:=`
 - functions
 - data type definitions (enums, structs, variants)
+- embedded C blocks and native build directives
 
 
 ### 4.1 Functions

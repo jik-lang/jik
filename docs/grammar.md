@@ -78,6 +78,25 @@ Embedded C is copied through to the generated C translation. Non-ASCII text in
 embedded C therefore remains dependent on the host C compiler's handling of C
 source encoding.
 
+### Build Directives
+
+```ebnf
+build_directive ::= platform_directive | path_directive | link_directive
+platform_directive ::= "@platform" "(" ( "all" | "windows" | "linux" ) ")" newline
+path_directive ::= ( "@includedir" | "@libdir" | "@copy" )
+                   "(" string_literal { "," string_literal } ")" newline
+link_directive ::= "@link" "(" string_literal { "," string_literal } ")" newline
+```
+
+Build directives are top-level declarations. Each physical module starts with platform `all`.
+`@platform(windows)` or `@platform(linux)` selects the platform for subsequent build directives in
+that module, while `@platform(all)` returns to platform-independent requirements. Platform state
+does not cross module boundaries and does not conditionally compile Jik declarations or embedded C.
+
+Relative include directories, library directories, and copied files are resolved from the source
+file containing the directive. Directives from all reachable modules are applied by `build`, `run`,
+and `memchk`.
+
 ## Types
 
 ```ebnf
@@ -132,7 +151,7 @@ a name before subscripting, member access, mutation, or iteration.
 
 ```ebnf
 program ::= { newline | use_decl | global_decl | top_decl | variant_decl
-            | enum_decl | embed_block }
+            | enum_decl | embed_block | build_directive }
 ```
 
 ### Imports

@@ -127,4 +127,31 @@ Extern structs without an init function cannot be default-constructed:
 f: io::File // error because io::File has no extern init function
 ```
 
+### 16.4 Native build requirements
+
+An FFI module can declare the include paths, library paths, libraries, and runtime files needed to
+build programs that import it:
+
+```jik
+@includedir("../vendor/raylib/include")
+
+@platform(windows)
+@libdir("../vendor/raylib/lib/windows")
+@link("raylib", "gdi32", "winmm")
+@copy("../vendor/raylib/bin/windows/raylib.dll")
+
+@platform(linux)
+@libdir("../vendor/raylib/lib/linux")
+@link("raylib", "m", "pthread", "dl")
+```
+
+Every module begins in platform `all`. A `@platform` directive selects the platform for later build
+directives in the same physical file; `@platform(all)` restores platform-independent behavior.
+Relative paths are resolved from the file containing the directive.
+
+Requirements are collected transitively from every reachable module. `@includedir` adds header
+search directories, `@libdir` adds library search directories, `@link` links named libraries, and
+`@copy` copies files beside the executable after a successful compilation. Each directive accepts
+one or more comma-separated string arguments.
+
 ---

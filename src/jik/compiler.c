@@ -77,9 +77,6 @@ get_proper_path(char *path, JikContext *ctx)
 {
     if (jik_module_path_is_stdlib(path)) {
         char *tail = strdup(path + 4);
-        if (strcmp(tail, "math.jik") == 0) {
-            ctx->math_used = true;
-        }
         return JIK_STRING_NCAT(ctx->conf.jiklib_path, tail);
     }
     else if (jik_module_path_is_package(path)) {
@@ -117,6 +114,74 @@ static bool
 jik_module_path_is_absolute(char *path)
 {
     return path[0] == '/' || path[0] == '\\' || (strlen(path) > 2 && path[1] == ':');
+}
+
+static bool
+jik_build_directive_is_active(JikBuildDirective *directive)
+{
+    if (directive->platform == JIK_BUILD_PLATFORM_ALL) {
+        return true;
+    }
+#ifdef _WIN32
+    return directive->platform == JIK_BUILD_PLATFORM_WINDOWS;
+#else
+    return directive->platform == JIK_BUILD_PLATFORM_LINUX;
+#endif
+}
+
+static char *
+jik_build_resolve_path(JikBuildDirective *directive, char *path)
+{
+    if (jik_module_path_is_absolute(path)) {
+        return path;
+    }
+    char *dir = jik_module_dirname(directive->token->filepath);
+    return dir[0] == '\0' ? path : JIK_STRING_NCAT(dir, "/", path);
+}
+
+static char *
+jik_build_get_compile_args(JikContext *ctx)
+{
+    CharBuffer *args = char_buffer_new("");
+    for (size_t i = 0; i < VecJikBuildDirective_size(ctx->build_directives); i++) {
+        JikBuildDirective *directive = VecJikBuildDirective_get_ptr(ctx->build_directives, i);
+        if (!jik_build_directive_is_active(directive) || directive->kind != JIK_BUILD_INCLUDE_DIR) {
+            continue;
+        }
+        for (size_t j = 0; j < VecString_size(directive->args); j++) {
+            char *path = jik_build_resolve_path(directive, VecString_get(directive->args, j));
+            char_buffer_append(args, " -I ");
+            char_buffer_append(args, shell_quote_arg(path));
+        }
+    }
+    return args->data;
+}
+
+static char *
+jik_build_get_linker_args(JikContext *ctx)
+{
+    CharBuffer *args = char_buffer_new("");
+    for (size_t i = 0; i < VecJikBuildDirective_size(ctx->build_directives); i++) {
+        JikBuildDirective *directive = VecJikBuildDirective_get_ptr(ctx->build_directives, i);
+        if (!jik_build_directive_is_active(directive)) {
+            continue;
+        }
+        if (directive->kind == JIK_BUILD_LIB_DIR) {
+            for (size_t j = 0; j < VecString_size(directive->args); j++) {
+                char *path = jik_build_resolve_path(directive, VecString_get(directive->args, j));
+                char_buffer_append(args, " -L ");
+                char_buffer_append(args, shell_quote_arg(path));
+            }
+        }
+        else if (directive->kind == JIK_BUILD_LINK) {
+            for (size_t j = 0; j < VecString_size(directive->args); j++) {
+                char *flag = JIK_STRING_NCAT("-l", VecString_get(directive->args, j));
+                char_buffer_append(args, " ");
+                char_buffer_append(args, shell_quote_arg(flag));
+            }
+        }
+    }
+    return args->data;
 }
 
 static char *
@@ -205,7 +270,9 @@ jik_compiler_get_usages(JikContext *ctx, JikModule *mod)
                                   .tokens       = VecJikToken_new_empty(),
                                   .used_aliases = TabBool_new()};
             if (usage_not_first) {
-                jik_diag_fatal_error("syntax error", jik_token_to_text(tok));
+                jik_diag_fatal_error(
+                    "use declarations must precede build directives and other top-level declarations",
+                    jik_token_to_text(tok));
             }
             if (i + 1 >= n) {
                 jik_diag_fatal_error("syntax error", jik_token_to_text(tok));
@@ -457,16 +524,67 @@ jik_compiler_env(JikConfig *conf)
 }
 
 static char *
-jik_get_linker_args(JikContext *ctx)
+jik_path_basename(char *path)
 {
-#ifdef _WIN32
-    return "";
-#else
-    if (ctx->math_used) {
-        return "-lm";
+    char *slash     = strrchr(path, '/');
+    char *backslash = strrchr(path, '\\');
+    char *separator = slash;
+    if (backslash && (!separator || backslash > separator)) {
+        separator = backslash;
     }
-    return "";
-#endif
+    return separator ? separator + 1 : path;
+}
+
+static void
+jik_build_copy_file(char *source, char *destination, JikToken *token)
+{
+    if (strcmp(source, destination) == 0) {
+        return;
+    }
+
+    FILE *src = fopen(source, "rb");
+    jik_diag_fatal_error_if(
+        src == NULL, JIK_STRING_NCAT("copy source not found: ", source), jik_token_to_text(token));
+    bool failed = fseek(src, 0, SEEK_END) != 0;
+    long size   = failed ? -1 : ftell(src);
+    failed      = failed || size < 0 || fseek(src, 0, SEEK_SET) != 0;
+    char *data  = failed ? NULL : jik_alloc((size_t)size + 1);
+    if (!failed && size > 0) {
+        failed = fread(data, 1, (size_t)size, src) != (size_t)size;
+    }
+    int src_close = fclose(src);
+    failed        = failed || src_close != 0;
+    jik_diag_fatal_error_if(
+        failed, JIK_STRING_NCAT("error reading copy source: ", source), jik_token_to_text(token));
+
+    FILE *dst = fopen(destination, "wb");
+    jik_diag_fatal_error_if(dst == NULL,
+                            JIK_STRING_NCAT("cannot write copied file: ", destination),
+                            jik_token_to_text(token));
+    failed = size > 0 && fwrite(data, 1, (size_t)size, dst) != (size_t)size;
+    failed = fclose(dst) != 0 || failed;
+    jik_diag_fatal_error_if(
+        failed, JIK_STRING_NCAT("error copying file to: ", destination), jik_token_to_text(token));
+}
+
+static void
+jik_build_copy_files(JikContext *ctx, char *out_bin)
+{
+    char *output_dir = jik_module_dirname(out_bin);
+    for (size_t i = 0; i < VecJikBuildDirective_size(ctx->build_directives); i++) {
+        JikBuildDirective *directive = VecJikBuildDirective_get_ptr(ctx->build_directives, i);
+        if (!jik_build_directive_is_active(directive) || directive->kind != JIK_BUILD_COPY) {
+            continue;
+        }
+        for (size_t j = 0; j < VecString_size(directive->args); j++) {
+            char *source = jik_build_resolve_path(directive, VecString_get(directive->args, j));
+            char *name   = jik_path_basename(source);
+            char *destination =
+                output_dir[0] == '\0' ? name : JIK_STRING_NCAT(output_dir, "/", name);
+            jik_compiler_verbose(&ctx->conf, "copy", JIK_STRING_NCAT(source, " -> ", destination));
+            jik_build_copy_file(source, destination, directive->token);
+        }
+    }
 }
 
 static void
@@ -485,17 +603,19 @@ jik_compiler_build(JikContext *ctx, bool run)
 #endif
     char *release_cc_flags = ctx->conf.release ? "-O3" : "";
     char *user_cc_flags    = ctx->conf.cc_flags ? ctx->conf.cc_flags : "";
+    char *build_cc_args    = jik_build_get_compile_args(ctx);
     char *base_cc_flags    = *release_cc_flags
                                  ? JIK_STRING_NCAT(default_cc_flags, " ", release_cc_flags)
                                  : default_cc_flags;
     char *cc_flags =
         *user_cc_flags ? JIK_STRING_NCAT(base_cc_flags, " ", user_cc_flags) : base_cc_flags;
-    char *linker_args    = jik_get_linker_args(ctx);
+    char *linker_args    = jik_build_get_linker_args(ctx);
     char *quoted_out_bin = shell_quote_arg(out_bin);
     char *quoted_include = shell_quote_arg(ctx->conf.jik_core_include_path);
     cmd                  = JIK_STRING_NCAT(compiler,
                           " -x c ",
                           cc_flags,
+                          build_cc_args,
                           " -I ",
                           quoted_include,
                           " -o ",
@@ -513,6 +633,7 @@ jik_compiler_build(JikContext *ctx, bool run)
     fputs(ctx->translation, cc_pipe);
     int ret = PCLOSE(cc_pipe);
     jik_diag_fatal_error_if(ret != 0, "CC compilation failed", "");
+    jik_build_copy_files(ctx, out_bin);
 
     if (run) {
         jik_compiler_verbose(&ctx->conf, "run", out_bin);
@@ -534,14 +655,24 @@ jik_compiler_memchk(JikContext *ctx)
     char *out_bin        = jik_string_cat(ctx->conf.target_name, OUT_EXT);
     char *quoted_out_bin = shell_quote_arg(out_bin);
     char *quoted_include = shell_quote_arg(ctx->conf.jik_core_include_path);
-    char *cmd =
-        JIK_STRING_NCAT(compiler, " -g -O0 -x c -I ", quoted_include, " -o ", quoted_out_bin, " -");
+    char *build_cc_args  = jik_build_get_compile_args(ctx);
+    char *linker_args    = jik_build_get_linker_args(ctx);
+    char *cmd            = JIK_STRING_NCAT(compiler,
+                                " -g -O0 -x c",
+                                build_cc_args,
+                                " -I ",
+                                quoted_include,
+                                " -o ",
+                                quoted_out_bin,
+                                " -",
+                                linker_args);
     jik_compiler_verbose(&ctx->conf, "compile", cmd);
     FILE *cc_pipe = POPEN(cmd, "w");
     jik_diag_fatal_error_if(cc_pipe == NULL, "error opening CC", "");
     fputs(ctx->translation, cc_pipe);
     int ret = PCLOSE(cc_pipe);
     jik_diag_fatal_error_if(ret != 0, "CC compilation failed", "");
+    jik_build_copy_files(ctx, out_bin);
     char *vlgr_cmd = JIK_STRING_NCAT("valgrind "
                                      "--tool=memcheck "
                                      "--leak-check=full "

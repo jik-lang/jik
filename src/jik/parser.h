@@ -8,18 +8,20 @@
 #include "token.h"
 
 typedef struct JikParser {
-    JikContext  *ctx;
-    size_t       pos;
-    VecJikToken *tokens;
-    size_t       num_tokens;
-    JikNode     *ast;
-    VecJikScope *contexts;
-    VecJikNode  *nodes;
-    JikNode     *parsed_function;
-    JikNode     *parsed_struct;
-    bool         parsing_struct;
-    char        *parsing_struct_name;
-    size_t       container_depth;
+    JikContext      *ctx;
+    size_t           pos;
+    VecJikToken     *tokens;
+    size_t           num_tokens;
+    JikNode         *ast;
+    VecJikScope     *contexts;
+    VecJikNode      *nodes;
+    JikNode         *parsed_function;
+    JikNode         *parsed_struct;
+    bool             parsing_struct;
+    char            *parsing_struct_name;
+    size_t           container_depth;
+    JikBuildPlatform build_platform;
+    char            *build_filepath;
 } JikParser;
 
 void

@@ -65,6 +65,11 @@ To inspect the compiler command without running it:
 jik build hello.jik --preview
 ```
 
+Reachable modules may contain native build directives such as `@includedir`, `@libdir`, `@link`,
+and `@copy`. Active directives are applied transitively by `build` and `run`; copied files are placed
+beside the produced executable. `@platform(windows)`, `@platform(linux)`, and `@platform(all)` select
+the platform for subsequent build directives in the same source file.
+
 ### `jik tran <filepath>`
 
 Translate a Jik source file to C.
