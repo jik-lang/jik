@@ -57,16 +57,32 @@ In the current package layout, `JIK_PKG_PATH` should point to a local clone of
 `https://github.com/jik-lang/jik-packages`, whose top-level `packages/` directory contains package
 source trees.
 
-For package imports, `use "pkg/<name>"` resolves to:
+For package entry-module imports, `use "pkg/<name>"` resolves to:
 
 ```text
 <JIK_PKG_PATH>/packages/<name>/src/<name>.jik
 ```
 
-For example, `use "pkg/csv"` resolves to:
+Imports with a path after the package name resolve below that package's `src/` directory:
+
+```text
+pkg/<name>/<path...> -> <JIK_PKG_PATH>/packages/<name>/src/<path...>.jik
+```
+
+For example:
+
+```jik
+use "pkg/csv"
+use "pkg/csv/reader"
+use "pkg/csv/utils/foo"
+```
+
+resolve to:
 
 ```text
 <JIK_PKG_PATH>/packages/csv/src/csv.jik
+<JIK_PKG_PATH>/packages/csv/src/reader.jik
+<JIK_PKG_PATH>/packages/csv/src/utils/foo.jik
 ```
 
 During compilation, Jik resolves all modules reachable from the main module (e.g. the one which is the input to

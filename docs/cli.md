@@ -179,7 +179,7 @@ compilation.
 Imports under `pkg/...` are resolved from the directory configured by the
 `JIK_PKG_PATH` environment variable.
 
-For example:
+The package entry module:
 
 ```jik
 use "pkg/csv"
@@ -190,6 +190,19 @@ resolves to:
 ```text
 <JIK_PKG_PATH>/packages/csv/src/csv.jik
 ```
+
+Package submodules resolve below the package `src/` directory:
+
+```jik
+use "pkg/csv/reader"
+use "pkg/csv/utils/foo"
+```
+
+```text
+<JIK_PKG_PATH>/packages/csv/src/reader.jik
+<JIK_PKG_PATH>/packages/csv/src/utils/foo.jik
+```
+
 
 Use `jik env` to check the currently resolved value. It is printed as
 `pkg_path=<path>`. If `JIK_PKG_PATH` is not set and a program imports

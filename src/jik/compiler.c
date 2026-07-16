@@ -84,10 +84,20 @@ get_proper_path(char *path, JikContext *ctx)
             !ctx->conf.jik_pkg_path,
             "jik package path not set",
             "set the environment variable JIK_PKG_PATH to the packages directory");
-        char *tail     = strdup(path + 4);
-        char *pkg_name = trim_jik_ext(tail);
+        char *tail           = strdup(path + 4);
+        char *submodule_path = strchr(tail, '/');
+        if (submodule_path == NULL) {
+            char *pkg_name = trim_jik_ext(tail);
+            return JIK_STRING_NCAT(
+                ctx->conf.jik_pkg_path, "/packages/", pkg_name, "/src/", pkg_name, ".jik");
+        }
+
+        *submodule_path = '\0';
+        submodule_path++;
+        char *pkg_name    = tail;
+        char *module_path = trim_jik_ext(submodule_path);
         return JIK_STRING_NCAT(
-            ctx->conf.jik_pkg_path, "/packages/", pkg_name, "/src/", pkg_name, ".jik");
+            ctx->conf.jik_pkg_path, "/packages/", pkg_name, "/src/", module_path, ".jik");
     }
     return path;
 }
@@ -206,6 +216,33 @@ jik_compiler_validate_use_path(char *path, JikToken *tok)
     if (strchr(path, '\\') != NULL) {
         jik_diag_fatal_error("module paths in use declarations must use '/' separators",
                              jik_token_to_text(tok));
+    }
+
+    if (!jik_module_path_is_package(path)) {
+        return;
+    }
+
+    char *segment = path + 4;
+    if (*segment == '\0') {
+        jik_diag_fatal_error("package import path must include a package name", jik_token_to_text(tok));
+    }
+
+    while (true) {
+        char *segment_end = strchr(segment, '/');
+        size_t segment_len = segment_end ? (size_t)(segment_end - segment) : strlen(segment);
+        if (segment_len == 0) {
+            jik_diag_fatal_error("package import path contains an empty path segment",
+                                 jik_token_to_text(tok));
+        }
+        if ((segment_len == 1 && segment[0] == '.') ||
+            (segment_len == 2 && segment[0] == '.' && segment[1] == '.')) {
+            jik_diag_fatal_error("package import path cannot contain '.' or '..' path segments",
+                                 jik_token_to_text(tok));
+        }
+        if (segment_end == NULL) {
+            break;
+        }
+        segment = segment_end + 1;
     }
 }
 
