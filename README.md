@@ -170,6 +170,12 @@ end
 
 For more examples, look in the [examples](examples/) directory or inside the Jik [test suite](test/jik/).
 
+## Showcase
+
+- [Play Missile Defence](https://jik-lang.org/showcase/missile-defence/) — a Jik game using the [Raylib 6.0 wrapper](https://github.com/jik-lang/jik-packages/tree/main/packages/raylib).
+  - [Source code](https://github.com/jik-lang/jik-packages/tree/main/packages/raylib/examples/missile_defence)
+  - Note: the browser demo is a separate WebAssembly build
+
 
 <a id="quick-start"></a>
 ## Quick start
