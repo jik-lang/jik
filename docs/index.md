@@ -7,3 +7,4 @@ This site contains the Jik language overview, grammar reference, and standard li
 - For standard library (`jiklib`), see the [standard library documentation](overview/18-standard-library.md)
 - For syntax definition, see the [grammar reference](grammar.md)
 - For current implementation limitations, see [known issues and current limitations](known-issues.md)
+- For repository layout, development, and the roadmap, see [development notes](development.md)

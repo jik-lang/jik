@@ -1,6 +1,6 @@
 # Jik
 
-_A readable language with region-based memory management that compiles to C._
+_A readable, statically typed language that compiles to C and manages memory with regions._
 
 <p align="center">
   <img src="assets/logo/jik-logo.png" alt="Jik logo" width="280" />
@@ -22,20 +22,36 @@ _Open a ready-to-use Jik development environment._
 <a id="intro"></a>
 ## What is Jik?
 
-Jik is a statically typed programming language designed to be readable and easy to learn. It uses a straightforward source-to-C compilation model, region-based memory management
-and avoids garbage collection.
+Jik is a statically typed programming language with a straightforward source-to-C compilation model. It avoids both garbage collection and manual heap allocation.
 
-Jik provides practical language features such as type inference, optional type annotations, vectors, dictionaries, options, variants, and more, together with a small standard library. The
-result is a language that keeps common code concise and expressive, while still compiling to readable and predictable C.
+It provides type inference, optional type annotations, vectors, dictionaries, options, variants, error handling, a standard library, and a growing package ecosystem. The result is concise source code and predictable generated C.
 
-Jik's memory model is one of its defining ideas. Instead of garbage collection or manual heap allocation, composite values are allocated into explicit regions that determine their lifetime, with language rules that prevent invalid cross-region use.
-
+Jik's defining idea is its memory model: composite values are allocated into regions that determine their lifetime, while compiler checks prevent references across regions with incompatible lifetimes.
 
 ## Examples
 
-These examples provide a quick tour of common Jik features.
-
+<a id="hello-regions"></a>
 <details open>
+<summary><strong>Hello, Regions!</strong></summary>
+
+Functions that return composite values let the caller choose the destination region:
+
+```jik
+func default_actions(r: Region) -> Vec[String]:
+    return ["Open", "Save", "Quit"][r]
+end
+
+func main():
+    actions := default_actions(_)
+    println("first action: ", actions[0])
+end
+```
+
+`_` is the current function's local region. For a longer-lived result, pass an explicit `Region` or the region of another composite value.
+
+</details>
+
+<details>
 <summary><strong>Parsing a config</strong></summary>
 
 ```jik
@@ -46,24 +62,23 @@ func main():
     settings: Dict[String]
 
     for line in string::split(text, "\n", _):
-        if line == "":
+        parts := string::split(line, "=", _)
+        if len(parts) != 2:
             continue
         end
-        parts := string::split(line, "=", _)
-        if len(parts) == 2:
-            key := string::trim(parts[0], _)
-            value := string::trim(parts[1], _)
-            settings[key] = value
-        end
+        key := string::trim(parts[0], _)
+        value := string::trim(parts[1], _)
+        settings[key] = value
     end
 
     host := settings["host"]
     port := settings["port"]
     if host is Some and port is Some:
-        println("connecting to ", host?, ":", must string::to_int(port?))
+        println("connecting to ", host?, ":", port?)
     end
 end
 ```
+
 </details>
 
 <details>
@@ -88,91 +103,22 @@ end
 func main():
     show_div(12.0, 3.0)
     show_div(7.0, 0.0)
-    println("forced result: ", must safe_div(8.0, 2.0))
 end
 ```
+
 </details>
 
-<details>
-<summary><strong>Working with variants</strong></summary>
+## Explore more
 
-```jik
-variant Packet:
-    ID: int
-    TEXT: String
-    BYTES: Vec[int]
-end
+See the [examples](examples/) directory for [variants](examples/variants.jik), more [error handling](examples/error_handling.jik), [word count](examples/word_count.jik), [Dijkstra](examples/dijkstra.jik), [Newton's method](examples/newton.jik), [Game of Life](examples/game_of_life.jik), [Forth](examples/forth.jik), and [C interop](examples/ffi_demo.jik).
 
-func inspect(pkt):
-    if pkt is Packet.ID:
-        pkt[Packet.ID] = pkt[Packet.ID] + 1
-        println("next id: ", pkt[Packet.ID])
-    end
+## Packages
 
-    match pkt:
-        case Packet.ID{id}:
-            println("id packet: ", id)
-        case Packet.TEXT{text}:
-            println("text packet: ", text)
-        case Packet.BYTES{bytes}:
-            println("bytes packet, len = ", len(bytes), ", first = ", bytes[0])
-    end
-end
-
-func main():
-    pkt := Packet.ID{41}
-    println("raw id: ", pkt[Packet.ID])
-    inspect(pkt)
-
-    inspect(Packet.TEXT{"hello"})
-    inspect(Packet.BYTES{[10, 20, 30]})
-end
-```
-</details>
-
-<details>
-<summary><strong>Newton method</strong></summary>
-
-```jik
-use "jik/math"
-
-struct NewtonResult:
-    root: double
-    converged: bool
-    xs: Vec[double]
-end
-
-func solve(x0: double, tol: double, max_steps: int, r: Region) -> NewtonResult:
-    xs := [0 of 0.0][r]
-    x := x0
-    push(xs, x)
-
-    for step = 0, max_steps:
-        fx := math::cos(x) - x
-        if math::abs(fx) <= tol:
-            return NewtonResult{root = x, converged = true, xs = xs}[r]
-        end
-        x = x - fx / (-math::sin(x) - 1.0)
-        push(xs, x)
-    end
-
-    return NewtonResult{root = x, converged = false, xs = xs}[r]
-end
-
-func main():
-    res := solve(1.0, 1e-12, 20, _)
-    println("root: ", res.root)
-    println("steps: ", len(res.xs) - 1)
-    println("converged: ", res.converged)
-end
-```
-</details>
-
-For more examples, look in the [examples](examples/) directory or inside the Jik [test suite](test/jik/).
+[Jik packages](https://github.com/jik-lang/jik-packages) provide reusable libraries and C bindings for writing larger programs.
 
 ## Showcase
 
-- [Play Missile Defence](https://jik-lang.org/showcase/missile-defence/) — a Jik game using the [Raylib 6.0 wrapper](https://github.com/jik-lang/jik-packages/tree/main/packages/raylib).
+- [Play Missile Defence](https://jik-lang.org/showcase/missile-defence/) — a Jik game built with the [Raylib wrapper](https://github.com/jik-lang/jik-packages/tree/main/packages/raylib).
   - [Source code](https://github.com/jik-lang/jik-packages/tree/main/packages/raylib/examples/missile_defence)
   - Note: the browser demo is a separate WebAssembly build
 
@@ -188,14 +134,7 @@ To start programming in Jik:
 - (optional) add the extracted directory to `PATH`
 - if you plan to use `jik run` or `jik build`, either pass the compiler name with `--cc` or set `JIK_CC`, for example to `clang` or `gcc`
     - Windows: For a simple GCC setup, download from [WinLibs](https://winlibs.com/), and add its `bin` directory to `PATH`
-- create a file `hello.jik`:
-
-```jik
-func main():
-    println("Hello, Jik!")
-end
-```
-
+- save a copy of [the example](#hello-regions) as `hello.jik`
 - run it: `jik run hello.jik`
 - generate C output: `jik tran hello.jik`
 - build an executable: `jik build hello.jik`
@@ -224,34 +163,5 @@ Note that MSVC was not tested and is not the default build path in this reposito
 - [Region-based memory management](docs/overview/08-memory-management.md)
 - [CLI reference](docs/cli.md)
 - [Standard library documentation](docs/overview/18-standard-library.md)
-- [Jik packages](https://github.com/jik-lang/jik-packages)
+- [Development notes and roadmap](docs/development.md)
 - [Official Jik website](https://jik-lang.org/)
-
----
-
-<a id="repo-layout"></a>
-### Repository layout
-
-- `src/` - compiler source
-- `jiklib/` - Jik standard library modules
-- `support/` - Jik support library
-- `test/` - test suite
-- `docs/` - design notes and language [documentation](docs/overview.md)
-- `examples/` - examples of Jik code
-- `assets/` - assets (logo, etc)
-- `scripts/` - dev scripts
-- `tools/` - tools (syntax highlighting, etc)
-
-<a id="roadmap"></a>
-### Roadmap
-
-- **0.1.x - Implementation stabilisation**
-  - keep the language syntax stable (intended to be frozen)
-  - find and fix bugs in the compiler and in the support library (`core.h`)
-  - extend the standard library as needed
-  - expand the test suite
-  - write real programs in Jik to validate the implementation
-
-- **Later**
-  - bootstrapping: rewrite Jik in Jik
-  - concurrency support (may be implemented either in the C implementation or during bootstrapping)
