@@ -98,6 +98,7 @@ jik_node_new_function(char       *name,
     nd->val_function.info           = NULL;
     nd->val_function.ret_type_annot = NULL;
     nd->val_function.throws         = throws;
+    nd->val_function.is_region_safe         = true;
     nd->context                     = ctx;
     nd->token                       = tok;
     return nd;

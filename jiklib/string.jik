@@ -100,7 +100,7 @@ extern func jik_impl_string_copy as
 /// @param s Source string.
 /// @param prefix Prefix to check.
 /// @returns `true` if `s` starts with `prefix`, otherwise `false`.
-func starts_with(foreign s: String, foreign prefix: String) -> bool:
+func starts_with(s: String, prefix: String) -> bool:
     ns := len(s)
     np := len(prefix)
     if np > ns:
@@ -122,7 +122,7 @@ end
 /// @param s Source string.
 /// @param suffix Suffix to check.
 /// @returns `true` if `s` ends with `suffix`, otherwise `false`.
-func ends_with(foreign s: String, foreign suffix: String) -> bool:
+func ends_with(s: String, suffix: String) -> bool:
     ns := len(s)
     nf := len(suffix)
     if nf > ns:
@@ -172,7 +172,7 @@ end
 /// @param s Source string.
 /// @param needle Substring to search for.
 /// @returns First match byte index or `-1`.
-func find(foreign s: String, foreign needle: String) -> int:
+func find(s: String, needle: String) -> int:
     ns := len(s)
     nn := len(needle)
     if nn == 0:

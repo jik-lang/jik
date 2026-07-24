@@ -296,7 +296,9 @@ jik_codegen_emit_main_function(JikCodeGenerator *cg)
 static bool
 is_type_print_supported(JikType *t)
 {
-    (void)t;
+    if (t->name == TYPE_REGION || t->name == TYPE_SITE || t->name == TYPE_VOID) {
+        return false;        
+    }
     return true;
 }
 

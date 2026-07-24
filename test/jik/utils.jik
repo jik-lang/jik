@@ -32,6 +32,23 @@ func compile_fail_cmd(foreign src_path: String, foreign out_path: String, r):
     return concat(compiler_command(r), " tran ", src_path, " > ", out_path, " 2>&1", r)
 end
 
+func compile_check_cmd(foreign src_path: String, foreign out_path: String, r):
+    return concat(compiler_command(r), " check ", src_path, " > ", out_path, " 2>&1", r)
+end
+
+func assert_compile_succeeds_source(ts, foreign prog: String):
+    src_path := "test/jik/input/cs_temp.jik"
+    out_path := "test/jik/input/cs_temp.out"
+    remove_if_exists(src_path)
+    remove_if_exists(out_path)
+    write_string_to_file(src_path, prog)
+
+    test::suite_assert(ts, sys::system(compile_check_cmd(src_path, out_path, _)) == 0, site())
+
+    remove_if_exists(src_path)
+    remove_if_exists(out_path)
+end
+
 func assert_compile_fail_file(ts, foreign src_path: String, foreign expected: String):
     out_path := "test/jik/input/cf_temp.out"
     remove_if_exists(out_path)

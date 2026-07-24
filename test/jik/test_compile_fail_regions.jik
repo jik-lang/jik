@@ -18,21 +18,23 @@ end
 """
     )
 
-    // Mixing region arguments
-    utils::assert_compile_fails_source(ts,
+    // Composite literal cannot transfer a local value into a caller-owned region
+    utils::assert_compile_fail_source(ts,
 """
-func bar(r1, r2):
+func pack(a: String, b: String):
+    values := [a, b][.a]
 end
 
-func foo(r):
-    bar(r, _)
+func outer(a: String):
+    b := "local"
+    pack(a, b)
 end
-
 
 func main():
-    foo(_)
+    outer("caller")
 end
-"""
+""",
+        "all arguments should belong to same region"
     )
 
     // Subscript set to local region

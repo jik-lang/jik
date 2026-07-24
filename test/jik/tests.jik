@@ -36,6 +36,7 @@ use "test_examples"
 use "test_compile_fail_semantic"
 use "test_compile_fail_operators"
 use "test_compile_fail_regions"
+use "test_region_safe_functions"
 use "test_compile_fail_modules"
 
 
@@ -78,6 +79,7 @@ func main():
     test_compile_fail_semantic::run_tests(ts)
     test_compile_fail_operators::run_tests(ts)
     test_compile_fail_regions::run_tests(ts)
+    test_region_safe_functions::run_tests(ts)
     test_compile_fail_modules::run_tests(ts)
     
     test::suite_finish(ts)

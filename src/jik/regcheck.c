@@ -644,24 +644,177 @@ jik_diag_uninferred_alloc(JikNode *nd)
                         jik_token_to_text(nd->token)));
 }
 
-// A function is region safe if it does not write anything
-// from one region to another or similar. Such functions are
-// builtins like print, etc. Checks for user-defined functions
-// should be added later.
+static bool
+is_region_safe_operation(JikNode *lhs, JikNode *rhs, TabJikAllocSpec *spec_tab)
+{
+    JikAllocSpec spec_lhs = get_expression_alloc_spec(lhs, spec_tab);
+    JikAllocSpec spec_rhs = get_expression_alloc_spec(rhs, spec_tab);
+    // We cannot decide, so we return a safe answer
+    if (!jik_both_alloc_sources_known(spec_lhs, spec_rhs)) {
+        return false;
+    }
+    if (spec_lhs.src == JIK_ALLOC_SRC_LOCAL && spec_rhs.src == JIK_ALLOC_SRC_LOCAL) {
+        return true;
+    }
+    if (spec_lhs.src == JIK_ALLOC_SRC_FOREIGN && spec_rhs.src == JIK_ALLOC_SRC_FOREIGN &&
+        spec_lhs.kind == spec_rhs.kind && spec_lhs.region_name && spec_rhs.region_name &&
+        strcmp(spec_lhs.region_name, spec_rhs.region_name) == 0) {
+        return true;
+    }
+    return false;
+}
+
+static bool
+is_region_safe_literal_child(JikNode *parent, JikNode *child, TabJikAllocSpec *spec_tab)
+{
+    if (!jik_type_is_allocated(child->jik_type)) {
+        return true;
+    }
+    return is_region_safe_operation(parent, child, spec_tab);
+}
+
+static bool
+is_region_safe_literal(JikNode *nd, TabJikAllocSpec *spec_tab)
+{
+    if (nd->type == NODE_EXPR_VECTOR) {
+        if (nd->val_vector.init_elems) {
+            for (size_t i = 0; i < VecJikNode_size(nd->val_vector.init_elems); i++) {
+                JikNode *elem = VecJikNode_get(nd->val_vector.init_elems, i);
+                if (!is_region_safe_literal_child(nd, elem, spec_tab)) {
+                    return false;
+                }
+            }
+        }
+        else if (!is_region_safe_literal_child(nd, nd->val_vector.elem_expr, spec_tab)) {
+            return false;
+        }
+    }
+    else if (nd->type == NODE_EXPR_DICT && nd->val_dict.init_values) {
+        for (size_t i = 0; i < VecJikNode_size(nd->val_dict.init_values); i++) {
+            JikNode *elem = VecJikNode_get(nd->val_dict.init_values, i);
+            if (!is_region_safe_literal_child(nd, elem, spec_tab)) {
+                return false;
+            }
+        }
+    }
+    else if (nd->type == NODE_EXPR_STRUCT_NEW) {
+        TabJikNode_iter it = TabJikNode_iter_new(nd->val_struct_new.init_vals);
+        TabJikNode_item item;
+        while (TabJikNode_iter_next(&it, &item)) {
+            if (!is_region_safe_literal_child(nd, item.value, spec_tab)) {
+                return false;
+            }
+        }
+    }
+    else if (nd->type == NODE_EXPR_VARIANT_NEW && nd->val_variant_new.init_expr) {
+        return is_region_safe_literal_child(nd, nd->val_variant_new.init_expr, spec_tab);
+    }
+    else if (nd->type == NODE_EXPR_OPTION_SOME) {
+        return is_region_safe_literal_child(nd, nd->val_option_some.expr, spec_tab);
+    }
+    return true;
+}
+
+static bool
+is_region_safe_function_call(JikNode *nd);
+
+// Only listed builtins are region safe by default. This immediately classifies a newly
+// added builtin, which is not defined here, as region-unsafe, which is a safer/conservative
+// option.
+static bool
+is_region_safe_builtin(char *name)
+{
+    const char *safe_builtins[] = {
+        "print",      "println",   "concat",    "assert",     "pop",
+        "copy",       "len",       "clear",     "site",       "site_file",
+        "site_line",  "site_code", "fail",      "error_msg",  "error_code",
+    };
+    for (size_t i = 0; i < sizeof(safe_builtins) / sizeof(safe_builtins[0]); i++) {
+        if (strcmp(name, safe_builtins[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool
+is_region_safe_function(JikNode *func_nd)
+{
+    // A function is region safe (eg doesn't require Same region rule check), if it contains no composite
+    // stores between non-local region pairs (eg local-argument, argument-argument, foreign-local, etc)
+    assert(func_nd->type == NODE_FUNCTION);
+    TabJikAllocSpec *spec_tab = func_nd->val_function.info->spec_tab;
+    VecJikNode_iter  it       = VecJikNode_iter_new(func_nd->val_function.subnodes);
+    JikNode         *nd;
+    while (VecJikNode_iter_next(&it, &nd)) {
+        if (jik_node_is_allocated_literal(nd) && !is_region_safe_literal(nd, spec_tab)) {
+            return false;
+        }
+        else if (nd->type == NODE_STMNT_RETURN && nd->val_return.expr &&
+            jik_type_is_allocated(nd->val_return.expr->jik_type)) {
+            return false;
+        }
+        else if ((nd->type == NODE_STMNT_SUBSCRIPT_SET) && jik_type_is_allocated(nd->val_subscript_set.expr->jik_type)) {
+            if (!is_region_safe_operation(nd->val_subscript_set.node, nd->val_subscript_set.expr, spec_tab)) {
+                return false;
+            }
+        }
+        else if ((nd->type == NODE_STMNT_MEMBER_SET) && jik_type_is_allocated(nd->val_member_set.expr->jik_type)) {
+            if (!is_region_safe_operation(nd->val_member_set.node, nd->val_member_set.expr, spec_tab)) {
+                return false;
+            }
+        }
+        else if (nd->type == NODE_EXPR_CALL && !is_region_safe_function_call(nd)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void
+jik_classify_region_safe_functions(JikNode *ast)
+{
+    JikNode *func_nd;
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (size_t i = 0; i < VecJikNode_size(ast->val_program.functions); i++) {
+            func_nd = VecJikNode_get(ast->val_program.functions, i);
+            if (func_nd->val_function.is_region_safe && !is_region_safe_function(func_nd)) {
+                func_nd->val_function.is_region_safe = false;
+                changed = true;
+            }
+        }
+    }
+}
+
 static bool
 is_region_safe_function_call(JikNode *nd)
 {
     assert(nd->type == NODE_EXPR_CALL);
-    if (nd->val_call.builtin && strcmp(nd->val_call.name->val_id.name, "print") == 0) {
-        return true;
+    if (nd->val_call.builtin) {
+        char *name = nd->val_call.name->val_id.name;
+        if (strcmp(name, "push") != 0) {
+            return is_region_safe_builtin(name);
+        }
+        assert(nd->val_call.parent_func);
+        TabJikAllocSpec *spec_tab = nd->val_call.parent_func->val_function.info->spec_tab;
+        JikNode *vec = VecJikNode_get(nd->val_call.args, 0);
+        JikNode *expr = VecJikNode_get(nd->val_call.args, 1);
+        if (!jik_type_is_allocated(expr->jik_type)) {
+            return true;
+        }
+        return is_region_safe_operation(vec, expr, spec_tab);
     }
-    else if (nd->val_call.builtin && strcmp(nd->val_call.name->val_id.name, "println") == 0) {
-        return true;
+    JikNode *func = jik_scope_get_function(nd->context,
+                                        nd->val_call.name->val_id.name,
+                                        nd->val_call.name->val_id.mod_alias,
+                                        nd->token->mod_alias);
+    assert(func);
+    if (func->type == NODE_EXTERN_FUNCTION) {
+        return false;
     }
-    else if (nd->val_call.builtin && strcmp(nd->val_call.name->val_id.name, "concat") == 0) {
-        return true;
-    }
-    return false;
+    return func->val_function.is_region_safe;
 }
 
 static void
@@ -1013,6 +1166,9 @@ jik_check_regions(JikNode *ast)
     jik_mark_global_allocs(ast);
     jik_check_orphaned_allocations(ast);
     jik_check_region_semantics(ast);
+    // We need a first pass here, in order to properly classify region safe functions next
+    jik_check_region_integrity(ast);
+    jik_classify_region_safe_functions(ast);
 
     VecJikNode *unknown_allocs = VecJikNode_new_empty();
     size_t      prev_len       = SIZE_MAX;

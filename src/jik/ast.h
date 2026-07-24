@@ -339,6 +339,7 @@ typedef struct JikNode {
             VecJikNode      *subnodes;
             struct FuncInfo *info;
             bool             throws;
+            bool is_region_safe;
         } val_function;
 
         struct {

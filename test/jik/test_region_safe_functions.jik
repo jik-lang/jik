@@ -1,0 +1,365 @@
+use "jik/testing" as test
+use "utils"
+
+func run_tests(ts):
+
+    // Direct observers do not require their allocated arguments to share a region.
+    utils::assert_compile_succeeds_source(ts,
+"""
+func observe(r1: Region, r2: Region):
+end
+
+func caller(r: Region):
+    observe(r, _)
+end
+
+func main():
+    caller(_)
+end
+"""
+    )
+
+    // Region safety propagates through a chain of user-defined calls.
+    utils::assert_compile_succeeds_source(ts,
+"""
+func leaf(r1: Region, r2: Region):
+end
+
+func middle(r1: Region, r2: Region):
+    leaf(r1, r2)
+end
+
+func caller(r: Region):
+    middle(r, _)
+end
+
+func main():
+    caller(_)
+end
+"""
+    )
+
+    // A mutually recursive read-only cycle remains region safe.
+    utils::assert_compile_succeeds_source(ts,
+"""
+func first(r1: Region, r2: Region):
+    second(r1, r2)
+end
+
+func second(r1: Region, r2: Region):
+    first(r1, r2)
+end
+
+func caller(r: Region):
+    first(r, _)
+end
+
+func main():
+    caller(_)
+end
+"""
+    )
+
+    // Bound local composites can be safely combined in a function-local region.
+    utils::assert_compile_succeeds_source(ts,
+"""
+func mutate_locals():
+    values := [[1]]
+    item := [2]
+    push(values, item)
+end
+
+func wrapper(r1: Region, r2: Region):
+    mutate_locals()
+end
+
+func caller(r: Region):
+    wrapper(r, _)
+end
+
+func main():
+    caller(_)
+end
+"""
+    )
+
+    // Primitive pushes do not retain an allocated value.
+    utils::assert_compile_succeeds_source(ts,
+"""
+func append(v: Vec[int], unused: Region):
+    push(v, 1)
+end
+
+func caller(v: Vec[int]):
+    append(v, _)
+end
+
+func main():
+    v: Vec[int]
+    caller(v)
+end
+"""
+    )
+
+    // concat and copy explicitly allocate into their destination region.
+    utils::assert_compile_succeeds_source(ts,
+"""
+func transform(a: String, b: String, r: Region):
+    joined := concat(a, b, r)
+    cloned := copy(a, r)
+end
+
+func caller(a: String):
+    b := "b"
+    transform(a, b, _)
+end
+
+func main():
+    caller("a")
+end
+"""
+    )
+
+    // A copy into v's region may safely be stored in v.
+    utils::assert_compile_succeeds_source(ts,
+"""
+func repair(v: Vec[String], unused: Region):
+    local := "local"
+    push(v, copy(local, .v))
+end
+
+func caller(v: Vec[String]):
+    repair(v, _)
+end
+
+func main():
+    v: Vec[String]
+    caller(v)
+end
+"""
+    )
+
+    // An unsafe subscript store propagates through a wrapper.
+    utils::assert_compile_fail_source(ts,
+"""
+func store(v: Vec[String], value: String):
+    v[0] = value
+end
+
+func wrapper(v: Vec[String], value: String, unused: Region):
+    store(v, value)
+end
+
+func caller(v: Vec[String]):
+    value := "local"
+    wrapper(v, value, _)
+end
+
+func main():
+    v: Vec[String]
+    caller(v)
+end
+""",
+        "all arguments should belong to same region"
+    )
+
+    // An unsafe member store propagates through a wrapper.
+    utils::assert_compile_fail_source(ts,
+"""
+struct Box:
+    value: String
+end
+
+func store(box: Box, value: String):
+    box.value = value
+end
+
+func wrapper(box: Box, value: String, unused: Region):
+    store(box, value)
+end
+
+func caller(box: Box):
+    value := "local"
+    wrapper(box, value, _)
+end
+
+func main():
+    box := Box{}
+    caller(box)
+end
+""",
+        "all arguments should belong to same region"
+    )
+
+    // An unsafe push propagates through a wrapper.
+    utils::assert_compile_fail_source(ts,
+"""
+func store(v: Vec[String], value: String):
+    push(v, value)
+end
+
+func wrapper(v: Vec[String], value: String, unused: Region):
+    store(v, value)
+end
+
+func caller(v: Vec[String]):
+    value := "local"
+    wrapper(v, value, _)
+end
+
+func main():
+    v: Vec[String]
+    caller(v)
+end
+""",
+        "all arguments should belong to same region"
+    )
+
+    // A recursive cycle containing a store is unsafe.
+    utils::assert_compile_fail_source(ts,
+"""
+func first(v: Vec[String], value: String):
+    second(v, value)
+end
+
+func second(v: Vec[String], value: String):
+    first(v, value)
+    v[0] = value
+end
+
+func caller(v: Vec[String]):
+    value := "local"
+    first(v, value)
+end
+
+func main():
+    v: Vec[String]
+    caller(v)
+end
+""",
+        "all arguments should belong to same region"
+    )
+
+    // A vector element is a retention path.
+    utils::assert_compile_fail_source(ts,
+"""
+func build(a: String, b: String):
+    value := [b][.a]
+end
+
+func caller(a: String):
+    b := "local"
+    build(a, b)
+end
+
+func main():
+    caller("anchor")
+end
+""",
+        "all arguments should belong to same region"
+    )
+
+    // A repeated vector initializer is a retention path.
+    utils::assert_compile_fail_source(ts,
+"""
+func build(a: String, b: String):
+    value := [2 of b][.a]
+end
+
+func caller(a: String):
+    b := "local"
+    build(a, b)
+end
+
+func main():
+    caller("anchor")
+end
+""",
+        "all arguments should belong to same region"
+    )
+
+    // A dictionary value is a retention path.
+    utils::assert_compile_fail_source(ts,
+"""
+func build(a: String, b: String):
+    value := {"key": b}[.a]
+end
+
+func caller(a: String):
+    b := "local"
+    build(a, b)
+end
+
+func main():
+    caller("anchor")
+end
+""",
+        "all arguments should belong to same region"
+    )
+
+    // A struct field is a retention path.
+    utils::assert_compile_fail_source(ts,
+"""
+struct Record:
+    value: String
+end
+
+func build(a: String, b: String):
+    value := Record{value=b}[.a]
+end
+
+func caller(a: String):
+    b := "local"
+    build(a, b)
+end
+
+func main():
+    caller("anchor")
+end
+""",
+        "all arguments should belong to same region"
+    )
+
+    // An Option payload is a retention path.
+    utils::assert_compile_fail_source(ts,
+"""
+func build(a: String, b: String):
+    value := Some{b}[.a]
+end
+
+func caller(a: String):
+    b := "local"
+    build(a, b)
+end
+
+func main():
+    caller("anchor")
+end
+""",
+        "all arguments should belong to same region"
+    )
+
+    // A variant payload is a retention path.
+    utils::assert_compile_fail_source(ts,
+"""
+variant Choice:
+    TEXT: String
+end
+
+func build(a: String, b: String):
+    value := Choice.TEXT{b}[.a]
+end
+
+func caller(a: String):
+    b := "local"
+    build(a, b)
+end
+
+func main():
+    caller("anchor")
+end
+""",
+        "all arguments should belong to same region"
+    )
+
+end
