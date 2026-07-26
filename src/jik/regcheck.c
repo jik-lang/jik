@@ -476,6 +476,10 @@ can_retarget_literal(JikNode *literal, JikAllocSpec req_spec)
 {
     assert(jik_node_is_allocated_literal(literal));
     JikAllocSpec arg_src = jik_get_alloc_spec(literal);
+    if (arg_src.src == JIK_ALLOC_SRC_LOCAL && req_spec.kind == JIK_ALLOC_GLOBAL) {
+        jik_diag_fatal_error("cannot implicitly allocate literal in global region",
+                             jik_token_to_text(literal->token));
+    }
     return arg_src.src == JIK_ALLOC_SRC_LOCAL && req_spec.src != JIK_ALLOC_SRC_LOCAL &&
            req_spec.src != JIK_ALLOC_SRC_CROSS;
 }

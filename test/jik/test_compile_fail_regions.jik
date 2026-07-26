@@ -37,6 +37,26 @@ end
         "all arguments should belong to same region"
     )
 
+    // A call literal must not be implicitly promoted into the global region.
+    utils::assert_compile_fail_source(ts,
+"""
+struct Log:
+    entries: Vec[String]
+end
+
+GLOBAL_LOG := Log{entries = [0 of ""]}
+
+func record(text: String, log: Log):
+    push(log.entries, text)
+end
+
+func main():
+    record("entry", GLOBAL_LOG)
+end
+""",
+        "cannot implicitly allocate literal in global region"
+    )
+
     // Subscript set to local region
     utils::assert_compile_fails_source(ts,
 """
