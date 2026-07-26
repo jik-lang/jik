@@ -555,12 +555,13 @@ get_expression_alloc_spec(JikNode *nd, TabJikAllocSpec *tvs)
         JikAllocSpec spec_else = get_expression_alloc_spec(expr_else, tvs);
 
         if (jik_alloc_spec_complete(spec_if) && jik_node_is_allocated_literal(expr_else) &&
-            spec_else.src == JIK_ALLOC_SRC_LOCAL) {
+            spec_else.src == JIK_ALLOC_SRC_LOCAL &&
+            can_retarget_literal(expr_else, spec_if)) {
             jik_set_alloc_spec(expr_else, spec_if);
             return spec_if;
         }
         if (jik_alloc_spec_complete(spec_else) && jik_node_is_allocated_literal(expr_if) &&
-            spec_if.src == JIK_ALLOC_SRC_LOCAL) {
+            spec_if.src == JIK_ALLOC_SRC_LOCAL && can_retarget_literal(expr_if, spec_else)) {
             jik_set_alloc_spec(expr_if, spec_else);
             return spec_else;
         }
@@ -856,9 +857,6 @@ jik_check_region_integrity(JikNode *ast)
             else if (nd->type == NODE_STMNT_SUBSCRIPT_SET) {
                 JikAllocSpec spec_lhs =
                     get_expression_alloc_spec(nd->val_subscript_set.node, spec_tab);
-                jik_diag_fatal_error_if(spec_lhs.kind == JIK_ALLOC_GLOBAL,
-                                        "global composites are immutable",
-                                        jik_token_to_text(nd->token));
                 if (!jik_type_is_allocated(nd->val_subscript_set.expr->jik_type)) {
                     continue;
                 }
@@ -870,7 +868,8 @@ jik_check_region_integrity(JikNode *ast)
                     jik_node_is_allocated_literal(nd->val_subscript_set.expr)) {
                     JikAllocSpec as =
                         get_expression_alloc_spec(nd->val_subscript_set.node, spec_tab);
-                    if (jik_alloc_spec_complete(as)) {
+                    if (jik_alloc_spec_complete(as) &&
+                        can_retarget_literal(nd->val_subscript_set.expr, as)) {
                         jik_set_alloc_spec(nd->val_subscript_set.expr, as);
                         continue;
                     }
@@ -884,9 +883,6 @@ jik_check_region_integrity(JikNode *ast)
             else if (nd->type == NODE_STMNT_MEMBER_SET) {
                 JikAllocSpec spec_lhs =
                     get_expression_alloc_spec(nd->val_member_set.node, spec_tab);
-                jik_diag_fatal_error_if(spec_lhs.kind == JIK_ALLOC_GLOBAL,
-                                        "global composites are immutable",
-                                        jik_token_to_text(nd->token));
                 if (!jik_type_is_allocated(nd->val_member_set.expr->jik_type)) {
                     continue;
                 }
@@ -897,7 +893,8 @@ jik_check_region_integrity(JikNode *ast)
                 if (jik_alloc_source_known(spec_lhs) &&
                     jik_node_is_allocated_literal(nd->val_member_set.expr)) {
                     JikAllocSpec as = get_expression_alloc_spec(nd->val_member_set.node, spec_tab);
-                    if (jik_alloc_spec_complete(as)) {
+                    if (jik_alloc_spec_complete(as) &&
+                        can_retarget_literal(nd->val_member_set.expr, as)) {
                         jik_set_alloc_spec(nd->val_member_set.expr, as);
                         continue;
                     }

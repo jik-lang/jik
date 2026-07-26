@@ -401,7 +401,7 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             JikNode *gs =
                 jik_scope_get_global_symbol(nd->val_assign.id->val_id.name, nd->token->mod_alias);
             jik_diag_fatal_error_if(
-                gs, "global symbols are immutable", jik_token_to_text(nd->val_assign.id->token));
+                gs, "global bindings are immutable", jik_token_to_text(nd->val_assign.id->token));
             JikNode *ls = jik_scope_get_local_symbol(nd->context, nd->val_assign.id->val_id.name);
             jik_diag_fatal_error_if(
                 !ls,

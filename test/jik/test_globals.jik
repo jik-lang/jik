@@ -8,9 +8,25 @@ y := "foo"
 lst := [2 of 0]
 platform := sys::platform()
 prog := "a" if sys::platform() == "windows" else "b"
+labels := [1 of ""]
+label := "updated"
+
+
+struct GlobalState:
+    count: int
+end
+
+
+state := GlobalState{count = 0}
 
 func foo(ts, y):
     test::suite_assert(ts, y != "foo", site())
+end
+
+
+func update_globals(items: Vec[String], text: String, s: GlobalState):
+    push(items, text)
+    s.count = 1
 end
 
 func test_globals_01(ts):
@@ -27,6 +43,14 @@ func test_globals_01(ts):
     else:
         test::suite_assert(ts, prog == "b", site())
     end
+    update_globals(labels, label, state)
+    labels[0] = label
+    test::suite_assert(ts, len(labels) == 2, site())
+    test::suite_assert(ts, labels[0] == "updated", site())
+    test::suite_assert(ts, labels[1] == "updated", site())
+    test::suite_assert(ts, state.count == 1, site())
+    clear(labels)
+    test::suite_assert(ts, len(labels) == 0, site())
 end
 
 

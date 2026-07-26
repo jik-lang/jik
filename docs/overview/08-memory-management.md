@@ -48,9 +48,11 @@ end
 Composite globals are allocated in the global region. The global region is created
 at program start and remains alive until program exit.
 
-Global values, regardless if composite or not, are immutable: their members and container
-elements cannot be changed. A function also cannot return a composite global
-directly.
+Global bindings are immutable, so a global name cannot be reassigned. A composite value held by
+a global binding is mutable: its members and container elements may be changed directly or by a
+function that receives it. All allocations owned by a global composite remain until program exit;
+in particular, clearing a global container does not reclaim its backing region storage. A function
+also cannot return a composite global directly.
 
 ### 8.2 Choosing a non-local allocation target
 
@@ -201,6 +203,9 @@ func demo(p: Person):
     rename(p, "Alice")          // OK: compiler automatically allocates "Alice" in region of "p"
 end
 ```
+
+Automatic literal retargeting never selects the global region. A local literal therefore cannot
+be silently promoted to program-lifetime storage by a call or store operation.
 
 
 #### 8.4.3 Region-safe functions

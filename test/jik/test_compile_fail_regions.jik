@@ -57,6 +57,30 @@ end
         "cannot implicitly allocate literal in global region"
     )
 
+    // A local literal cannot be implicitly promoted while storing into a global container.
+    utils::assert_compile_fail_source(ts,
+"""
+items := [1 of ""]
+
+func main():
+    items[0] = "entry"
+end
+""",
+        "cannot implicitly allocate literal in global region"
+    )
+
+    // Global bindings cannot be reassigned, even though global composites are mutable.
+    utils::assert_compile_fail_source(ts,
+"""
+value := 1
+
+func main():
+    value = 2
+end
+""",
+        "global bindings are immutable"
+    )
+
     // Subscript set to local region
     utils::assert_compile_fails_source(ts,
 """
