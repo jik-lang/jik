@@ -14,6 +14,17 @@ func test_string(ts):
     test::suite_assert(ts, s3 == "", site())
     s4 := must string::slice(s1, 0, len(s1), _)
     test::suite_assert(ts, s4 == s1, site())
+
+    s5 := s1[1:5]
+    s6 := s1[:3]
+    s7 := s1[6:]
+    s8 := s1[:]
+    s9 := s1[3:3]
+    test::suite_assert(ts, s5 == "ooba", site())
+    test::suite_assert(ts, s6 == "foo", site())
+    test::suite_assert(ts, s7 == "baz", site())
+    test::suite_assert(ts, s8 == s1, site())
+    test::suite_assert(ts, s9 == "", site())
 end
 
 func test_string_from_primitives(ts):

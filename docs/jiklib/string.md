@@ -170,6 +170,19 @@ Return a substring of `s` from byte index `start` (inclusive) to byte index `end
 **Returns**
 - A newly allocated substring.
 
+For copying slices in the source string's region, use slice syntax instead:
+
+```jik
+middle := s[1:4]
+prefix := s[:4]
+suffix := s[1:]
+copy := s[:]
+```
+
+These bounds are non-negative byte offsets and follow the same half-open range
+convention. The explicit `string::slice` function remains appropriate when the
+destination region must be selected.
+
 ---
 
 ### `split(foreign s: String, foreign delim: String, r: Region) -> Vec[String]`

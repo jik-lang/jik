@@ -403,6 +403,7 @@ primary ::= atom { postfix }
 
 postfix ::= "." identifier
           | "[" expr "]"
+          | "[" [ expr ] ":" [ expr ] "]"
           | "?"
 ```
 
@@ -411,6 +412,10 @@ Examples:
 ```jik
 point.x
 values[i]
+values[1:3]
+values[:3]
+values[1:]
+values[:]
 opt?
 v[Value.INT]
 ```

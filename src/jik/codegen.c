@@ -928,6 +928,52 @@ jik_codegen_emit_expr_subscript_get(JikCodeGenerator *cg, JikNode *nd)
     }
 }
 
+static char *
+jik_codegen_emit_expr_slice(JikCodeGenerator *cg, JikNode *nd)
+{
+    JikNode *source = nd->val_slice.node;
+    char    *node   = jik_codegen_emit_expression(cg, source);
+    char    *start  = nd->val_slice.start ? jik_codegen_emit_expression(cg, nd->val_slice.start) : "0";
+    char    *stop   = nd->val_slice.stop ? jik_codegen_emit_expression(cg, nd->val_slice.stop) : "0";
+    char    *start_omitted = nd->val_slice.start ? "false" : "true";
+    char    *stop_omitted  = nd->val_slice.stop ? "false" : "true";
+
+    if (source->jik_type->name == TYPE_VECTOR) {
+        if (!source->jik_type->mangled_name) {
+            source->jik_type->mangled_name = get_vec_name(source->jik_type);
+        }
+        return JIK_STRING_NCAT(source->jik_type->mangled_name,
+                               "_slice(",
+                               node,
+                               ", ",
+                               start,
+                               ", ",
+                               start_omitted,
+                               ", ",
+                               stop,
+                               ", ",
+                               stop_omitted,
+                               ", ",
+                               DEBUG_ARG,
+                               ")");
+    }
+
+    assert(source->jik_type->name == TYPE_STRING);
+    return JIK_STRING_NCAT("jik_string_slice(",
+                           node,
+                           ", ",
+                           start,
+                           ", ",
+                           start_omitted,
+                           ", ",
+                           stop,
+                           ", ",
+                           stop_omitted,
+                           ", ",
+                           DEBUG_ARG,
+                           ")");
+}
+
 static void
 jik_codegen_emit_stmnt_subscript_set(JikCodeGenerator *cg, JikNode *nd)
 {
@@ -1453,6 +1499,9 @@ jik_codegen_emit_expression(JikCodeGenerator *cg, JikNode *nd)
     }
     else if (nd->type == NODE_EXPR_SUBSCRIPT_GET) {
         return jik_codegen_emit_expr_subscript_get(cg, nd);
+    }
+    else if (nd->type == NODE_EXPR_SLICE) {
+        return jik_codegen_emit_expr_slice(cg, nd);
     }
     else if (nd->type == NODE_EXPR_ENUM_NEW) {
         return jik_codegen_emit_expr_enum_new(cg, nd);
@@ -2601,7 +2650,7 @@ jik_codegen_emit_vec_definitions(JikCodeGenerator *cg)
     JikNode        *nd;
     VecJikNode_iter it = VecJikNode_iter_new(cg->nodes);
     while (VecJikNode_iter_next(&it, &nd)) {
-        if (nd->type == NODE_EXPR_VECTOR) {
+        if (nd->type == NODE_EXPR_VECTOR || nd->type == NODE_EXPR_SLICE) {
             jik_codegen_emit_type_definition(cg, nd->jik_type);
         }
         else if (nd->type == NODE_EXTERN_FUNCTION) {

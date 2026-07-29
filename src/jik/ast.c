@@ -784,6 +784,20 @@ jik_node_new_subscript_get(JikNode *node, JikNode *expr, JikScope *ctx, JikToken
 }
 
 JikNode *
+jik_node_new_slice(JikNode *node, JikNode *start, JikNode *stop, JikScope *ctx, JikToken *tok)
+{
+    JikNode *nd          = (JikNode *)jik_alloc(sizeof(JikNode));
+    nd->jik_type         = jik_type_new(TYPE_UNKNOWN);
+    nd->type             = NODE_EXPR_SLICE;
+    nd->val_slice.node   = node;
+    nd->val_slice.start  = start;
+    nd->val_slice.stop   = stop;
+    nd->context          = ctx;
+    nd->token            = tok;
+    return nd;
+}
+
+JikNode *
 jik_node_new_subscript_set(JikNode  *node,
                            JikNode  *sub_expr,
                            JikNode  *expr,
@@ -1053,6 +1067,17 @@ jik_node_print(JikNode *nd, size_t level)
         printf("<%s", NODE_STRINGS[nd->type]);
         jik_node_print(nd->val_subscript_get.node, level + 1);
         jik_node_print(nd->val_subscript_get.expr, level + 1);
+        printf(">\n");
+    }
+    else if (nd->type == NODE_EXPR_SLICE) {
+        printf("<%s", NODE_STRINGS[nd->type]);
+        jik_node_print(nd->val_slice.node, level + 1);
+        if (nd->val_slice.start) {
+            jik_node_print(nd->val_slice.start, level + 1);
+        }
+        if (nd->val_slice.stop) {
+            jik_node_print(nd->val_slice.stop, level + 1);
+        }
         printf(">\n");
     }
     else if (nd->type == NODE_STMNT_SUBSCRIPT_SET) {
@@ -1401,6 +1426,15 @@ jik_collect_nodes(JikNode *nd, VecJikNode *nodes)
     else if (nd->type == NODE_EXPR_SUBSCRIPT_GET) {
         jik_collect_nodes(nd->val_subscript_get.node, nodes);
         jik_collect_nodes(nd->val_subscript_get.expr, nodes);
+    }
+    else if (nd->type == NODE_EXPR_SLICE) {
+        jik_collect_nodes(nd->val_slice.node, nodes);
+        if (nd->val_slice.start) {
+            jik_collect_nodes(nd->val_slice.start, nodes);
+        }
+        if (nd->val_slice.stop) {
+            jik_collect_nodes(nd->val_slice.stop, nodes);
+        }
     }
     else if (nd->type == NODE_STMNT_SUBSCRIPT_SET) {
         jik_collect_nodes(nd->val_subscript_set.node, nodes);

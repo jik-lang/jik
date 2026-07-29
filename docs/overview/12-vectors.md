@@ -48,8 +48,24 @@ assert(len(numbers) == 1)
 
 `push`, `pop` and `len` are builtin functions which work on vectors and dictionaries.
 
+### 12.5 Slicing vectors
 
-### 12.5 Iterating over vector elements
+Vectors support copying slices with half-open bounds:
+
+```jik
+numbers := [10, 20, 30, 40]
+middle := numbers[1:3] // [20, 30]
+prefix := numbers[:2]  // [10, 20]
+suffix := numbers[2:]  // [30, 40]
+copy := numbers[:]
+```
+
+Slices return a new vector allocated in the source vector's region. Bounds are
+non-negative integers; invalid bounds abort at runtime. Slice syntax is only
+available for vectors and strings, and slices cannot be assigned to.
+
+
+### 12.6 Iterating over vector elements
 
 One can iterate over vector elements with a `for` loop:
 

@@ -1185,6 +1185,23 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
             }
         }
     }
+    else if (nd->type == NODE_EXPR_SLICE) {
+        jik_semantic_infer_type(sa, nd->val_slice.node);
+        if (nd->val_slice.start) {
+            jik_semantic_infer_type(sa, nd->val_slice.start);
+        }
+        if (nd->val_slice.stop) {
+            jik_semantic_infer_type(sa, nd->val_slice.stop);
+        }
+        if (jik_node_is_type_inferred(nd->val_slice.node)) {
+            JikType *source_type = nd->val_slice.node->jik_type;
+            jik_diag_fatal_error_if(!jik_type_is_one_of(source_type,
+                                                         (JikTypeName[]){TYPE_VECTOR, TYPE_STRING}),
+                                    "slicing is supported only for vectors and strings",
+                                    jik_token_to_text(nd->val_slice.node->token));
+            nd->jik_type = source_type;
+        }
+    }
     else if (nd->type == NODE_EXPR_VECTOR) {
         if (nd->val_vector.init_elems) {
             size_t n = VecJikNode_size(nd->val_vector.init_elems);

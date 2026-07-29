@@ -450,6 +450,23 @@ jik_check_types(VecJikNode *nodes)
                     jik_token_to_text(nd->val_subscript_get.expr->token));
             }
         }
+        else if (nd->type == NODE_EXPR_SLICE) {
+            JikNode *source = nd->val_slice.node;
+            jik_diag_fatal_error_if(!jik_type_is_one_of(source->jik_type,
+                                                         (JikTypeName[]){TYPE_VECTOR, TYPE_STRING}),
+                                    "slicing is supported only for vectors and strings",
+                                    jik_token_to_text(source->token));
+            if (nd->val_slice.start) {
+                jik_diag_fatal_error_if(!jik_type_equal(nd->val_slice.start->jik_type, &JIK_TYPE_INT),
+                                        "expected expression of integer type",
+                                        jik_token_to_text(nd->val_slice.start->token));
+            }
+            if (nd->val_slice.stop) {
+                jik_diag_fatal_error_if(!jik_type_equal(nd->val_slice.stop->jik_type, &JIK_TYPE_INT),
+                                        "expected expression of integer type",
+                                        jik_token_to_text(nd->val_slice.stop->token));
+            }
+        }
         else if (nd->type == NODE_STMNT_SUBSCRIPT_SET) {
             JikNode *node = nd->val_subscript_set.node;
             JikNode *sub  = nd->val_subscript_set.sub_expr;

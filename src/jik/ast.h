@@ -27,6 +27,7 @@ typedef struct TabVarInfo TabVarInfo;
     X(NODE_STMNT_MEMBER_SET)                                                                       \
     X(NODE_CATCH)                                                                                  \
     X(NODE_EXPR_SUBSCRIPT_GET)                                                                     \
+    X(NODE_EXPR_SLICE)                                                                             \
     X(NODE_STMNT_SUBSCRIPT_SET)                                                                    \
     X(NODE_COND_IF)                                                                                \
     X(NODE_COND_IFELIF)                                                                            \
@@ -286,6 +287,12 @@ typedef struct JikNode {
             struct JikNode *node;
             struct JikNode *expr;
         } val_subscript_get;
+
+        struct {
+            struct JikNode *node;
+            struct JikNode *start;
+            struct JikNode *stop;
+        } val_slice;
 
         struct {
             struct JikNode *node;
@@ -615,6 +622,8 @@ jik_node_new_member_set(JikNode  *node,
                         JikToken *tok);
 JikNode *
 jik_node_new_subscript_get(JikNode *node, JikNode *expr, JikScope *ctx, JikToken *tok);
+JikNode *
+jik_node_new_slice(JikNode *node, JikNode *start, JikNode *stop, JikScope *ctx, JikToken *tok);
 JikNode *
 jik_node_new_subscript_set(JikNode  *node,
                            JikNode  *sub_expr,

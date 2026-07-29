@@ -545,6 +545,9 @@ get_expression_alloc_spec(JikNode *nd, TabJikAllocSpec *tvs)
     else if (nd->type == NODE_EXPR_SUBSCRIPT_GET) {
         return get_expression_alloc_spec(nd->val_subscript_get.node, tvs);
     }
+    else if (nd->type == NODE_EXPR_SLICE) {
+        return get_expression_alloc_spec(nd->val_slice.node, tvs);
+    }
     else if (nd->type == NODE_EXPR_MEMBER_ACCESS) {
         return get_expression_alloc_spec(nd->val_member_access.node, tvs);
     }

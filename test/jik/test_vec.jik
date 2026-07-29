@@ -63,6 +63,29 @@ func test_vec_05(ts):
     test::suite_assert(ts, v1[1][2] == 6, site())
 end
 
+func test_vec_slice(ts):
+    values := [10, 20, 30, 40, 50]
+    middle := values[1:4]
+    prefix := values[:2]
+    suffix := values[3:]
+    all_values := values[:]
+    empty := values[2:2]
+
+    test::suite_assert(ts, len(middle) == 3, site())
+    test::suite_assert(ts, middle[0] == 20, site())
+    test::suite_assert(ts, middle[2] == 40, site())
+    test::suite_assert(ts, len(prefix) == 2, site())
+    test::suite_assert(ts, prefix[1] == 20, site())
+    test::suite_assert(ts, len(suffix) == 2, site())
+    test::suite_assert(ts, suffix[0] == 40, site())
+    test::suite_assert(ts, len(all_values) == 5, site())
+    test::suite_assert(ts, all_values[4] == 50, site())
+    test::suite_assert(ts, len(empty) == 0, site())
+
+    push(values, 60)
+    test::suite_assert(ts, len(middle) == 3, site())
+end
+
 
 func run_tests(ts):
     test_vec_01(ts)
@@ -70,4 +93,5 @@ func run_tests(ts):
     test_vec_03(ts)
     test_vec_04(ts)
     test_vec_05(ts)
+    test_vec_slice(ts)
 end

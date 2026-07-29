@@ -331,7 +331,23 @@ jik_parser_parse_primary(JikParser *p)
         }
         else if (tok->type == TOK_LANG) {
             JikToken *lang_tok = jik_parser_eat_token(p, TOK_LANG);
-            JikNode  *expr     = jik_parser_parse_expr(p);
+            JikNode  *expr     = NULL;
+            if (jik_parser_current_token(p)->type != TOK_COLON) {
+                expr = jik_parser_parse_expr(p);
+            }
+            if (jik_parser_current_token(p)->type == TOK_COLON) {
+                jik_parser_eat_token(p, TOK_COLON);
+                JikNode *stop = NULL;
+                if (jik_parser_current_token(p)->type != TOK_RANG) {
+                    stop = jik_parser_parse_expr(p);
+                }
+                jik_parser_eat_token(p, TOK_RANG);
+                node = jik_node_new_slice(node, expr, stop, jik_parser_current_context(p), lang_tok);
+                continue;
+            }
+            jik_diag_fatal_error_if(expr == NULL,
+                                    "parse error: expected subscript expression",
+                                    jik_token_to_text(lang_tok));
             jik_parser_eat_token(p, TOK_RANG);
             node = jik_node_new_subscript_get(node, expr, jik_parser_current_context(p), lang_tok);
         }

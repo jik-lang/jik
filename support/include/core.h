@@ -435,6 +435,56 @@ jik_string_get(JikString *s, size_t idx, char *dbg_info)
     return s->data[idx];
 }
 
+static inline void
+jik_slice_check_bounds(int32_t start,
+                       bool    start_omitted,
+                       int32_t stop,
+                       bool    stop_omitted,
+                       size_t  size,
+                       char   *kind,
+                       char   *dbg_info,
+                       size_t *out_start,
+                       size_t *out_stop)
+{
+    jik_die_if((!start_omitted && start < 0) || (!stop_omitted && stop < 0),
+               "invalid %s slice bounds\n  --> %s",
+               kind,
+               dbg_info);
+
+    size_t lower = start_omitted ? 0 : (size_t)start;
+    size_t upper = stop_omitted ? size : (size_t)stop;
+    jik_die_if(lower > upper || upper > size,
+               "invalid %s slice bounds\n  --> %s",
+               kind,
+               dbg_info);
+    *out_start = lower;
+    *out_stop  = upper;
+}
+
+static inline JikString *
+jik_string_slice(JikString *s,
+                 int32_t    start,
+                 bool       start_omitted,
+                 int32_t    stop,
+                 bool       stop_omitted,
+                 char      *dbg_info)
+{
+    size_t lower;
+    size_t upper;
+    jik_slice_check_bounds(
+        start, start_omitted, stop, stop_omitted, s->size, "string", dbg_info, &lower, &upper);
+
+    size_t     n   = upper - lower;
+    JikString *out = jik_region_alloc(s->region, sizeof(JikString));
+    out->data      = jik_region_alloc(s->region, n + 1);
+    memcpy(out->data, s->data + lower, n);
+    out->data[n]  = '\0';
+    out->size     = n;
+    out->capacity = n;
+    out->region   = s->region;
+    return out;
+}
+
 
 // ---------------------------------------------------------------------------------------------------
 //      BUILTIN ERRORS
@@ -709,6 +759,12 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
     void vec_name##_extend(                                                                        \
         struct vec_name *v, struct vec_name *b, char *dbg_info);                  \
     vec_elem_type vec_name##_pop(struct vec_name *v, char *dbg_info);                              \
+    struct vec_name *vec_name##_slice(struct vec_name *v,                                          \
+                                      int32_t start,                                                \
+                                      bool start_omitted,                                           \
+                                      int32_t stop,                                                 \
+                                      bool stop_omitted,                                            \
+                                      char *dbg_info);                                              \
     JikString    *vec_name##_tostr(struct vec_name *v, JikRegion *a);                               \
     size_t        vec_name##_size(struct vec_name *v, char *dbg_info);
 
@@ -800,6 +856,32 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         jik_die_if(v->size == 0, "cannot pop from empty vector\n  --> %s", dbg_info);              \
         v->size--;                                                                                 \
         return v->data[v->size];                                                                   \
+    }                                                                                              \
+                                                                                                   \
+    struct vec_name *vec_name##_slice(struct vec_name *v,                                          \
+                                      int32_t start,                                                \
+                                      bool start_omitted,                                           \
+                                      int32_t stop,                                                 \
+                                      bool stop_omitted,                                            \
+                                      char *dbg_info)                                              \
+    {                                                                                              \
+        size_t lower;                                                                              \
+        size_t upper;                                                                              \
+        jik_slice_check_bounds(start,                                                              \
+                               start_omitted,                                                      \
+                               stop,                                                               \
+                               stop_omitted,                                                       \
+                               v->size,                                                            \
+                               "vector",                                                           \
+                               dbg_info,                                                           \
+                               &lower,                                                             \
+                               &upper);                                                            \
+        size_t n = upper - lower;                                                                  \
+        struct vec_name *out = vec_name##_new(v->region, n);                                      \
+        for (size_t i = 0; i < n; i++) {                                                          \
+            out->data[i] = v->data[lower + i];                                                    \
+        }                                                                                          \
+        return out;                                                                                \
     }                                                                                              \
                                                                                                    \
     size_t vec_name##_size(struct vec_name *v, char *dbg_info) { return v->size; }
