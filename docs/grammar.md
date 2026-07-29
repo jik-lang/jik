@@ -405,6 +405,7 @@ postfix ::= "." identifier
           | "[" expr "]"
           | "[" [ expr ] ":" [ expr ] "]"
           | "?"
+          | "!"
 ```
 
 Examples:
@@ -417,6 +418,7 @@ values[:3]
 values[1:]
 values[:]
 opt?
+load_config()!
 v[Value.INT]
 ```
 

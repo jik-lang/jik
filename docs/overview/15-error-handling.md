@@ -68,6 +68,17 @@ x := must div_safe(10, 2)
 
 `must` calls a throwing function and panics if the call results in an error.
 
+The postfix form `call()!` has the same behavior and is convenient within
+expressions:
+
+```jik
+x := div_safe(10, 2)!
+print(div_safe(10, 2)! == 5)
+```
+
+`!` applies only to function calls. Use `try ... except ... end` when failure
+needs local recovery.
+
 ### 15.4 Inspecting the current error
 
 Inside an `except` block, the current error can be inspected with:

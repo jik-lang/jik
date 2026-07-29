@@ -48,6 +48,11 @@ func test_error(ts):
     x = must div_safe_code(3, 1)
     test::suite_assert(ts, x == 3, site())
 
+    x = div_safe(3, 1)!
+    test::suite_assert(ts, x == 3, site())
+    test::suite_assert(ts, div_safe_code(3, 1)! == 3, site())
+    test::suite_assert(ts, div_safe(div_safe(3, 1)!, 1)! == 3, site())
+
 end
 
 func test_recursive_container_types(ts):

@@ -200,6 +200,31 @@ end
         "extern struct type already has an init function")
 end
 
+func test_compile_fail_14(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func ordinary() -> int:
+    return 1
+end
+
+func main():
+    value := ordinary()!
+end
+""",
+        "non-throwable function cannot be handled with \"must\"")
+end
+
+func test_compile_fail_15(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    value := 1
+    value!
+end
+""",
+        "expected function call")
+end
+
 func run_tests(ts):
     test_compile_fail_01(ts)
     test_compile_fail_02(ts)
@@ -214,4 +239,6 @@ func run_tests(ts):
     test_compile_fail_11(ts)
     test_compile_fail_12(ts)
     test_compile_fail_13(ts)
+    test_compile_fail_14(ts)
+    test_compile_fail_15(ts)
 end

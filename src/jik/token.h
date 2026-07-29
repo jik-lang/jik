@@ -81,6 +81,7 @@ typedef struct JikToken JikToken;
     X(TOK_DECLARE)                                                                                 \
     X(TOK_DOT)                                                                                     \
     X(TOK_QMARK)                                                                                   \
+    X(TOK_BANG)                                                                                    \
     X(TOK_DIRECTIVE_PLATFORM)                                                                      \
     X(TOK_DIRECTIVE_INCLUDEDIR)                                                                    \
     X(TOK_DIRECTIVE_LIBDIR)                                                                        \

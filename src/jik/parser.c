@@ -322,7 +322,8 @@ jik_parser_parse_primary(JikParser *p)
     JikNode  *node = jik_parser_parse_atom(p);
     JikToken *tok;
     while ((tok = jik_parser_current_token(p)) != NULL &&
-           (tok->type == TOK_DOT || tok->type == TOK_LANG || tok->type == TOK_QMARK)) {
+           (tok->type == TOK_DOT || tok->type == TOK_LANG || tok->type == TOK_QMARK ||
+            tok->type == TOK_BANG)) {
         if (tok->type == TOK_DOT) {
             jik_parser_eat_token(p, tok->type);
             JikToken *id_tok = jik_parser_eat_token(p, TOK_ID);
@@ -354,6 +355,14 @@ jik_parser_parse_primary(JikParser *p)
         else if (tok->type == TOK_QMARK) {
             JikToken *qmark_tok = jik_parser_eat_token(p, TOK_QMARK);
             node = jik_node_new_option_unwrap(node, jik_parser_current_context(p), qmark_tok);
+        }
+        else if (tok->type == TOK_BANG) {
+            JikToken *bang_tok = jik_parser_eat_token(p, TOK_BANG);
+            jik_diag_fatal_error_if(node->type != NODE_EXPR_CALL,
+                                    "expected function call",
+                                    jik_token_to_text(bang_tok));
+            node->val_call.must = true;
+            node = jik_node_new_must(node, jik_parser_current_context(p), bang_tok);
         }
     }
     return node;

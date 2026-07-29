@@ -585,6 +585,9 @@ match_char(char ch)
     case '?': {
         return TOK_QMARK;
     }
+    case '!': {
+        return TOK_BANG;
+    }
     default:
         return TOK_ERROR;
     }
