@@ -24,6 +24,7 @@ io, file-io, jik/io = jiklib/io.md
 math, jik/math = jiklib/math.md
 path, paths, jik/path = jiklib/path.md
 process, processes, jik/process = jiklib/process.md
+argparse, arguments, cli-args, jik/argparse = jiklib/argparse.md
 rand, random, rng, jik/rand = jiklib/rand.md
 region-lib, jik/region = jiklib/region.md
 std, jik/std = jiklib/std.md

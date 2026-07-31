@@ -1,0 +1,145 @@
+use "jik/argparse"
+use "jik/string"
+use "jik/testing" as test
+
+
+func _assert_parse_fails(ts, foreign parser: argparse::Parser, foreign args: Vec[String]):
+    try result := argparse::parse(parser, args, _):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+end
+
+func _assert_contains(ts, foreign text: String, foreign expected: String):
+    test::suite_assert(ts, string::find(text, expected) >= 0, site())
+end
+
+
+func test_long_option_and_flag(ts):
+    parser := argparse::new(_)
+    argparse::add_positional(parser, "input", "Input file.")
+    output := argparse::add_option(parser, "--output", "-o", "Output file.")
+    argparse::add_option_positional(output, "file", "Output path.")
+    argparse::add_option(parser, "--verbose", "-v", "Show extra output.")
+
+    result := must argparse::parse(parser, ["--verbose", "--output", "out.txt", "in.txt"], _)
+    test::suite_assert(ts, result.positionals["input"] is Some, site())
+    test::suite_assert(ts, result.positionals["input"]? == "in.txt", site())
+    test::suite_assert(ts, result.options["--output"] is Some, site())
+    test::suite_assert(ts, result.options["--output"]?["file"]? == "out.txt", site())
+    test::suite_assert(ts, result.options["--verbose"] is Some, site())
+    test::suite_assert(ts, len(result.options["--verbose"]?) == 0, site())
+end
+
+func test_short_option(ts):
+    parser := argparse::new(_)
+    argparse::add_positional(parser, "input", "Input file.")
+    output := argparse::add_option(parser, "--output", "-o", "Output file.")
+    argparse::add_option_positional(output, "file", "Output path.")
+
+    result := must argparse::parse(parser, ["-o", "out.txt", "in.txt"], _)
+    test::suite_assert(ts, result.positionals["input"]? == "in.txt", site())
+    test::suite_assert(ts, result.options["--output"]?["file"]? == "out.txt", site())
+end
+
+func test_long_only_options(ts):
+    parser := argparse::new(_)
+    argparse::add_positional(parser, "input", "Input file.")
+    output := argparse::add_option(parser, "--output", "", "Output file.")
+    argparse::add_option_positional(output, "file", "Output path.")
+    argparse::add_option(parser, "--verbose", "", "Show extra output.")
+
+    result := must argparse::parse(parser, ["--verbose", "--output", "out.txt", "in.txt"], _)
+    test::suite_assert(ts, result.positionals["input"]? == "in.txt", site())
+    test::suite_assert(ts, result.options["--output"]?["file"]? == "out.txt", site())
+    test::suite_assert(ts, result.options["--verbose"] is Some, site())
+end
+
+func test_end_of_options(ts):
+    parser := argparse::new(_)
+    argparse::add_positional(parser, "first", "First value.")
+    argparse::add_positional(parser, "second", "Second value.")
+    argparse::add_option(parser, "--verbose", "-v", "Show extra output.")
+
+    result := must argparse::parse(parser, ["-v", "one", "--", "-two"], _)
+    test::suite_assert(ts, result.options["--verbose"] is Some, site())
+    test::suite_assert(ts, result.positionals["first"]? == "one", site())
+    test::suite_assert(ts, result.positionals["second"]? == "-two", site())
+end
+
+func test_lone_dash_is_positional(ts):
+    parser := argparse::new(_)
+    argparse::add_positional(parser, "input", "Input file.")
+
+    result := must argparse::parse(parser, ["-"], _)
+    test::suite_assert(ts, result.positionals["input"]? == "-", site())
+end
+
+func test_parse_results_are_independent(ts):
+    parser := argparse::new(_)
+    argparse::add_positional(parser, "input", "Input file.")
+
+    first := must argparse::parse(parser, ["one.txt"], _)
+    second := must argparse::parse(parser, ["two.txt"], _)
+    test::suite_assert(ts, first.positionals["input"]? == "one.txt", site())
+    test::suite_assert(ts, second.positionals["input"]? == "two.txt", site())
+end
+
+func test_help(ts):
+    parser := argparse::new(_)
+    argparse::add_positional(parser, "input", "Input file.")
+    output := argparse::add_option(parser, "--output", "-o", "Output file.")
+    argparse::add_option_positional(output, "file", "Output path.")
+    argparse::add_option(parser, "--verbose", "-v", "Show extra output.")
+
+    help := argparse::format_help(parser, "tool", _)
+    _assert_contains(ts, help, "Usage:")
+    _assert_contains(ts, help, "tool [-o, --output <file>] [-v, --verbose] <input>")
+    _assert_contains(ts, help, "Positional arguments:")
+    _assert_contains(ts, help, "Options:")
+    _assert_contains(ts, help, "<file>  Output path.")
+
+    long_only := argparse::new(_)
+    argparse::add_option(long_only, "--verbose", "", "Show extra output.")
+    long_only_help := argparse::format_help(long_only, "tool", _)
+    _assert_contains(ts, long_only_help, "tool [--verbose]")
+    test::suite_assert(ts, string::find(long_only_help, ", --verbose") == -1, site())
+end
+
+func test_parse_errors(ts):
+    unknown := argparse::new(_)
+    argparse::add_positional(unknown, "input", "Input file.")
+    _assert_parse_fails(ts, unknown, ["--unknown", "in.txt"])
+    _assert_parse_fails(ts, unknown, ["-vq", "in.txt"])
+
+    inline_option := argparse::new(_)
+    argparse::add_positional(inline_option, "input", "Input file.")
+    output := argparse::add_option(inline_option, "--output", "-o", "Output file.")
+    argparse::add_option_positional(output, "file", "Output path.")
+    _assert_parse_fails(ts, inline_option, ["--output=out.txt", "in.txt"])
+    _assert_parse_fails(ts, inline_option, ["--output"])
+
+    duplicate := argparse::new(_)
+    argparse::add_positional(duplicate, "input", "Input file.")
+    argparse::add_option(duplicate, "--verbose", "-v", "Show extra output.")
+    _assert_parse_fails(ts, duplicate, ["--verbose", "-v", "in.txt"])
+
+    positionals := argparse::new(_)
+    argparse::add_positional(positionals, "input", "Input file.")
+    empty_args: Vec[String]
+    _assert_parse_fails(ts, positionals, empty_args)
+    _assert_parse_fails(ts, positionals, ["one.txt", "two.txt"])
+end
+
+
+func run_tests(ts):
+    test_long_option_and_flag(ts)
+    test_short_option(ts)
+    test_long_only_options(ts)
+    test_end_of_options(ts)
+    test_lone_dash_is_positional(ts)
+    test_parse_results_are_independent(ts)
+    test_help(ts)
+    test_parse_errors(ts)
+end

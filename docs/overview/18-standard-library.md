@@ -16,6 +16,7 @@ strings, input/output, math, randomness, and testing.
 - [jik::rand](../jiklib/rand.md) - pseudo-random number generation
 - [jik::sys](../jiklib/sys.md) - system-level utilities
 - [jik::process](../jiklib/process.md) - shell-free process execution
+- [jik::argparse](../jiklib/argparse.md) - command-line argument parsing
 - [jik::path](../jiklib/path.md) - lexical path utilities
 - [jik::math](../jiklib/math.md) - mathematical functions and constants
 - [jik::testing](../jiklib/testing.md) - support for writing tests

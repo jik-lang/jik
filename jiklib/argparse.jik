@@ -1,0 +1,363 @@
+//! Command-line argument parser.
+
+use "jik/std"
+use "jik/strbuf"
+
+
+// -------------------------------------------------------------
+//      Types
+// -------------------------------------------------------------
+
+
+/// A positional value accepted by the parser or an option.
+struct _ArgSpec:
+    name: String
+    help: String
+end
+
+/// A long option, optional short alias, and its value specifications.
+struct ArgumentOption:
+    name: String
+    short_name: String
+    help: String
+    positionals: Vec[_ArgSpec]
+end
+
+/// Configured parser.
+struct Parser:
+    positionals: Vec[_ArgSpec]
+    options: Vec[ArgumentOption]
+end
+
+/// Values returned by `parse`.
+///
+/// `positionals` is keyed by positional name. `options` is keyed by the configured long option spelling, including its `--` prefix.
+/// Each option value is keyed by its declared name. A present flag has an empty value dictionary.
+struct ParseResult:
+    positionals: Dict[String]
+    options: Dict[Dict[String]]
+end
+
+
+// -------------------------------------------------------------
+//      Configuration helpers
+// -------------------------------------------------------------
+
+func _valid_option_name(name: String) -> bool:
+    return len(name) > 2 and name[0] == '-' and name[1] == '-'
+end
+
+func _valid_short_name(name: String) -> bool:
+    return len(name) == 0 or (len(name) == 2 and name[0] == '-')
+end
+
+func _has_option_name(foreign parser: Parser, foreign name: String) -> bool:
+    for option in parser.options:
+        if option.name == name or option.short_name == name:
+            return true
+        end
+    end
+    return false
+end
+
+func _has_positional_name(foreign parser: Parser, foreign name: String) -> bool:
+    for positional in parser.positionals:
+        if positional.name == name:
+            return true
+        end
+    end
+    return false
+end
+
+func _has_option_positional_name(foreign option: ArgumentOption, foreign name: String) -> bool:
+    for positional in option.positionals:
+        if positional.name == name:
+            return true
+        end
+    end
+    return false
+end
+
+
+// -------------------------------------------------------------
+//      Configuration API
+// -------------------------------------------------------------
+
+
+/// Create an empty argument parser.
+///
+/// @param r Allocation region for the parser and all configured data.
+func new(r: Region) -> Parser:
+    return Parser{}[r]
+end
+
+/// Add a required positional argument.
+///
+/// @param parser Parser to configure.
+/// @param name Positional argument name.
+/// @param help Help text.
+func add_positional(parser: Parser, foreign name: String, foreign help: String):
+    if len(name) == 0:
+        std::panic("argparse: positional name cannot be empty")
+    elif _has_positional_name(parser, name):
+        std::panic("argparse: duplicate positional name")
+    end
+    positional := _ArgSpec{
+        name = copy(name, .parser),
+        help = copy(help, .parser)
+    }[.parser]
+    push(parser.positionals, positional)
+end
+
+/// Add an option and return it.
+///
+/// An option with no declared values acts as a flag.
+/// Long names must begin with `--`. Short names are optional; when provided,
+/// they must be `-` followed by one character. Duplicate option names
+/// terminate through `std::panic`.
+///
+/// @param parser Parser to configure.
+/// @param name Long option name, such as `--verbose`.
+/// @param short_name Short option name, such as `-v`, or an empty string for a long-only option.
+/// @param help Help text.
+/// @returns Configured option handle.
+func add_option(parser: Parser, foreign name: String, foreign short_name: String, foreign help: String) -> ArgumentOption:
+    if not _valid_option_name(name):
+        std::panic("argparse: option name must begin with --")
+    elif not _valid_short_name(short_name):
+        std::panic("argparse: short option must be empty or - followed by one character")
+    elif _has_option_name(parser, name) or (len(short_name) > 0 and _has_option_name(parser, short_name)):
+        std::panic("argparse: duplicate option")
+    end
+    option := ArgumentOption{
+        name = copy(name, .parser),
+        short_name = copy(short_name, .parser),
+        help = copy(help, .parser)
+    }[.parser]
+    push(parser.options, option)
+    return option
+end
+
+/// Add a positional value consumed by an option.
+///
+/// Value names must be unique within an option because they become keys in the parse result.
+///
+/// @param option Option returned by `add_option`.
+/// @param name Value name.
+/// @param help Help text.
+func add_option_positional(option: ArgumentOption, foreign name: String, foreign help: String):
+    if len(name) == 0:
+        std::panic("argparse: option value name cannot be empty")
+    elif _has_option_positional_name(option, name):
+        std::panic("argparse: duplicate option value name")
+    end
+    positional := _ArgSpec{
+        name = copy(name, .option),
+        help = copy(help, .option)
+    }[.option]
+    push(option.positionals, positional)
+end
+
+
+// -------------------------------------------------------------
+//      Parsing helpers
+// -------------------------------------------------------------
+
+
+func _is_option(arg: String) -> bool:
+    return len(arg) > 1 and arg[0] == '-'
+end
+
+func _get_option_index(foreign parser: Parser, foreign arg: String) -> int:
+    for i = 0, len(parser.options):
+        option := parser.options[i]
+        if option.name == arg or option.short_name == arg:
+            return i
+        end
+    end
+    return -1
+end
+
+// -------------------------------------------------------------
+//      Parsing API
+// -------------------------------------------------------------
+
+
+/// Parse command-line arguments into a result.
+///
+/// `args` must not include the executable name. The parsed dictionaries are allocated in `r`. Options may be written with their long or short names.
+/// `--` ends option parsing. Repeating an option is a parse error.
+/// Supported forms are `--long` and `-s`; grouped short options and inline values such as `--output=file` are not supported.
+/// Option values are retrieved by name, such as `result.options["--output"]?["file"]?`.
+/// Unknown or repeated options, missing option values, and missing or extra positional arguments return an `argparse:` error.
+///
+/// @param parser Configured parser.
+/// @param args Command-line tokens after the executable name.
+/// @param r Allocation region for the returned result.
+/// @returns Parsed positional and option values.
+throws func parse(foreign parser: Parser, foreign args: Vec[String], r: Region) -> ParseResult:
+    result := ParseResult{}[r]
+    end_options := false
+    current_positional := 0
+    i := 0
+    while i < len(args):
+        arg := args[i]
+        if end_options:
+            if current_positional >= len(parser.positionals):
+                fail(concat("argparse: unexpected positional ", arg, .parser))
+            end
+            positional := parser.positionals[current_positional]
+            result.positionals[copy(positional.name, r)] = copy(arg, r)
+            current_positional += 1
+            i += 1
+            continue
+        end
+        if arg == "--":
+            end_options = true
+            i += 1
+            continue
+        end
+        if _is_option(arg):
+            option_index := _get_option_index(parser, arg)
+            if option_index == -1:
+                fail(concat("argparse: unknown option ", arg, .parser))
+            end
+            option := parser.options[option_index]
+            if result.options[option.name] is Some:
+                fail(concat("argparse: duplicate option ", arg, .parser))
+            end
+            required_values := len(option.positionals)
+            if i + required_values >= len(args):
+                fail(concat("argparse: missing value for option ", arg, .parser))
+            end
+            values: Dict[String][r]
+            j := 0
+            while j < required_values:
+                positional := option.positionals[j]
+                values[copy(positional.name, r)] = copy(args[i + j + 1], r)
+                j += 1
+            end
+            result.options[copy(option.name, r)] = values
+            i += required_values + 1
+            continue
+        end
+        if current_positional >= len(parser.positionals):
+            fail(concat("argparse: unexpected positional ", arg, .parser))
+        end
+        positional := parser.positionals[current_positional]
+        result.positionals[copy(positional.name, r)] = copy(arg, r)
+        current_positional += 1
+        i += 1
+    end
+    if current_positional < len(parser.positionals):
+        positional := parser.positionals[current_positional]
+        fail(concat("argparse: missing positional ", positional.name, .parser))
+    end
+
+    return result
+end
+
+
+// -------------------------------------------------------------
+//      Help API
+// -------------------------------------------------------------
+
+
+func _append_spaces(sb: strbuf::StrBuf, count: int):
+    i := 0
+    while i < count:
+        strbuf::append(sb, " ")
+        i += 1
+    end
+end
+
+func _option_spec_len(foreign option: ArgumentOption) -> int:
+    size := len(option.name)
+    if len(option.short_name) > 0:
+        size += len(option.short_name) + 2
+    end
+    for positional in option.positionals:
+        size += len(positional.name) + 3
+    end
+    return size
+end
+
+func _append_option_spec(sb: strbuf::StrBuf, foreign option: ArgumentOption):
+    if len(option.short_name) > 0:
+        strbuf::append(sb, option.short_name)
+        strbuf::append(sb, ", ")
+    end
+    strbuf::append(sb, option.name)
+    for positional in option.positionals:
+        strbuf::append(sb, " <")
+        strbuf::append(sb, positional.name)
+        strbuf::append(sb, ">")
+    end
+end
+
+/// Format generated parser help text.
+///
+/// @param parser Configured parser.
+/// @param prog Program name shown in the usage line.
+/// @param r Allocation region for the returned string.
+/// @returns Help text.
+func format_help(foreign parser: Parser, foreign prog: String, r: Region) -> String:
+    sb := strbuf::new("", r)
+    strbuf::append(sb, "Usage:\n  ")
+    strbuf::append(sb, prog)
+    for option in parser.options:
+        strbuf::append(sb, " [")
+        _append_option_spec(sb, option)
+        strbuf::append(sb, "]")
+    end
+    for positional in parser.positionals:
+        strbuf::append(sb, " <")
+        strbuf::append(sb, positional.name)
+        strbuf::append(sb, ">")
+    end
+    if len(parser.positionals) > 0:
+        width := 0
+        for positional in parser.positionals:
+            if len(positional.name) > width:
+                width = len(positional.name)
+            end
+        end
+        strbuf::append(sb, "\n\nPositional arguments:\n")
+        for positional in parser.positionals:
+            strbuf::append(sb, "  ")
+            strbuf::append(sb, positional.name)
+            _append_spaces(sb, width - len(positional.name) + 2)
+            strbuf::append(sb, positional.help)
+            strbuf::append(sb, "\n")
+        end
+    end
+    if len(parser.options) > 0:
+        width := 0
+        for option in parser.options:
+            size := _option_spec_len(option)
+            if size > width:
+                width = size
+            end
+        end
+        strbuf::append(sb, "\nOptions:\n")
+        for option in parser.options:
+            strbuf::append(sb, "  ")
+            _append_option_spec(sb, option)
+            _append_spaces(sb, width - _option_spec_len(option) + 2)
+            strbuf::append(sb, option.help)
+            strbuf::append(sb, "\n")
+            for positional in option.positionals:
+                strbuf::append(sb, "      <")
+                strbuf::append(sb, positional.name)
+                strbuf::append(sb, ">  ")
+                strbuf::append(sb, positional.help)
+                strbuf::append(sb, "\n")
+            end
+            if len(option.positionals) > 0:
+                strbuf::append(sb, "\n")
+            end
+        end
+    end
+
+    return strbuf::to_string(sb, r)
+end
