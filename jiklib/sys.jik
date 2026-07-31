@@ -43,6 +43,14 @@ func getenv(name: String, region: Region) -> Option[String]:
     return Some{getenv_raw(name, region)}[region]
 end
 
+/// Return the absolute path of the running executable.
+///
+/// @param region Allocation region for the returned string.
+/// @returns Absolute executable path.
+/// @throws When the operating system cannot determine the executable path.
+extern throws func jik_impl_sys_executable_path as
+    executable_path(region: Region) -> String
+
 /// Return the current working directory.
 ///
 /// @param region Allocation region for the returned string.
@@ -73,9 +81,11 @@ extern func jik_impl_sys_platform as
 #ifdef _WIN32
 #include <windows.h>
 #include <direct.h>
-#else
+#elif defined(__linux__)
 #include <time.h>
+#include <sys/types.h>
 #include <unistd.h>
+extern ssize_t readlink(const char *path, char *buf, size_t size);
 #endif
 
 void
@@ -106,6 +116,49 @@ jik_impl_sys_getenv_raw(JikString *name, JikRegion *r)
         return jik_string_new("", r);
     }
     return jik_string_new((char *)val, r);
+}
+
+JikString *
+jik_impl_sys_executable_path(JikRegion *r, JikError *e)
+{
+#ifdef _WIN32
+    DWORD cap = 256;
+    for (;;) {
+        char *buf = jik_region_alloc(r, (size_t)cap);
+        SetLastError(ERROR_SUCCESS);
+        DWORD len = GetModuleFileNameA(NULL, buf, cap);
+        if (len == 0) {
+            break;
+        }
+        if (len < cap - 1 || (len == cap - 1 && GetLastError() != ERROR_INSUFFICIENT_BUFFER)) {
+            buf[len] = '\0';
+            return jik_string_new(buf, r);
+        }
+        if (cap > (DWORD)-1 / 2) {
+            break;
+        }
+        cap *= 2;
+    }
+#elif defined(__linux__)
+    size_t cap = 256;
+    for (;;) {
+        char *buf = jik_region_alloc(r, cap);
+        ssize_t len = readlink("/proc/self/exe", buf, cap - 1);
+        if (len < 0) {
+            break;
+        }
+        if ((size_t)len < cap - 1) {
+            buf[len] = '\0';
+            return jik_string_new(buf, r);
+        }
+        if (cap > SIZE_MAX / 2) {
+            break;
+        }
+        cap *= 2;
+    }
+#endif
+    jik_error_set(e, 1, "sys::executable_path: could not determine executable path");
+    return NULL;
 }
 
 JikString *

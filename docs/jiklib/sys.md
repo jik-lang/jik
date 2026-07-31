@@ -29,6 +29,23 @@ Return the current working directory.
 
 ---
 
+### `throws executable_path(region: Region) -> String`
+
+Return the absolute path of the running executable.
+
+**Parameters**
+1. `region: Region` - Allocation region for the returned string.
+
+**Returns**
+- Absolute path of the running executable.
+
+**Behavior**
+- Throws if the operating system cannot determine the executable path.
+- Use `path::dirname` when locating files beside the executable. This is not
+  the current working directory.
+
+---
+
 ### `getenv(name: String, region: Region) -> Option[String]`
 
 Get an environment variable value.

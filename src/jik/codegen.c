@@ -642,8 +642,7 @@ get_function_call(JikCodeGenerator *cg, JikNode *nd)
                                            nd->val_call.name->val_id.mod_alias,
                                            nd->token->mod_alias);
     assert(func);
-    size_t n       = VecJikNode_size(nd->val_call.args);
-    char  *prefix  = n > 0 ? ", " : "";
+    char  *prefix  = *args ? ", " : "";
     char  *err_arg = jik_function_throws(func) ? JIK_STRING_NCAT(prefix, "&jik_catch_err") : "";
     return JIK_STRING_NCAT(func_name, "(", args, err_arg, ")");
 }
@@ -1360,7 +1359,7 @@ jik_codegen_emit_expr_must(JikCodeGenerator *cg, JikNode *nd)
     char *func_name = get_callee_name(cg, call_expr);
     char *args      = get_callee_args(cg, call_expr);
     char *msg       = jik_codegen_format_runtime_error(nd->token, "must failed");
-    char *prefix    = VecJikNode_size(call_expr->val_call.args) > 0 ? ", " : "";
+    char *prefix    = *args ? ", " : "";
     return JIK_STRING_NCAT(func_name, "_must", "(", args, prefix, msg, ")");
 }
 
