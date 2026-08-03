@@ -699,6 +699,11 @@ jik_lexer_tokenize(JikLexer *lex)
             VecJikToken_push(tokens, tok);
             jik_lexer_advance_by(lex, strlen("@platform"));
         }
+        else if (strncmp(jik_lexer_current_ptr(lex), "@profile", (int)strlen("@profile")) == 0) {
+            tok = jik_lexer_make_token(lex, TOK_DIRECTIVE_PROFILE, "@profile");
+            VecJikToken_push(tokens, tok);
+            jik_lexer_advance_by(lex, strlen("@profile"));
+        }
         else if (strncmp(jik_lexer_current_ptr(lex), "@includedir", (int)strlen("@includedir")) ==
                  0) {
             tok = jik_lexer_make_token(lex, TOK_DIRECTIVE_INCLUDEDIR, "@includedir");

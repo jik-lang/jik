@@ -198,6 +198,8 @@ jik_token_type_pretty_name(JikTokenType type)
         return "!";
     case TOK_DIRECTIVE_PLATFORM:
         return "@platform";
+    case TOK_DIRECTIVE_PROFILE:
+        return "@profile";
     case TOK_DIRECTIVE_INCLUDEDIR:
         return "@includedir";
     case TOK_DIRECTIVE_LIBDIR:

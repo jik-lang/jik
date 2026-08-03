@@ -26,6 +26,7 @@ jik_parser_init(JikParser *p, JikContext *ctx)
     p->parsing_struct  = false;
     p->container_depth = 0;
     p->build_platform  = JIK_BUILD_PLATFORM_ALL;
+    p->build_profile   = JIK_BUILD_PROFILE_ALL;
     p->build_filepath  = NULL;
 }
 
@@ -1430,6 +1431,39 @@ jik_parser_parse_platform_directive(JikParser *p)
     jik_parser_eat_newlines(p);
 }
 
+static void
+jik_parser_parse_profile_directive(JikParser *p)
+{
+    jik_parser_eat_token(p, TOK_DIRECTIVE_PROFILE);
+    jik_parser_eat_token(p, TOK_LPAREN);
+    JikToken *profile = jik_parser_eat_token(p, TOK_ID);
+    char     *name    = profile->lexeme;
+
+    JikToken *next;
+    while ((next = jik_parser_current_token(p)) != NULL && next->type == TOK_OP_MINUS) {
+        jik_parser_eat_token(p, TOK_OP_MINUS);
+        JikToken *part = jik_parser_eat_token(p, TOK_ID);
+        name           = JIK_STRING_NCAT(name, "-", part->lexeme);
+    }
+
+    if (strcmp(name, "all") == 0) {
+        p->build_profile = JIK_BUILD_PROFILE_ALL;
+    }
+    else if (strcmp(name, "windows-x64-mingw") == 0) {
+        p->build_profile = JIK_BUILD_PROFILE_WINDOWS_X64_MINGW;
+    }
+    else if (strcmp(name, "linux-x64-gnu") == 0) {
+        p->build_profile = JIK_BUILD_PROFILE_LINUX_X64_GNU;
+    }
+    else {
+        jik_diag_fatal_error(JIK_STRING_NCAT("unknown build profile: ", name),
+                             jik_token_to_text(profile));
+    }
+
+    jik_parser_eat_token(p, TOK_RPAREN);
+    jik_parser_eat_newlines(p);
+}
+
 static JikBuildDirectiveKind
 jik_parser_build_directive_kind(JikTokenType type)
 {
@@ -1477,7 +1511,11 @@ jik_parser_parse_build_directive(JikParser *p)
     VecJikBuildDirective_push(
         p->ctx->build_directives,
         (JikBuildDirective){
-            .kind = kind, .platform = p->build_platform, .args = args, .token = directive});
+            .kind = kind,
+            .platform = p->build_platform,
+            .profile = p->build_profile,
+            .args = args,
+            .token = directive});
 }
 
 static void
@@ -1486,10 +1524,11 @@ jik_parser_parse(JikParser *p)
     JikToken *tok;
     JikNode  *nd;
     while ((tok = jik_parser_current_token(p)) != NULL) {
-        // Each new parsed module starts with build platform "all"
+        // Each new parsed module starts with unrestricted build directives.
         if (p->build_filepath == NULL || strcmp(p->build_filepath, tok->filepath) != 0) {
             p->build_filepath = tok->filepath;
             p->build_platform = JIK_BUILD_PLATFORM_ALL;
+            p->build_profile  = JIK_BUILD_PROFILE_ALL;
         }
         if (tok->type == TOK_NEWLINE) {
             jik_parser_eat_token(p, TOK_NEWLINE);
@@ -1556,6 +1595,9 @@ jik_parser_parse(JikParser *p)
         }
         else if (tok->type == TOK_DIRECTIVE_PLATFORM) {
             jik_parser_parse_platform_directive(p);
+        }
+        else if (tok->type == TOK_DIRECTIVE_PROFILE) {
+            jik_parser_parse_profile_directive(p);
         }
         else if (jik_parser_is_build_directive(tok->type)) {
             jik_parser_parse_build_directive(p);

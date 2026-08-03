@@ -68,7 +68,10 @@ jik build hello.jik --preview
 Reachable modules may contain native build directives such as `@includedir`, `@libdir`, `@link`,
 and `@copy`. Active directives are applied transitively by `build` and `run`; copied files are placed
 beside the produced executable. `@platform(windows)`, `@platform(linux)`, and `@platform(all)` select
-the platform for subsequent build directives in the same source file.
+the platform for subsequent build directives in the same source file. `@profile(windows-x64-mingw)`
+and `@profile(linux-x64-gnu)` additionally restrict subsequent native directives to a compatible
+compiler target; `@profile(all)` removes that restriction. Profile matching is checked before the
+host compiler is invoked. MSVC is not currently a supported native build profile.
 
 ### `jik tran <filepath>`
 
@@ -127,7 +130,8 @@ jik memchk hello.jik --cc gcc
 
 Print resolved Jik configuration values as `key=value` lines, including the Jik
 version, platform, root directory, `jiklib` path, package path, support include
-path, and selected C compiler.
+path, selected C compiler, its reported target, and Jik's normalized compiler
+profile.
 
 Example:
 

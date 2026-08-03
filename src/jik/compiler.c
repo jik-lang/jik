@@ -127,7 +127,7 @@ jik_module_path_is_absolute(char *path)
 }
 
 static bool
-jik_build_directive_is_active(JikBuildDirective *directive)
+jik_build_directive_platform_is_active(JikBuildDirective *directive)
 {
     if (directive->platform == JIK_BUILD_PLATFORM_ALL) {
         return true;
@@ -137,6 +137,13 @@ jik_build_directive_is_active(JikBuildDirective *directive)
 #else
     return directive->platform == JIK_BUILD_PLATFORM_LINUX;
 #endif
+}
+
+static bool
+jik_build_directive_is_active(JikBuildDirective *directive, JikBuildProfile profile)
+{
+    return jik_build_directive_platform_is_active(directive) &&
+           (directive->profile == JIK_BUILD_PROFILE_ALL || directive->profile == profile);
 }
 
 static char *
@@ -150,12 +157,13 @@ jik_build_resolve_path(JikBuildDirective *directive, char *path)
 }
 
 static char *
-jik_build_get_compile_args(JikContext *ctx)
+jik_build_get_compile_args(JikContext *ctx, JikBuildProfile profile)
 {
     CharBuffer *args = char_buffer_new("");
     for (size_t i = 0; i < VecJikBuildDirective_size(ctx->build_directives); i++) {
         JikBuildDirective *directive = VecJikBuildDirective_get_ptr(ctx->build_directives, i);
-        if (!jik_build_directive_is_active(directive) || directive->kind != JIK_BUILD_INCLUDE_DIR) {
+        if (!jik_build_directive_is_active(directive, profile) ||
+            directive->kind != JIK_BUILD_INCLUDE_DIR) {
             continue;
         }
         for (size_t j = 0; j < VecString_size(directive->args); j++) {
@@ -168,12 +176,12 @@ jik_build_get_compile_args(JikContext *ctx)
 }
 
 static char *
-jik_build_get_linker_args(JikContext *ctx)
+jik_build_get_linker_args(JikContext *ctx, JikBuildProfile profile)
 {
     CharBuffer *args = char_buffer_new("");
     for (size_t i = 0; i < VecJikBuildDirective_size(ctx->build_directives); i++) {
         JikBuildDirective *directive = VecJikBuildDirective_get_ptr(ctx->build_directives, i);
-        if (!jik_build_directive_is_active(directive)) {
+        if (!jik_build_directive_is_active(directive, profile)) {
             continue;
         }
         if (directive->kind == JIK_BUILD_LIB_DIR) {
@@ -500,6 +508,133 @@ jik_compiler_dump_translation(JikContext *ctx)
 #define OUT_EXT ""
 #endif
 
+typedef struct JikCompilerTarget {
+    JikBuildProfile profile;
+    char           *raw_target;
+    bool            probe_ok;
+} JikCompilerTarget;
+
+static char *
+jik_build_profile_name(JikBuildProfile profile)
+{
+    switch (profile) {
+    case JIK_BUILD_PROFILE_WINDOWS_X64_MINGW:
+        return "windows-x64-mingw";
+    case JIK_BUILD_PROFILE_LINUX_X64_GNU:
+        return "linux-x64-gnu";
+    case JIK_BUILD_PROFILE_UNKNOWN:
+        return "unknown";
+    case JIK_BUILD_PROFILE_ALL:
+        return "all";
+    }
+    return "unknown";
+}
+
+static JikBuildProfile
+jik_compiler_normalize_profile(char *target)
+{
+    if (strstr(target, "x86_64") == NULL) {
+        return JIK_BUILD_PROFILE_UNKNOWN;
+    }
+    if (strstr(target, "mingw") != NULL || strstr(target, "windows-gnu") != NULL) {
+        return JIK_BUILD_PROFILE_WINDOWS_X64_MINGW;
+    }
+    if (strstr(target, "linux") != NULL && strstr(target, "gnu") != NULL) {
+        return JIK_BUILD_PROFILE_LINUX_X64_GNU;
+    }
+    return JIK_BUILD_PROFILE_UNKNOWN;
+}
+
+static JikCompilerTarget
+jik_compiler_probe_target(char *compiler, char *cc_flags)
+{
+    JikCompilerTarget target = {
+        .profile = JIK_BUILD_PROFILE_UNKNOWN, .raw_target = "", .probe_ok = false};
+    char *cmd = *cc_flags ? JIK_STRING_NCAT(compiler, " ", cc_flags, " -dumpmachine 2>&1")
+                          : JIK_STRING_NCAT(compiler, " -dumpmachine 2>&1");
+    FILE *probe = POPEN(cmd, "r");
+    if (probe == NULL) {
+        target.raw_target = "compiler target probe could not be started";
+        return target;
+    }
+
+    CharBuffer *output = char_buffer_new("");
+    char        line[256];
+    while (fgets(line, sizeof(line), probe) != NULL) {
+        char_buffer_append(output, line);
+    }
+    int status = PCLOSE(probe);
+    while (*output->data && (output->data[strlen(output->data) - 1] == '\n' ||
+                             output->data[strlen(output->data) - 1] == '\r')) {
+        output->data[strlen(output->data) - 1] = '\0';
+    }
+    target.raw_target = *output->data ? output->data : "unknown";
+    target.probe_ok   = status == 0;
+    if (status != 0) {
+        return target;
+    }
+    target.profile = jik_compiler_normalize_profile(target.raw_target);
+    return target;
+}
+
+static JikBuildProfile
+jik_compiler_validate_build_profiles(JikContext *ctx, char *compiler)
+{
+    bool needs_profile = false;
+    for (size_t i = 0; i < VecJikBuildDirective_size(ctx->build_directives); i++) {
+        JikBuildDirective *directive = VecJikBuildDirective_get_ptr(ctx->build_directives, i);
+        if (jik_build_directive_platform_is_active(directive) &&
+            directive->profile != JIK_BUILD_PROFILE_ALL) {
+            needs_profile = true;
+            break;
+        }
+    }
+    if (!needs_profile) {
+        return JIK_BUILD_PROFILE_UNKNOWN;
+    }
+
+    JikCompilerTarget target =
+        jik_compiler_probe_target(compiler, ctx->conf.cc_flags ? ctx->conf.cc_flags : "");
+    JikBuildProfile selected = target.profile;
+    TabBool *module_matches = TabBool_new();
+    for (size_t i = 0; i < VecJikBuildDirective_size(ctx->build_directives); i++) {
+        JikBuildDirective *directive = VecJikBuildDirective_get_ptr(ctx->build_directives, i);
+        if (!jik_build_directive_platform_is_active(directive) ||
+            directive->profile == JIK_BUILD_PROFILE_ALL) {
+            continue;
+        }
+
+        char *filepath = directive->token->filepath;
+        bool *matches   = TabBool_get(module_matches, filepath);
+        if (directive->profile == selected) {
+            TabBool_set(module_matches, filepath, true);
+        }
+        else if (matches == NULL) {
+            TabBool_set(module_matches, filepath, false);
+        }
+    }
+
+    CharBuffer  *unsupported_modules = char_buffer_new("");
+    TabBool_iter it                  = TabBool_iter_new(module_matches);
+    TabBool_item item;
+    while (TabBool_iter_next(&it, &item)) {
+        if (!item.value) {
+            char_buffer_append(unsupported_modules, "\n- ");
+            char_buffer_append(unsupported_modules, item.key);
+        }
+    }
+    if (*unsupported_modules->data) {
+        char *details = JIK_STRING_NCAT("selected profile: ",
+                                        jik_build_profile_name(selected),
+                                        "\ncompiler target: ",
+                                        target.raw_target,
+                                        "\npackage/modules:",
+                                        unsupported_modules->data);
+        jik_diag_fatal_error("native dependencies are unsupported by the selected toolchain", details);
+    }
+    return selected;
+}
+
 static int
 jik_compiler_run_binary(char *bin_fp)
 {
@@ -546,6 +681,11 @@ static void
 jik_compiler_env(JikConfig *conf)
 {
     char *compiler = jik_get_compiler_from_conf(conf);
+    JikCompilerTarget target = {
+        .profile = JIK_BUILD_PROFILE_UNKNOWN, .raw_target = "", .probe_ok = false};
+    if (compiler) {
+        target = jik_compiler_probe_target(compiler, conf->cc_flags ? conf->cc_flags : "");
+    }
 
     printf("version=%s\n", JIK_VERSION_STRING);
 #ifdef _WIN32
@@ -555,9 +695,11 @@ jik_compiler_env(JikConfig *conf)
 #endif
     printf("root=%s\n", conf->jik_root_dir);
     printf("jiklib=%s\n", conf->jiklib_path);
-    printf("pkg_path=%s\n", conf->jik_pkg_path ? conf->jik_pkg_path : "");
     printf("core_include=%s\n", conf->jik_core_include_path);
+    printf("pkg_path=%s\n", conf->jik_pkg_path ? conf->jik_pkg_path : "");
     printf("cc=%s\n", compiler ? compiler : "");
+    printf("cc_target=%s\n", target.probe_ok ? target.raw_target : "unknown");
+    printf("cc_profile=%s\n", jik_build_profile_name(target.profile));
 }
 
 static char *
@@ -605,12 +747,12 @@ jik_build_copy_file(char *source, char *destination, JikToken *token)
 }
 
 static void
-jik_build_copy_files(JikContext *ctx, char *out_bin)
+jik_build_copy_files(JikContext *ctx, char *out_bin, JikBuildProfile profile)
 {
     char *output_dir = jik_module_dirname(out_bin);
     for (size_t i = 0; i < VecJikBuildDirective_size(ctx->build_directives); i++) {
         JikBuildDirective *directive = VecJikBuildDirective_get_ptr(ctx->build_directives, i);
-        if (!jik_build_directive_is_active(directive) || directive->kind != JIK_BUILD_COPY) {
+        if (!jik_build_directive_is_active(directive, profile) || directive->kind != JIK_BUILD_COPY) {
             continue;
         }
         for (size_t j = 0; j < VecString_size(directive->args); j++) {
@@ -633,6 +775,7 @@ jik_compiler_build(JikContext *ctx, bool run)
     char *compiler = jik_get_compiler_from_conf(&ctx->conf);
     jik_diag_fatal_error_if(
         !compiler, "no compiler found, either set using JIK_CC or with the --cc option", "");
+    JikBuildProfile profile = jik_compiler_validate_build_profiles(ctx, compiler);
 #ifdef _WIN32
     char *default_cc_flags = "-D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_WARNINGS";
 #else
@@ -640,13 +783,13 @@ jik_compiler_build(JikContext *ctx, bool run)
 #endif
     char *release_cc_flags = ctx->conf.release ? "-O3" : "";
     char *user_cc_flags    = ctx->conf.cc_flags ? ctx->conf.cc_flags : "";
-    char *build_cc_args    = jik_build_get_compile_args(ctx);
+    char *build_cc_args    = jik_build_get_compile_args(ctx, profile);
     char *base_cc_flags    = *release_cc_flags
                                  ? JIK_STRING_NCAT(default_cc_flags, " ", release_cc_flags)
                                  : default_cc_flags;
     char *cc_flags =
         *user_cc_flags ? JIK_STRING_NCAT(base_cc_flags, " ", user_cc_flags) : base_cc_flags;
-    char *linker_args    = jik_build_get_linker_args(ctx);
+    char *linker_args    = jik_build_get_linker_args(ctx, profile);
     char *quoted_out_bin = shell_quote_arg(out_bin);
     char *quoted_include = shell_quote_arg(ctx->conf.jik_core_include_path);
     cmd                  = JIK_STRING_NCAT(compiler,
@@ -670,7 +813,7 @@ jik_compiler_build(JikContext *ctx, bool run)
     fputs(ctx->translation, cc_pipe);
     int ret = PCLOSE(cc_pipe);
     jik_diag_fatal_error_if(ret != 0, "CC compilation failed", "");
-    jik_build_copy_files(ctx, out_bin);
+    jik_build_copy_files(ctx, out_bin, profile);
 
     if (run) {
         jik_compiler_verbose(&ctx->conf, "run", out_bin);
@@ -689,11 +832,12 @@ jik_compiler_memchk(JikContext *ctx)
     char *compiler = jik_get_compiler_from_conf(&ctx->conf);
     jik_diag_fatal_error_if(
         !compiler, "no compiler found, either set using JIK_CC or with --cc flag", "");
+    JikBuildProfile profile = jik_compiler_validate_build_profiles(ctx, compiler);
     char *out_bin        = jik_string_cat(ctx->conf.target_name, OUT_EXT);
     char *quoted_out_bin = shell_quote_arg(out_bin);
     char *quoted_include = shell_quote_arg(ctx->conf.jik_core_include_path);
-    char *build_cc_args  = jik_build_get_compile_args(ctx);
-    char *linker_args    = jik_build_get_linker_args(ctx);
+    char *build_cc_args  = jik_build_get_compile_args(ctx, profile);
+    char *linker_args    = jik_build_get_linker_args(ctx, profile);
     char *cmd            = JIK_STRING_NCAT(compiler,
                                 " -g -O0 -x c",
                                 build_cc_args,
@@ -709,7 +853,7 @@ jik_compiler_memchk(JikContext *ctx)
     fputs(ctx->translation, cc_pipe);
     int ret = PCLOSE(cc_pipe);
     jik_diag_fatal_error_if(ret != 0, "CC compilation failed", "");
-    jik_build_copy_files(ctx, out_bin);
+    jik_build_copy_files(ctx, out_bin, profile);
     char *vlgr_cmd = JIK_STRING_NCAT("valgrind "
                                      "--tool=memcheck "
                                      "--leak-check=full "

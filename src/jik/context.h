@@ -13,6 +13,13 @@ typedef enum JikBuildPlatform {
     JIK_BUILD_PLATFORM_LINUX,
 } JikBuildPlatform;
 
+typedef enum JikBuildProfile {
+    JIK_BUILD_PROFILE_UNKNOWN,
+    JIK_BUILD_PROFILE_ALL,
+    JIK_BUILD_PROFILE_WINDOWS_X64_MINGW,
+    JIK_BUILD_PROFILE_LINUX_X64_GNU,
+} JikBuildProfile;
+
 typedef enum JikBuildDirectiveKind {
     JIK_BUILD_INCLUDE_DIR,
     JIK_BUILD_LIB_DIR,
@@ -23,6 +30,7 @@ typedef enum JikBuildDirectiveKind {
 typedef struct JikBuildDirective {
     JikBuildDirectiveKind kind;
     JikBuildPlatform      platform;
+    JikBuildProfile       profile;
     VecString            *args;
     JikToken             *token;
 } JikBuildDirective;

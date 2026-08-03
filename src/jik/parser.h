@@ -21,6 +21,7 @@ typedef struct JikParser {
     char            *parsing_struct_name;
     size_t           container_depth;
     JikBuildPlatform build_platform;
+    JikBuildProfile  build_profile;
     char            *build_filepath;
 } JikParser;
 

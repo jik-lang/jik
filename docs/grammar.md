@@ -83,17 +83,25 @@ source encoding.
 ### Build Directives
 
 ```ebnf
-build_directive ::= platform_directive | path_directive | link_directive
+build_directive ::= platform_directive | profile_directive | path_directive | link_directive
 platform_directive ::= "@platform" "(" ( "all" | "windows" | "linux" ) ")" newline
+profile_directive ::= "@profile" "(" ( "all" | "windows-x64-mingw" | "linux-x64-gnu" ) ")" newline
 path_directive ::= ( "@includedir" | "@libdir" | "@copy" )
                    "(" string_literal { "," string_literal } ")" newline
 link_directive ::= "@link" "(" string_literal { "," string_literal } ")" newline
 ```
 
-Build directives are top-level declarations. Each physical module starts with platform `all`.
+Build directives are top-level declarations. Each physical module starts with platform and profile `all`.
 `@platform(windows)` or `@platform(linux)` selects the platform for subsequent build directives in
 that module, while `@platform(all)` returns to platform-independent requirements. Platform state
 does not cross module boundaries and does not conditionally compile Jik declarations or embedded C.
+
+`@profile(windows-x64-mingw)` and `@profile(linux-x64-gnu)` restrict subsequent native build
+directives to a compatible host C compiler target. `@profile(all)` removes that restriction. A
+profile-restricted directive is active only when both its platform and profile match. `jik build`,
+`jik run`, and `jik memchk` detect the selected compiler target before invoking the compiler and
+report an incompatible native module early. `jik check` and `jik tran` only parse these directives;
+they do not probe a compiler. MSVC is not currently a supported native build profile.
 
 Relative include directories, library directories, and copied files are resolved from the source
 file containing the directive. Directives from all reachable modules are applied by `build`, `run`,
