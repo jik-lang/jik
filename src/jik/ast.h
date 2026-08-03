@@ -252,6 +252,7 @@ typedef struct JikNode {
             char           *name;
             char           *first_member;
             TabJikNode     *type_descs;
+            TabBool        *payloadless_tags;
             VecString      *member_order;
             TabJikNode     *init_vals;
             struct JikNode *enum_nd;
@@ -263,6 +264,7 @@ typedef struct JikNode {
             struct JikNode *variant_node;
             struct JikNode *init_expr;
             char           *tag;
+            bool            has_initializer_syntax;
             JikAllocSpec    alloc_spec;
         } val_variant_new;
 

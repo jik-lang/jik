@@ -331,6 +331,19 @@ jik_parser_parse_primary(JikParser *p)
                 node, id_tok->lexeme, jik_parser_current_context(p), id_tok);
         }
         else if (tok->type == TOK_LANG) {
+            if (node->type == NODE_EXPR_MEMBER_ACCESS &&
+                node->val_member_access.node->type == NODE_EXPR_IDENTIFIER &&
+                jik_parser_match_token_sequence(
+                    p, (JikTokenType[]){TOK_LANG, TOK_DOT, TOK_ID, TOK_RANG, TOK_ERROR})) {
+                JikNode *ret = jik_node_new_variant_new(node->val_member_access.node,
+                                                        NULL,
+                                                        node->val_member_access.member_name,
+                                                        jik_parser_current_context(p),
+                                                        node->token);
+                jik_set_alloc_spec(ret, jik_parser_get_region_spec(p));
+                node = ret;
+                continue;
+            }
             JikToken *lang_tok = jik_parser_eat_token(p, TOK_LANG);
             JikNode  *expr     = NULL;
             if (jik_parser_current_token(p)->type != TOK_COLON) {
@@ -803,6 +816,16 @@ jik_parser_parse_match(JikParser *p)
     while (curr->type != TOK_KWD_END) {
         jik_parser_eat_token(p, TOK_KWD_CASE);
         JikNode *var_tag = jik_parser_parse_atom(p);
+        if (var_tag->type == NODE_EXPR_IDENTIFIER &&
+            jik_parser_current_token(p)->type == TOK_DOT) {
+            jik_parser_eat_token(p, TOK_DOT);
+            JikToken *tag_tok = jik_parser_eat_token(p, TOK_ID);
+            var_tag = jik_node_new_variant_new(var_tag,
+                                               NULL,
+                                               tag_tok->lexeme,
+                                               jik_parser_current_context(p),
+                                               tag_tok);
+        }
         jik_diag_fatal_error_if(
             var_tag->type != NODE_EXPR_VARIANT_NEW, "expected variant", jik_token_to_text(curr));
         if (var_tag->val_variant_new.init_expr &&
@@ -1200,10 +1223,15 @@ jik_parser_parse_variant(JikParser *p)
             first_member = field_name;
         }
         VecString_push(variant_node->val_variant.member_order, field_name);
-        jik_parser_eat_token(p, TOK_COLON);
-        JikNode *td = jik_parser_parse_type_desc(p);
+        if (jik_parser_current_token(p)->type == TOK_COLON) {
+            jik_parser_eat_token(p, TOK_COLON);
+            JikNode *td = jik_parser_parse_type_desc(p);
+            TabJikNode_set(type_descs, field_name, td);
+        }
+        else {
+            TabBool_set(variant_node->val_variant.payloadless_tags, field_name, true);
+        }
         jik_parser_eat_newlines(p);
-        TabJikNode_set(type_descs, field_name, td);
     }
     jik_parser_eat_token(p, TOK_KWD_END);
     variant_node->val_variant.type_descs   = type_descs;
@@ -1287,6 +1315,7 @@ jik_parser_parse_variant_new(JikParser *p, JikToken *var_name_tok, JikToken *mod
         jik_parser_eat_token(p, TOK_RCURL);
         JikNode *ret = jik_node_new_variant_new(
             id, NULL, variant->lexeme, jik_parser_current_context(p), var_name_tok);
+        ret->val_variant_new.has_initializer_syntax = true;
         jik_set_alloc_spec(ret, jik_parser_get_region_spec(p));
         return ret;
     }
@@ -1295,6 +1324,7 @@ jik_parser_parse_variant_new(JikParser *p, JikToken *var_name_tok, JikToken *mod
     jik_parser_eat_token(p, TOK_RCURL);
     JikNode *ret = jik_node_new_variant_new(
         id, init_expr, variant->lexeme, jik_parser_current_context(p), var_name_tok);
+    ret->val_variant_new.has_initializer_syntax = true;
     jik_set_alloc_spec(ret, jik_parser_get_region_spec(p));
     return ret;
 }

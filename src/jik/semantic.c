@@ -33,6 +33,13 @@ jik_tab_jik_node_is_empty(TabJikNode *tab)
     return !TabJikNode_iter_next(&it, &item);
 }
 
+static bool
+jik_variant_tag_is_payloadless(JikNode *variant, char *tag)
+{
+    assert(variant->type == NODE_VARIANT);
+    return TabBool_get(variant->val_variant.payloadless_tags, tag) != NULL;
+}
+
 void
 jik_semantic_init(JikSemanticAnalyzer *sa, JikContext *ctx)
 {
@@ -126,7 +133,7 @@ jik_ensure_valid_variant_tag(JikNode *nd)
     nd->val_variant_new.variant_node = s;
     JikNode **res = TabJikNode_get(s->val_variant.type_descs, nd->val_variant_new.tag);
     jik_diag_fatal_error_if(
-        !res,
+        !res && !jik_variant_tag_is_payloadless(s, nd->val_variant_new.tag),
         JIK_STRING_NCAT("unknown variant tag \"", nd->val_variant_new.tag, "\""),
         jik_token_to_text(nd->token));
 }
@@ -172,6 +179,30 @@ jik_semantic_reject_invalid_value_expr(JikNode *nd)
                                              nd->val_variant_tag.tag,
                                              "{}"),
                              jik_token_to_text(nd->token));
+    }
+    if (nd->type == NODE_EXPR_VARIANT_NEW) {
+        JikNode *variant = jik_scope_get_symbol(nd->context,
+                                                 nd->val_variant_new.name->val_id.name,
+                                                 nd->val_variant_new.name->val_id.mod_alias,
+                                                 nd->token->mod_alias);
+        if (variant && variant->type == NODE_VARIANT &&
+            jik_variant_tag_is_payloadless(variant, nd->val_variant_new.tag)) {
+            jik_diag_fatal_error_if(nd->val_variant_new.has_initializer_syntax,
+                                    "payloadless variant tag cannot use braces",
+                                    JIK_STRING_NCAT("use ",
+                                                    nd->val_variant_new.name->val_id.name,
+                                                    ".",
+                                                    nd->val_variant_new.tag));
+        }
+        else if (variant && variant->type == NODE_VARIANT &&
+                 !nd->val_variant_new.has_initializer_syntax) {
+            jik_diag_fatal_error(JIK_STRING_NCAT("variant tag cannot be used as a value; use ",
+                                                 nd->val_variant_new.name->val_id.name,
+                                                 ".",
+                                                 nd->val_variant_new.tag,
+                                                 "{}"),
+                                 jik_token_to_text(nd->token));
+        }
     }
     if (nd->type == NODE_EXPR_MEMBER_ACCESS &&
         nd->val_member_access.node->type == NODE_EXPR_IDENTIFIER) {
@@ -307,6 +338,11 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             while (TabJikNode_iter_next(&it_fields, &item_field)) {
                 jik_semantic_reject_reserved_prefix(item_field.key, item_field.value->token);
             }
+            jik_diag_warning_if(VecString_size(nd->val_variant.member_order) > 0 &&
+                                    TabBool_size(nd->val_variant.payloadless_tags) ==
+                                        VecString_size(nd->val_variant.member_order),
+                                "variant has no payloads; use an enum instead",
+                                jik_token_to_text(nd->token));
             bool res = jik_scope_add_global_symbol(nd->val_variant.name, nd->token->mod_alias, nd);
             jik_diag_fatal_error_if(!res,
                                     JIK_STRING_NCAT("symbol \"",
@@ -562,6 +598,60 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                                                     nd->val_variant_new.name->val_id.name,
                                                     "\" not defined"),
                                     jik_token_to_text(nd->token));
+            if (!nd->val_variant_new.name->val_id.mod_alias) {
+                nd->val_variant_new.name->val_id.mod_alias = nd->token->mod_alias;
+            }
+        }
+        else if ((nd->type == NODE_EXPR_SUBSCRIPT_GET &&
+                  nd->val_subscript_get.expr->type == NODE_EXPR_MEMBER_ACCESS &&
+                  nd->val_subscript_get.expr->val_member_access.node->type ==
+                      NODE_EXPR_IDENTIFIER) ||
+                 (nd->type == NODE_STMNT_SUBSCRIPT_SET &&
+                  nd->val_subscript_set.sub_expr->type == NODE_EXPR_MEMBER_ACCESS &&
+                  nd->val_subscript_set.sub_expr->val_member_access.node->type ==
+                      NODE_EXPR_IDENTIFIER)) {
+            JikNode *member = nd->type == NODE_EXPR_SUBSCRIPT_GET
+                                  ? nd->val_subscript_get.expr
+                                  : nd->val_subscript_set.sub_expr;
+            char    *mod_alias = member->val_member_access.node->val_id.mod_alias
+                                     ? member->val_member_access.node->val_id.mod_alias
+                                     : member->val_member_access.node->token->mod_alias;
+            JikNode *variant = jik_scope_get_global_symbol(
+                member->val_member_access.node->val_id.name, mod_alias);
+            if (variant && variant->type == NODE_VARIANT) {
+                JikNode *tag = jik_node_new_variant_tag(member->val_member_access.node,
+                                                        member->val_member_access.member_name,
+                                                        nd->context,
+                                                        member->token);
+                *member = *tag;
+            }
+        }
+        else if (nd->type == NODE_EXPR_SUBSCRIPT_GET &&
+                 nd->val_subscript_get.node->type == NODE_EXPR_MEMBER_ACCESS &&
+                 nd->val_subscript_get.node->val_member_access.node->type ==
+                     NODE_EXPR_IDENTIFIER &&
+                 nd->val_subscript_get.expr->type == NODE_EXPR_IDENTIFIER) {
+            JikNode *member = nd->val_subscript_get.node;
+            JikNode *variant = jik_scope_get_symbol(
+                nd->context,
+                member->val_member_access.node->val_id.name,
+                member->val_member_access.node->val_id.mod_alias,
+                nd->token->mod_alias);
+            if (variant && variant->type == NODE_VARIANT &&
+                jik_variant_tag_is_payloadless(variant, member->val_member_access.member_name)) {
+                JikNode *ret = jik_node_new_variant_new(member->val_member_access.node,
+                                                        NULL,
+                                                        member->val_member_access.member_name,
+                                                        nd->context,
+                                                        nd->token);
+                ret->val_variant_new.name->val_id.mod_alias = variant->token->mod_alias;
+                jik_set_alloc_spec(ret,
+                                   (JikAllocSpec){.kind = JIK_ALLOC_NAMED_REGION,
+                                                  .src = JIK_ALLOC_SRC_UNKNOWN,
+                                                  .region_name =
+                                                      nd->val_subscript_get.expr->val_id.name});
+                *nd = *ret;
+            }
         }
         else if (nd->type == NODE_EXPR_MEMBER_ACCESS) {
             if (nd->val_member_access.node->type == NODE_EXPR_IDENTIFIER) {
@@ -584,15 +674,31 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                         jik_token_to_text(nd->token));
                 }
                 else if (enum_node && enum_node->type == NODE_VARIANT) {
-                    JikNode *var_new_nd =
-                        jik_node_new_variant_tag(nd->val_member_access.node,
-                                                 nd->val_member_access.member_name,
-                                                 nd->context,
-                                                 nd->token);
-                    nd->type                 = var_new_nd->type;
-                    nd->jik_type             = var_new_nd->jik_type;
-                    nd->val_variant_tag.name = var_new_nd->val_variant_tag.name;
-                    nd->val_variant_tag.tag  = var_new_nd->val_variant_tag.tag;
+                    if (jik_variant_tag_is_payloadless(enum_node,
+                                                       nd->val_member_access.member_name)) {
+                        JikNode *var_new_nd = jik_node_new_variant_new(
+                            nd->val_member_access.node,
+                            NULL,
+                            nd->val_member_access.member_name,
+                            nd->context,
+                            nd->token);
+                        var_new_nd->val_variant_new.name->val_id.mod_alias = mod_alias;
+                        jik_set_alloc_spec(var_new_nd,
+                                           (JikAllocSpec){.kind = JIK_ALLOC_LOCAL,
+                                                          .src = JIK_ALLOC_SRC_LOCAL});
+                        *nd = *var_new_nd;
+                    }
+                    else {
+                        JikNode *var_new_nd =
+                            jik_node_new_variant_tag(nd->val_member_access.node,
+                                                     nd->val_member_access.member_name,
+                                                     nd->context,
+                                                     nd->token);
+                        nd->type                 = var_new_nd->type;
+                        nd->jik_type             = var_new_nd->jik_type;
+                        nd->val_variant_tag.name = var_new_nd->val_variant_tag.name;
+                        nd->val_variant_tag.tag  = var_new_nd->val_variant_tag.tag;
+                    }
                 }
             }
         }
@@ -1056,6 +1162,9 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
         nd->val_variant.inferring = true;
         for (size_t i = 0; i < VecString_size(nd->val_variant.member_order); i++) {
             char     *field_name = VecString_get(nd->val_variant.member_order, i);
+            if (jik_variant_tag_is_payloadless(nd, field_name)) {
+                continue;
+            }
             JikNode **type_desc  = TabJikNode_get(nd->val_variant.type_descs, field_name);
             assert(type_desc);
             if (TabJikNode_get(nd->val_variant.init_vals, field_name)) {
@@ -1069,6 +1178,7 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
 
         nd->jik_type->val_variant.variant_types =
             get_field_types(nd->val_variant.init_vals, nd->jik_type);
+        nd->jik_type->val_variant.payloadless_tags = nd->val_variant.payloadless_tags;
         sa->needs_recollect       = true;
         nd->val_variant.inferring = false;
     }
@@ -1094,6 +1204,10 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
         nd->jik_type = st->jik_type;
         if (st->jik_type->name == TYPE_VARIANT) {
             jik_ensure_valid_variant_tag(nd);
+            if (jik_variant_tag_is_payloadless(nd->val_variant_new.variant_node,
+                                               nd->val_variant_new.tag)) {
+                return;
+            }
             JikNode **init_expr = TabJikNode_get(
                 nd->val_variant_new.variant_node->val_variant.init_vals, nd->val_variant_new.tag);
             if (!init_expr) {
@@ -1172,6 +1286,11 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
                 assert(variant_nd->jik_type->val_variant.variant_types);
                 JikType **t = TabJikType_get(variant_nd->jik_type->val_variant.variant_types,
                                              nd->val_subscript_get.expr->val_variant_tag.tag);
+                jik_diag_fatal_error_if(
+                    jik_variant_tag_is_payloadless(
+                        variant_nd, nd->val_subscript_get.expr->val_variant_tag.tag),
+                    "variant tag has no payload",
+                    jik_token_to_text(nd->val_subscript_get.expr->token));
                 jik_diag_fatal_error_if(
                     !t,
                     JIK_STRING_NCAT("unknown variant tag \"",
@@ -1315,7 +1434,9 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
                 JikType **expr_type =
                     TabJikType_get(variant_type->val_variant.variant_types,
                                    case_nd->val_case.variant->val_variant_new.tag);
-                assert(expr_type);
+                if (!expr_type) {
+                    continue;
+                }
                 // jik_diag_fatal_error_if(!expr_type, JIK_STRING_NCAT("wrong variant type: expected
                 // ", jik_type_pretty_name(variant_type)),
                 // jik_token_to_text(case_nd->val_case.variant->token));

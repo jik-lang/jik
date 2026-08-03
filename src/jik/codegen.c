@@ -49,6 +49,12 @@ get_alloc_dest(JikAllocSpec spec)
     }
 }
 
+static bool
+jik_codegen_variant_tag_is_payloadless(JikNode *variant, char *tag)
+{
+    return TabBool_get(variant->val_variant.payloadless_tags, tag) != NULL;
+}
+
 static JikNode *
 jik_codegen_make_console_arg_vec(JikContext *ctx)
 {
@@ -700,6 +706,21 @@ jik_codegen_emit_expr_variant_new(JikCodeGenerator *cg, JikNode *nd)
     char *alloc_dest = get_alloc_dest(nd->val_variant_new.alloc_spec);
     char *mn         = jik_codegen_mangle_name(nd->val_variant_new.name->val_id.mod_alias,
                                        nd->val_variant_new.name->val_id.name);
+    char *tag_name = JIK_STRING_NCAT(
+        nd->val_variant_new.variant_node->val_variant.enum_nd->jik_type->mangled_name,
+        "_",
+        nd->val_variant_new.tag);
+    if (jik_codegen_variant_tag_is_payloadless(nd->val_variant_new.variant_node,
+                                               nd->val_variant_new.tag)) {
+        return JIK_STRING_NCAT(mn,
+                               "_new(",
+                               alloc_dest,
+                               ", &(struct ",
+                               mn,
+                               "){.tag = ",
+                               tag_name,
+                               "})");
+    }
     char *te         = NULL;
     if (nd->val_variant_new.init_expr) {
         te = jik_codegen_emit_expression(cg, nd->val_variant_new.init_expr);
@@ -710,10 +731,6 @@ jik_codegen_emit_expr_variant_new(JikCodeGenerator *cg, JikNode *nd)
         assert(default_expr);
         te = jik_codegen_emit_expression(cg, *default_expr);
     }
-    char *tag_name = JIK_STRING_NCAT(
-        nd->val_variant_new.variant_node->val_variant.enum_nd->jik_type->mangled_name,
-        "_",
-        nd->val_variant_new.tag);
     return JIK_STRING_NCAT(mn,
                            "_new(",
                            alloc_dest,
@@ -2063,34 +2080,56 @@ jik_codegen_emit_variant_print_function(JikCodeGenerator *cg, JikNode *nd, char 
     jik_writer_indent(&cg->cw);
     jik_writer_write_line(&cg->cw,
                           JIK_STRING_NCAT("if (!s) { return ", JIK_NULL_PRINT_EXPR, "; }"));
+    jik_writer_write_line(&cg->cw,
+                          JIK_STRING_NCAT("JikCharBuffer *cb = jik_char_buffer_new(\"<",
+                                          nd->val_variant.name,
+                                          " \", a);"));
     jik_writer_write_line(&cg->cw, "switch (s->tag) {");
     for (size_t i = 0; i < VecString_size(nd->val_variant.member_order); i++) {
         char     *member_name = VecString_get(nd->val_variant.member_order, i);
-        JikNode **member_node = TabJikNode_get(nd->val_variant.init_vals, member_name);
-        assert(member_node);
         char *tag_name =
             JIK_STRING_NCAT(nd->val_variant.enum_nd->jik_type->mangled_name, "_", member_name);
         jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("case ", tag_name, ":"));
         jik_writer_indent(&cg->cw);
+        jik_writer_write_line(&cg->cw,
+                              JIK_STRING_NCAT("jik_char_buffer_append(cb, \"",
+                                              member_name,
+                                              "\", a);"));
 
+        if (jik_codegen_variant_tag_is_payloadless(nd, member_name)) {
+            jik_writer_write_line(&cg->cw, "jik_char_buffer_append(cb, \">\", a);");
+            jik_writer_write_line(&cg->cw, "return jik_string_new(cb->data, a);");
+            jik_writer_dedent(&cg->cw);
+            continue;
+        }
+
+        JikNode **member_node = TabJikNode_get(nd->val_variant.init_vals, member_name);
+        assert(member_node);
         char *elem_type_name = jik_codegen_get_print_type_name((*member_node)->jik_type);
         assert(elem_type_name);
         entry = TabString_get(cg->print_functions, elem_type_name);
+        jik_writer_write_line(&cg->cw, "jik_char_buffer_append(cb, \"=\", a);");
         if (entry) {
             func_name = *entry;
             jik_writer_write_line(
                 &cg->cw,
-                JIK_STRING_NCAT("return ", func_name, "(", "s->val.", member_name, ", a);"));
+                JIK_STRING_NCAT("jik_char_buffer_append(cb, ",
+                                func_name,
+                                "(s->val.",
+                                member_name,
+                                ", a)->data, a);"));
         }
         else {
             char *member_pretty_name =
                 sanitize_string(jik_type_pretty_name((*member_node)->jik_type));
             jik_writer_write_line(
                 &cg->cw,
-                JIK_STRING_NCAT("return jik_string_new(\"<", member_pretty_name, ">\", a);"));
+                JIK_STRING_NCAT("jik_char_buffer_append(cb, \"<",
+                                member_pretty_name,
+                                ">\", a);"));
         }
-
-        // jik_writer_write_line(&cg->cw, "break;");
+        jik_writer_write_line(&cg->cw, "jik_char_buffer_append(cb, \">\", a);");
+        jik_writer_write_line(&cg->cw, "return jik_string_new(cb->data, a);");
         jik_writer_dedent(&cg->cw);
     }
     jik_writer_write_line(&cg->cw, "default: break;");
@@ -2319,12 +2358,20 @@ jik_codegen_emit_variant(JikCodeGenerator *cg, JikNode *nd)
     jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(JIK_C_ENUM_PREFIX, men, " tag;"));
     jik_writer_write_line(&cg->cw, "union {");
     jik_writer_indent(&cg->cw);
+    size_t payload_count = 0;
     for (size_t i = 0; i < VecString_size(nd->val_variant.member_order); i++) {
         char     *member_name = VecString_get(nd->val_variant.member_order, i);
+        if (jik_codegen_variant_tag_is_payloadless(nd, member_name)) {
+            continue;
+        }
         JikNode **member_node = TabJikNode_get(nd->val_variant.init_vals, member_name);
         assert(member_node);
         jik_writer_write_line(
             &cg->cw, JIK_STRING_NCAT((*member_node)->jik_type->C_name, " ", member_name, ";"));
+        payload_count++;
+    }
+    if (payload_count == 0) {
+        jik_writer_write_line(&cg->cw, "char unused;");
     }
     jik_writer_dedent(&cg->cw);
     jik_writer_write_line(&cg->cw, "} val;");
@@ -2929,6 +2976,22 @@ jik_codegen_emit_variant_copy_function(JikCodeGenerator *cg, JikType *variant_ty
                 " = ",
                 jik_codegen_copy_atom_expr(item.value, JIK_STRING_NCAT("src->val.", item.key), "a"),
                 "});"));
+        jik_writer_dedent(&cg->cw);
+    }
+    TabBool_iter nullary_it = TabBool_iter_new(variant_type->val_variant.payloadless_tags);
+    TabBool_item nullary_item;
+    while (TabBool_iter_next(&nullary_it, &nullary_item)) {
+        char *tag_name = JIK_STRING_NCAT(enum_mn, "_", nullary_item.key);
+        jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("case ", tag_name, ":"));
+        jik_writer_indent(&cg->cw);
+        jik_writer_write_line(&cg->cw,
+                              JIK_STRING_NCAT("return ",
+                                              mn,
+                                              "_new(a, &(struct ",
+                                              mn,
+                                              "){.tag = ",
+                                              tag_name,
+                                              "});"));
         jik_writer_dedent(&cg->cw);
     }
     jik_writer_write_line(&cg->cw, "default: break;");

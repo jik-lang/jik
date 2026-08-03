@@ -161,6 +161,7 @@ jik_type_new_variant(char *name, TabJikType *variant_types)
                            .C_name                    = NULL,
                            .val_variant.name          = name,
                            .val_variant.variant_types = variant_types,
+                           .val_variant.payloadless_tags = NULL,
                            .val_variant.visiting      = false,
                            .val_variant.enum_type     = NULL};
     return t;

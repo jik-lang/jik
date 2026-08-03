@@ -619,6 +619,7 @@ jik_node_new_variant(char *name, TabJikNode *type_descs, JikScope *ctx, JikToken
     nd->jik_type                 = jik_type_new(TYPE_UNKNOWN);
     nd->type                     = NODE_VARIANT;
     nd->val_variant.type_descs   = type_descs;
+    nd->val_variant.payloadless_tags = TabBool_new();
     nd->val_variant.name         = name;
     nd->val_variant.first_member = NULL;
     nd->val_variant.member_order = VecString_new_empty();
@@ -639,6 +640,7 @@ jik_node_new_variant_new(JikNode *name, JikNode *init_expr, char *tag, JikScope 
     nd->val_variant_new.name         = name;
     nd->val_variant_new.init_expr    = init_expr;
     nd->val_variant_new.tag          = tag;
+    nd->val_variant_new.has_initializer_syntax = false;
     nd->val_variant_new.variant_node = NULL;
     nd->val_variant_new.alloc_spec = (JikAllocSpec){JIK_ALLOC_UNKNOWN, JIK_ALLOC_SRC_UNKNOWN, NULL};
     nd->context                    = ctx;

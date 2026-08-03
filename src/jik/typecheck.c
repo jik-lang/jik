@@ -498,7 +498,9 @@ jik_check_types(VecJikNode *nodes)
             else if (node->jik_type->name == TYPE_VARIANT) {
                 JikType **active_type = TabJikType_get(node->jik_type->val_variant.variant_types,
                                                        sub->val_variant_tag.tag);
-                assert(active_type);
+                jik_diag_fatal_error_if(!active_type,
+                                        "variant tag has no payload",
+                                        jik_token_to_text(sub->token));
                 JikType *req_type = *active_type;
                 jik_diag_fatal_error_if(
                     !jik_type_equal(req_type, expr->jik_type),
@@ -543,7 +545,8 @@ jik_check_types(VecJikNode *nodes)
                                     "expected variant instance",
                                     jik_token_to_text(nd->val_match.expr->token));
             JikType *variant_type = nd->val_match.expr->jik_type;
-            size_t   num_tags     = TabJikType_size(variant_type->val_variant.variant_types);
+            size_t   num_tags     = TabJikType_size(variant_type->val_variant.variant_types) +
+                                  TabBool_size(variant_type->val_variant.payloadless_tags);
             size_t   n            = VecJikNode_size(nd->val_match.cases);
             jik_diag_fatal_error_if(n == 0, "no cases provided", jik_token_to_text(nd->token));
             TabBool *seen_tags = TabBool_new();
@@ -580,7 +583,8 @@ jik_check_types(VecJikNode *nodes)
             nd->val_variant_tag_check.variant_node = s;
             JikNode **res = TabJikNode_get(s->val_variant.init_vals, nd->val_variant_tag_check.tag);
             jik_diag_fatal_error_if(
-                !res,
+                !res && !TabBool_get(s->val_variant.payloadless_tags,
+                                     nd->val_variant_tag_check.tag),
                 JIK_STRING_NCAT("unknown variant tag \"", nd->val_variant_tag_check.tag, "\""),
                 jik_token_to_text(nd->val_variant_tag_check.id_node->token));
         }

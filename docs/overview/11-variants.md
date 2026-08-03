@@ -2,8 +2,7 @@
 
 # 11. Variants
 
-Variants can be regarded as enumerations where each enumerator also carries a payload. They are essentially
-tagged unions with safe payload access. In the case of variants, the enumerators are called tags.
+Variants are tagged unions with safe payload access. Their tags may or may not carry a payload.
 
 
 ### 11.1 Declaring variants
@@ -15,6 +14,7 @@ variant Value:
     INT: int
     TEXT: String
     NUMS: Vec[int]
+    EOF
 end
 ```
 
@@ -28,6 +28,7 @@ v2 := Value.INT{}
 
 v3 := Value.TEXT{"hello"}
 v4 := Value.NUMS{[10 of 0]}
+v5 := Value.EOF
 ```
 
 
@@ -40,6 +41,7 @@ assert(v1 is Value.INT)
 assert(v2 is Value.INT)
 assert(v3 is Value.TEXT)
 assert(v4 is Value.NUMS)
+assert(v5 is Value.EOF)
 ```
 
 Payload extraction is done with an index-like syntax:
@@ -72,6 +74,8 @@ func handle(val):
             print("TEXT: ", msg)
         case Value.NUMS{vec}:
             print("NUMS: ", vec)
+        case Value.EOF:
+            print("end of input")
     end
 end
 ```
@@ -80,6 +84,13 @@ Each `case`:
 
 - Tests the tag
 - **Binds** the payload to a local name (`v`, `msg`, `vec`).
+
+Tags may omit their payload type. Construct and match those tags without braces, as with
+`Value.EOF`; braces always indicate a payload. If every tag has no payload, declare an `enum`
+instead of a `variant`.
+
+When printed, variants show their type, active tag, and payload when present: for example,
+`<Value INT=7>` and `<Value EOF>`.
 
 It is important to note that `match` is exhaustive, which means it requires all tags to be treated
 by a respective `case`, otherwise there is a compile error.

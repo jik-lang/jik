@@ -101,6 +101,10 @@ struct Fubar:
     x: Node    
 end
 
+struct TokenHolder:
+    token: Token
+end
+
 func test_var_05(ts):
     t1 := Fubar{x=Node.NUMS{}}
     test::suite_assert(ts, t1.x is Node.NUMS, site())
@@ -144,6 +148,41 @@ func test_var_06(ts):
     test::suite_assert(ts, e[Expr.BINOP].right?[Expr.INTEGER] == 5, site())
 end
 
+variant Token:
+    INTEGER: int
+    EOF
+end
+
+func make_eof(r: Region) -> Token:
+    return Token.EOF[r]
+end
+
+func test_var_07(ts):
+    eof := Token.EOF
+    test::suite_assert(ts, eof is Token.EOF, site())
+
+    match eof:
+        case Token.INTEGER{value}:
+            test::suite_assert(ts, false, site())
+        case Token.EOF:
+            test::suite_assert(ts, true, site())
+    end
+
+    tokens := [Token.EOF, Token.INTEGER{42}]
+    test::suite_assert(ts, tokens[0] is Token.EOF, site())
+    test::suite_assert(ts, tokens[1][Token.INTEGER] == 42, site())
+
+    holder := TokenHolder{}
+    holder.token = Token.EOF[.holder]
+    test::suite_assert(ts, holder.token is Token.EOF, site())
+
+    holder.token = make_eof(.holder)
+    test::suite_assert(ts, holder.token is Token.EOF, site())
+
+    copied := copy(eof, _)
+    test::suite_assert(ts, copied is Token.EOF, site())
+end
+
 
 func run_tests(ts):
     test_var_01(ts)
@@ -152,5 +191,6 @@ func run_tests(ts):
     test_var_04(ts)
     test_var_05(ts)
     test_var_06(ts)
+    test_var_07(ts)
 
 end

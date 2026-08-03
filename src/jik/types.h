@@ -99,6 +99,7 @@ typedef struct JikType {
         struct {
             char           *name;
             TabJikType     *variant_types;
+            TabBool        *payloadless_tags;
             struct JikType *enum_type;
             bool            visiting;
         } val_variant;

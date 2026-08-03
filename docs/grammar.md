@@ -232,7 +232,7 @@ extern_struct_decl ::= "extern" "struct" identifier "as" identifier
 
 ```ebnf
 variant_decl ::= "variant" identifier ":" newline
-                 { identifier ":" type_desc newline }
+                 { identifier [ ":" type_desc ] newline }
                  "end"
 ```
 
@@ -341,13 +341,13 @@ match_stmt ::= "match" expr ":" newline
                "end"
 
 case_clause ::= "case" variant_pattern ":" newline block
-variant_pattern ::= qualified_identifier "." identifier "{" identifier "}"
+variant_pattern ::= qualified_identifier "." identifier
+                  | qualified_identifier "." identifier "{" identifier "}"
 ```
 
 Current implementation note:
 
-- `case Value.TAG{x}:` is the supported pattern form.
-- The parser expects a bound identifier payload in the case pattern.
+- `case Value.TAG{x}:` binds a payload, while `case Value.TAG:` matches a payloadless tag.
 
 ## Expressions
 
@@ -473,9 +473,8 @@ struct_field ::= identifier "=" expr
 ### Variant Literals
 
 ```ebnf
-variant_literal ::= qualified_identifier "." identifier "{"
-                    [ expr ]
-                    "}"
+variant_literal ::= qualified_identifier "." identifier
+                  | qualified_identifier "." identifier "{" [ expr ] "}"
 ```
 
 Examples:
@@ -484,6 +483,7 @@ Examples:
 Value.INT{3}
 Value.TEXT{"hi"}[r]
 Value.INT{}
+Value.EOF
 ```
 
 ### Vector Literals
@@ -518,13 +518,13 @@ These forms are parsed first and refined later:
 
 - `EnumName.VALUE` is initially parsed as member access, then rewritten as an
   enum value during semantic analysis.
-- `VariantName.TAG` is initially parsed as member access, then rewritten as a
-  variant tag marker during semantic analysis.
+- `VariantName.TAG` is initially parsed as member access, then rewritten during semantic
+  analysis as either a payloadless variant value or a variant tag marker.
 - `value[VariantName.TAG]` is syntactically a subscript expression and becomes
   variant payload access only after semantic resolution.
 
 ## Current Implementation Gaps and Constraints
 
 - Top-level typed globals are not currently parsed.
-- `match` supports the current `case Variant.Tag{name}:` form; richer patterns
-  are not part of the current parser.
+- `match` supports payload-binding and payloadless variant-tag patterns; richer patterns are not
+  part of the current parser.
