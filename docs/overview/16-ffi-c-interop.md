@@ -136,17 +136,24 @@ build programs that import it:
 @includedir("../vendor/raylib/include")
 
 @platform(windows)
+@profile(windows-x64-mingw)
 @libdir("../vendor/raylib/lib/windows")
 @link("raylib", "gdi32", "winmm")
 @copy("../vendor/raylib/bin/windows/raylib.dll")
 
 @platform(linux)
+@profile(linux-x64-gnu)
 @libdir("../vendor/raylib/lib/linux")
 @link("raylib", "m", "pthread", "dl")
 ```
 
 Every module begins in platform `all`. A `@platform` directive selects the platform for later build
 directives in the same physical file; `@platform(all)` restores platform-independent behavior.
+`@profile` additionally selects the native compiler target required by later build directives:
+`@profile(windows-x64-mingw)` for MinGW on Windows or `@profile(linux-x64-gnu)` for GNU toolchains
+on Linux. `@profile(all)` removes this restriction. A directive guarded by a profile is active only
+when both its platform and profile match; this lets an FFI module reject an incompatible native
+toolchain before compilation. MSVC is not currently a supported native build profile.
 Relative paths are resolved from the file containing the directive.
 
 Requirements are collected transitively from every reachable module. `@includedir` adds header
