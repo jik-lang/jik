@@ -338,14 +338,14 @@ jik_check_orphaned_allocations(JikNode *ast)
                                         "composite value must be bound before iteration",
                                         jik_token_to_text(nd->val_for_in.container_expr->token));
             }
-            else if (nd->type == NODE_LOOP_FOR_IN_DICT) {
-                base = nd->val_for_in_dict.dict_expr;
+            else if (nd->type == NODE_LOOP_FOR_IN_PAIR) {
+                base = nd->val_for_in_pair.container_expr;
                 while (base->type == NODE_EXPR_GROUPING) {
                     base = base->val_grouping;
                 }
                 jik_diag_fatal_error_if(jik_node_is_allocated_literal(base),
                                         "composite value must be bound before iteration",
-                                        jik_token_to_text(nd->val_for_in.container_expr->token));
+                                        jik_token_to_text(nd->val_for_in_pair.container_expr->token));
             }
         }
     }
@@ -1013,15 +1013,17 @@ jik_check_region_integrity(JikNode *ast)
                     TabJikAllocSpec_set(spec_tab, nd->val_for_in.var_name->val_id.name, spec);
                 }
             }
-            else if (nd->type == NODE_LOOP_FOR_IN_DICT) {
-                JikAllocSpec spec_dict =
-                    get_expression_alloc_spec(nd->val_for_in_dict.dict_expr, spec_tab);
-                if (jik_alloc_source_known(spec_dict)) {
-                    TabJikAllocSpec_set(
-                        spec_tab, nd->val_for_in_dict.key_name->val_id.name, spec_dict);
-                    if (jik_type_is_allocated(nd->val_for_in_dict.val_name->jik_type)) {
+            else if (nd->type == NODE_LOOP_FOR_IN_PAIR) {
+                JikAllocSpec spec_container =
+                    get_expression_alloc_spec(nd->val_for_in_pair.container_expr, spec_tab);
+                if (jik_alloc_source_known(spec_container)) {
+                    if (jik_type_is_allocated(nd->val_for_in_pair.first_name->jik_type)) {
                         TabJikAllocSpec_set(
-                            spec_tab, nd->val_for_in_dict.val_name->val_id.name, spec_dict);
+                            spec_tab, nd->val_for_in_pair.first_name->val_id.name, spec_container);
+                    }
+                    if (jik_type_is_allocated(nd->val_for_in_pair.second_name->jik_type)) {
+                        TabJikAllocSpec_set(
+                            spec_tab, nd->val_for_in_pair.second_name->val_id.name, spec_container);
                     }
                 }
             }

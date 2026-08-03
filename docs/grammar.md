@@ -313,6 +313,8 @@ for_stmt ::= "for" identifier "=" expr "," expr ":" newline block "end"
            | "for" identifier "," identifier "in" expr ":" newline block "end"
 ```
 
+In the two-name form, vectors bind `index, value` and dictionaries bind `key, value`.
+
 ### Try / Except
 
 ```ebnf

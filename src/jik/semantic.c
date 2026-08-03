@@ -442,32 +442,32 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                                        nd->val_for_in.var_name->val_id.name,
                                        nd->val_for_in.var_name);
         }
-        else if (nd->type == NODE_LOOP_FOR_IN_DICT) {
-            jik_semantic_reject_reserved_prefix(nd->val_for_in_dict.key_name->val_id.name,
-                                                nd->val_for_in_dict.key_name->token);
-            jik_semantic_reject_reserved_prefix(nd->val_for_in_dict.val_name->val_id.name,
-                                                nd->val_for_in_dict.val_name->token);
+        else if (nd->type == NODE_LOOP_FOR_IN_PAIR) {
+            jik_semantic_reject_reserved_prefix(nd->val_for_in_pair.first_name->val_id.name,
+                                                nd->val_for_in_pair.first_name->token);
+            jik_semantic_reject_reserved_prefix(nd->val_for_in_pair.second_name->val_id.name,
+                                                nd->val_for_in_pair.second_name->token);
             jik_semantic_reject_builtin_name_collision(
-                sa, nd->val_for_in_dict.key_name->val_id.name, nd->val_for_in_dict.key_name->token);
+                sa, nd->val_for_in_pair.first_name->val_id.name, nd->val_for_in_pair.first_name->token);
             jik_semantic_reject_builtin_name_collision(
-                sa, nd->val_for_in_dict.val_name->val_id.name, nd->val_for_in_dict.val_name->token);
+                sa, nd->val_for_in_pair.second_name->val_id.name, nd->val_for_in_pair.second_name->token);
             JikNode *ls =
-                jik_scope_get_local_symbol(nd->context, nd->val_for_in_dict.key_name->val_id.name);
+                jik_scope_get_local_symbol(nd->context, nd->val_for_in_pair.first_name->val_id.name);
             jik_diag_fatal_error_if(ls,
                                     JIK_STRING_NCAT("symbol already declared: ",
-                                                    nd->val_for_in_dict.key_name->val_id.name),
-                                    jik_token_to_text(nd->val_for_in_dict.key_name->token));
-            jik_scope_add_local_symbol(nd->val_for_in_dict.body->context,
-                                       nd->val_for_in_dict.key_name->val_id.name,
-                                       nd->val_for_in_dict.key_name);
-            ls = jik_scope_get_local_symbol(nd->context, nd->val_for_in_dict.val_name->val_id.name);
+                                                    nd->val_for_in_pair.first_name->val_id.name),
+                                    jik_token_to_text(nd->val_for_in_pair.first_name->token));
+            jik_scope_add_local_symbol(nd->val_for_in_pair.body->context,
+                                       nd->val_for_in_pair.first_name->val_id.name,
+                                       nd->val_for_in_pair.first_name);
+            ls = jik_scope_get_local_symbol(nd->context, nd->val_for_in_pair.second_name->val_id.name);
             jik_diag_fatal_error_if(ls,
                                     JIK_STRING_NCAT("symbol already declared: ",
-                                                    nd->val_for_in_dict.val_name->val_id.name),
-                                    jik_token_to_text(nd->val_for_in_dict.val_name->token));
-            jik_scope_add_local_symbol(nd->val_for_in_dict.body->context,
-                                       nd->val_for_in_dict.val_name->val_id.name,
-                                       nd->val_for_in_dict.val_name);
+                                                    nd->val_for_in_pair.second_name->val_id.name),
+                                    jik_token_to_text(nd->val_for_in_pair.second_name->token));
+            jik_scope_add_local_symbol(nd->val_for_in_pair.body->context,
+                                       nd->val_for_in_pair.second_name->val_id.name,
+                                       nd->val_for_in_pair.second_name);
         }
         else if (nd->type == NODE_CASE) {
             if (!nd->val_case.variant->val_variant_new.init_expr ||
@@ -482,8 +482,8 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             JikNode *ls = jik_scope_get_local_symbol(nd->context, id);
             jik_diag_fatal_error_if(ls,
                                     JIK_STRING_NCAT("symbol already declared: ",
-                                                    nd->val_for_in_dict.key_name->val_id.name),
-                                    jik_token_to_text(nd->val_for_in_dict.key_name->token));
+                                                    nd->val_for_in_pair.first_name->val_id.name),
+                                    jik_token_to_text(nd->val_for_in_pair.first_name->token));
             jik_scope_add_local_symbol(
                 nd->val_case.body->context, id, nd->val_case.variant->val_variant_new.init_expr);
         }
@@ -1278,18 +1278,20 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
                     jik_type_get_iterable_elem_type(nd->val_for_in.container_expr->jik_type);
             }
         }
-        else if (nd->type == NODE_LOOP_FOR_IN_DICT &&
-                 (!jik_node_is_type_inferred(nd->val_for_in_dict.key_name) ||
-                  !jik_node_is_type_inferred(nd->val_for_in_dict.val_name))) {
-            if (jik_node_is_type_inferred(nd->val_for_in_dict.dict_expr)) {
-                // this check needs to go here because we need a dict to extract the type out
-                // of it
-                jik_diag_fatal_error_if(nd->val_for_in_dict.dict_expr->jik_type->name != TYPE_DICT,
-                                        "expected dictionary",
-                                        jik_token_to_text(nd->val_for_in_dict.dict_expr->token));
-                nd->val_for_in_dict.key_name->jik_type = &JIK_TYPE_STRING;
-                nd->val_for_in_dict.val_name->jik_type =
-                    jik_type_get_iterable_elem_type(nd->val_for_in_dict.dict_expr->jik_type);
+        else if (nd->type == NODE_LOOP_FOR_IN_PAIR &&
+                 (!jik_node_is_type_inferred(nd->val_for_in_pair.first_name) ||
+                  !jik_node_is_type_inferred(nd->val_for_in_pair.second_name))) {
+            if (jik_node_is_type_inferred(nd->val_for_in_pair.container_expr)) {
+                JikType *container_type = nd->val_for_in_pair.container_expr->jik_type;
+                jik_diag_fatal_error_if(container_type->name != TYPE_DICT &&
+                                            container_type->name != TYPE_VECTOR,
+                                        "expected vector or dictionary",
+                                        jik_token_to_text(nd->val_for_in_pair.container_expr->token));
+                nd->val_for_in_pair.first_name->jik_type = container_type->name == TYPE_DICT
+                                                            ? &JIK_TYPE_STRING
+                                                            : &JIK_TYPE_INT;
+                nd->val_for_in_pair.second_name->jik_type =
+                    jik_type_get_iterable_elem_type(container_type);
             }
         }
         else if (nd->type == NODE_STMNT_MATCH && jik_node_is_type_inferred(nd->val_match.expr)) {

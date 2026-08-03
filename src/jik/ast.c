@@ -260,20 +260,20 @@ jik_node_new_loop_for_in(JikNode  *var_name,
 }
 
 JikNode *
-jik_node_new_loop_for_in_dict(JikNode  *key_name,
-                              JikNode  *val_name,
-                              JikNode  *dict_expr,
+jik_node_new_loop_for_in_pair(JikNode  *first_name,
+                              JikNode  *second_name,
+                              JikNode  *container_expr,
                               JikNode  *body,
                               JikScope *ctx,
                               JikToken *tok)
 {
     JikNode *nd                   = (JikNode *)jik_alloc(sizeof(JikNode));
     nd->jik_type                  = jik_type_new(TYPE_NOTYPE);
-    nd->type                      = NODE_LOOP_FOR_IN_DICT;
-    nd->val_for_in_dict.key_name  = key_name;
-    nd->val_for_in_dict.val_name  = val_name;
-    nd->val_for_in_dict.dict_expr = dict_expr;
-    nd->val_for_in_dict.body      = body;
+    nd->type                      = NODE_LOOP_FOR_IN_PAIR;
+    nd->val_for_in_pair.first_name = first_name;
+    nd->val_for_in_pair.second_name = second_name;
+    nd->val_for_in_pair.container_expr = container_expr;
+    nd->val_for_in_pair.body      = body;
     nd->context                   = ctx;
     nd->token                     = tok;
     return nd;
@@ -1163,12 +1163,12 @@ jik_node_print(JikNode *nd, size_t level)
         jik_node_print(nd->val_for_in.container_expr, level + 1);
         jik_node_print(nd->val_for_in.body, level + 1);
     }
-    else if (nd->type == NODE_LOOP_FOR_IN_DICT) {
+    else if (nd->type == NODE_LOOP_FOR_IN_PAIR) {
         printf("<%s>\n", NODE_STRINGS[nd->type]);
-        jik_node_print(nd->val_for_in_dict.key_name, level + 1);
-        jik_node_print(nd->val_for_in_dict.val_name, level + 1);
-        jik_node_print(nd->val_for_in_dict.dict_expr, level + 1);
-        jik_node_print(nd->val_for_in_dict.body, level + 1);
+        jik_node_print(nd->val_for_in_pair.first_name, level + 1);
+        jik_node_print(nd->val_for_in_pair.second_name, level + 1);
+        jik_node_print(nd->val_for_in_pair.container_expr, level + 1);
+        jik_node_print(nd->val_for_in_pair.body, level + 1);
     }
     else if (nd->type == NODE_STMNT_BREAK) {
         printf("<%s, type=", NODE_STRINGS[nd->type]);
@@ -1521,9 +1521,9 @@ jik_collect_nodes(JikNode *nd, VecJikNode *nodes)
         jik_collect_nodes(nd->val_for_in.container_expr, nodes);
         jik_collect_nodes(nd->val_for_in.body, nodes);
     }
-    else if (nd->type == NODE_LOOP_FOR_IN_DICT) {
-        jik_collect_nodes(nd->val_for_in_dict.dict_expr, nodes);
-        jik_collect_nodes(nd->val_for_in_dict.body, nodes);
+    else if (nd->type == NODE_LOOP_FOR_IN_PAIR) {
+        jik_collect_nodes(nd->val_for_in_pair.container_expr, nodes);
+        jik_collect_nodes(nd->val_for_in_pair.body, nodes);
     }
     else if (nd->type == NODE_EXPR_BINOP) {
         jik_collect_nodes(nd->val_binop.left, nodes);

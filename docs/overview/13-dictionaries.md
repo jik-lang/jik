@@ -68,4 +68,6 @@ for k, v in counts:
 end
 ```
 
+With two names, vectors bind `index, value`, while dictionaries bind `key, value`.
+
 ---

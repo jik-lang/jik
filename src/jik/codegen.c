@@ -1107,25 +1107,58 @@ jik_codegen_emit_stmnt_loop_for_in(JikCodeGenerator *cg, JikNode *nd)
 }
 
 static void
-jik_codegen_emit_stmnt_loop_for_in_dict(JikCodeGenerator *cg, JikNode *nd)
+jik_codegen_emit_stmnt_loop_for_in_pair(JikCodeGenerator *cg, JikNode *nd)
 {
-    char *dict =
-        JIK_STRING_NCAT("(", jik_codegen_emit_expression(cg, nd->val_for_in_dict.dict_expr), ")");
-    char    *key_name      = nd->val_for_in_dict.key_name->val_id.name;
-    char    *val_name      = nd->val_for_in_dict.val_name->val_id.name;
+    char *container =
+        JIK_STRING_NCAT("(", jik_codegen_emit_expression(cg, nd->val_for_in_pair.container_expr), ")");
+    char    *first_name    = nd->val_for_in_pair.first_name->val_id.name;
+    char    *second_name   = nd->val_for_in_pair.second_name->val_id.name;
     char    *jik_idx_name  = "__jik_i";
-    char    *key_type_name = (&JIK_TYPE_STRING)->C_name;
-    JikType *dict_elem_type =
-        jik_type_get_iterable_elem_type(nd->val_for_in_dict.dict_expr->jik_type);
-    assert(dict_elem_type);
-    char *val_type_name = dict_elem_type->C_name;
+    JikType *container_elem_type =
+        jik_type_get_iterable_elem_type(nd->val_for_in_pair.container_expr->jik_type);
+    assert(container_elem_type);
+    char *val_type_name = container_elem_type->C_name;
+
+    if (nd->val_for_in_pair.container_expr->jik_type->name == TYPE_VECTOR) {
+        jik_writer_begin_block(&cg->cw,
+                               JIK_STRING_NCAT("for (size_t ",
+                                               jik_idx_name,
+                                               " = 0; ",
+                                               jik_idx_name,
+                                               " < ",
+                                               container,
+                                               "->size; ",
+                                               jik_idx_name,
+                                               "++) {"));
+        jik_writer_write_line(&cg->cw,
+                              JIK_STRING_NCAT((&JIK_TYPE_INT)->C_name,
+                                              " ",
+                                              first_name,
+                                              " = ",
+                                              jik_idx_name,
+                                              ";"));
+        jik_writer_write_line(&cg->cw,
+                              JIK_STRING_NCAT(val_type_name,
+                                              " ",
+                                              second_name,
+                                              " = ",
+                                              container,
+                                              "->data[",
+                                              jik_idx_name,
+                                              "];"));
+        jik_codegen_emit_block(cg, nd->val_for_in_pair.body);
+        jik_writer_end_block(&cg->cw);
+        return;
+    }
+
+    char *key_type_name = (&JIK_TYPE_STRING)->C_name;
     jik_writer_write_line(&cg->cw,
                           JIK_STRING_NCAT("for (size_t ",
                                           jik_idx_name,
                                           " = 0; ",
                                           jik_idx_name,
                                           " < ",
-                                          dict,
+                                          container,
                                           "->capacity;",
                                           jik_idx_name,
                                           "++) {"));
@@ -1133,16 +1166,16 @@ jik_codegen_emit_stmnt_loop_for_in_dict(JikCodeGenerator *cg, JikNode *nd)
     jik_writer_write_line(
         &cg->cw,
         JIK_STRING_NCAT(
-            "if (", dict, "->items[", jik_idx_name, "].key == NULL", ") { continue; }"));
+            "if (", container, "->items[", jik_idx_name, "].key == NULL", ") { continue; }"));
     jik_writer_write_line(
         &cg->cw,
         JIK_STRING_NCAT(
-            key_type_name, " ", key_name, " = ", dict, "->items[", jik_idx_name, "].key;"));
+            key_type_name, " ", first_name, " = ", container, "->items[", jik_idx_name, "].key;"));
     jik_writer_write_line(
         &cg->cw,
         JIK_STRING_NCAT(
-            val_type_name, " ", val_name, " = ", dict, "->items[", jik_idx_name, "].val;"));
-    jik_codegen_emit_block(cg, nd->val_for_in_dict.body);
+            val_type_name, " ", second_name, " = ", container, "->items[", jik_idx_name, "].val;"));
+    jik_codegen_emit_block(cg, nd->val_for_in_pair.body);
     jik_writer_dedent(&cg->cw);
     jik_writer_write_line(&cg->cw, "}");
 }
@@ -1746,8 +1779,8 @@ jik_codegen_emit_statement(JikCodeGenerator *cg, JikNode *nd)
     else if (nd->type == NODE_LOOP_FOR_IN) {
         jik_codegen_emit_stmnt_loop_for_in(cg, nd);
     }
-    else if (nd->type == NODE_LOOP_FOR_IN_DICT) {
-        jik_codegen_emit_stmnt_loop_for_in_dict(cg, nd);
+    else if (nd->type == NODE_LOOP_FOR_IN_PAIR) {
+        jik_codegen_emit_stmnt_loop_for_in_pair(cg, nd);
     }
     else if (nd->type == NODE_STMNT_BREAK) {
         jik_codegen_emit_stmnt_break(cg, nd);

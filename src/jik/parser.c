@@ -921,7 +921,7 @@ jik_parser_parse_loop_for(JikParser *p)
         JikNode *body      = jik_parser_parse_block(p);
         // VecJikScope_pop(p->contexts);
         jik_parser_eat_token(p, TOK_KWD_END);
-        return jik_node_new_loop_for_in_dict(
+        return jik_node_new_loop_for_in_pair(
             var_name, var_name2, obj_expr, body, jik_parser_current_context(p), tok);
     }
 

@@ -77,3 +77,11 @@ for ch in chars:
     end
 end
 ```
+
+One can also enumerate the iteration as follows:
+
+```jik
+for i, ch in chars:
+    print(i, ": ", ch)
+end
+```

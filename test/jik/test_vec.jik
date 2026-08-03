@@ -86,6 +86,14 @@ func test_vec_slice(ts):
     test::suite_assert(ts, len(middle) == 3, site())
 end
 
+func test_vec_indexed_iteration(ts):
+    values := [3, 5, 7]
+    total := 0
+    for index, value in values:
+        total = total + index * value
+    end
+    test::suite_assert(ts, total == 19, site())
+end
 
 func run_tests(ts):
     test_vec_01(ts)
@@ -94,4 +102,5 @@ func run_tests(ts):
     test_vec_04(ts)
     test_vec_05(ts)
     test_vec_slice(ts)
+    test_vec_indexed_iteration(ts)
 end

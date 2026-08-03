@@ -35,7 +35,7 @@ typedef struct TabVarInfo TabVarInfo;
     X(NODE_LOOP_WHILE)                                                                             \
     X(NODE_LOOP_FOR)                                                                               \
     X(NODE_LOOP_FOR_IN)                                                                            \
-    X(NODE_LOOP_FOR_IN_DICT)                                                                       \
+    X(NODE_LOOP_FOR_IN_PAIR)                                                                       \
     X(NODE_STMNT_BREAK)                                                                            \
     X(NODE_STMNT_CONTINUE)                                                                         \
     X(NODE_EXPR_CALL)                                                                              \
@@ -427,11 +427,11 @@ typedef struct JikNode {
         } val_for_in;
 
         struct {
-            struct JikNode *key_name;
-            struct JikNode *val_name;
-            struct JikNode *dict_expr;
+            struct JikNode *first_name;
+            struct JikNode *second_name;
+            struct JikNode *container_expr;
             struct JikNode *body;
-        } val_for_in_dict;
+        } val_for_in_pair;
 
         // Program
         struct {
@@ -516,9 +516,9 @@ jik_node_new_loop_for_in(JikNode  *var_name,
                          JikScope *ctx,
                          JikToken *tok);
 JikNode *
-jik_node_new_loop_for_in_dict(JikNode  *key_name,
-                              JikNode  *val_name,
-                              JikNode  *dict_expr,
+jik_node_new_loop_for_in_pair(JikNode  *first_name,
+                              JikNode  *second_name,
+                              JikNode  *container_expr,
                               JikNode  *body,
                               JikScope *ctx,
                               JikToken *tok);
