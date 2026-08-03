@@ -9,6 +9,7 @@ _A readable, statically typed language that compiles to C and manages memory wit
 <p align="center">
   <a href="https://github.com/jik-lang/jik/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jik-lang/jik/actions/workflows/ci.yml/badge.svg?branch=main&event=push"></a>
   <a href="https://jik-lang.org"><img alt="Website" src="https://img.shields.io/badge/website-jik--lang.org-111827"></a>
+  <a href="https://discord.gg/cnA8X5yKeA"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join%20chat-5865F2?logo=discord&logoColor=white"></a>
   <img alt="Status" src="https://img.shields.io/badge/status-alpha-b45309">
   <img alt="Backend" src="https://img.shields.io/badge/backend-C-2563eb">
   <img alt="Memory" src="https://img.shields.io/badge/memory-region--based-0f766e">
@@ -165,3 +166,4 @@ Note that MSVC was not tested and is not the default build path in this reposito
 - [Standard library documentation](docs/overview/18-standard-library.md)
 - [Development notes and roadmap](docs/development.md)
 - [Official Jik website](https://jik-lang.org/)
+- [Join the Jik Discord community](https://discord.gg/cnA8X5yKeA)
