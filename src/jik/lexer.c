@@ -226,8 +226,18 @@ jik_lexer_lex_number(JikLexer *lex)
     jik_lexer_mark_pos(lex);
     jik_lexer_mark_col(lex);
 
-    // integer part (at least one digit assumed by caller)
-    while (isdigit(jik_lexer_current_char(lex))) {
+    // A digit sequence may contain separators, but every separator must be
+    // surrounded by digits.
+    while (isdigit(jik_lexer_current_char(lex)) || jik_lexer_current_char(lex) == '_') {
+        if (jik_lexer_current_char(lex) == '_') {
+            jik_lexer_advance(lex);
+            if (!isdigit(jik_lexer_current_char(lex))) {
+                JikToken tok = jik_lexer_make_token_from_mark(lex, TOK_ERROR);
+                jik_diag_fatal_error("syntax error: invalid numeric separator",
+                                     jik_token_to_text(&tok));
+            }
+            continue;
+        }
         jik_lexer_advance(lex);
     }
 
@@ -237,7 +247,16 @@ jik_lexer_lex_number(JikLexer *lex)
     if (jik_lexer_current_char(lex) == '.' && isdigit(jik_lexer_peek_char(lex, 1))) {
         is_float = true;
         jik_lexer_advance(lex); // consume '.'
-        while (isdigit(jik_lexer_current_char(lex))) {
+        while (isdigit(jik_lexer_current_char(lex)) || jik_lexer_current_char(lex) == '_') {
+            if (jik_lexer_current_char(lex) == '_') {
+                jik_lexer_advance(lex);
+                if (!isdigit(jik_lexer_current_char(lex))) {
+                    JikToken tok = jik_lexer_make_token_from_mark(lex, TOK_ERROR);
+                    jik_diag_fatal_error("syntax error: invalid numeric separator",
+                                         jik_token_to_text(&tok));
+                }
+                continue;
+            }
             jik_lexer_advance(lex);
         }
     }
@@ -257,7 +276,17 @@ jik_lexer_lex_number(JikLexer *lex)
                 if (jik_lexer_current_char(lex) == '+' || jik_lexer_current_char(lex) == '-') {
                     jik_lexer_advance(lex); // consume sign
                 }
-                while (isdigit(jik_lexer_current_char(lex))) {
+                while (isdigit(jik_lexer_current_char(lex)) ||
+                       jik_lexer_current_char(lex) == '_') {
+                    if (jik_lexer_current_char(lex) == '_') {
+                        jik_lexer_advance(lex);
+                        if (!isdigit(jik_lexer_current_char(lex))) {
+                            JikToken tok = jik_lexer_make_token_from_mark(lex, TOK_ERROR);
+                            jik_diag_fatal_error("syntax error: invalid numeric separator",
+                                                 jik_token_to_text(&tok));
+                        }
+                        continue;
+                    }
                     jik_lexer_advance(lex);
                 }
             }
@@ -265,7 +294,21 @@ jik_lexer_lex_number(JikLexer *lex)
         }
     }
 
-    return jik_lexer_make_token_from_mark(lex, is_float ? TOK_FLOAT : TOK_INTEGER);
+    JikToken tok = jik_lexer_make_token_from_mark(lex, is_float ? TOK_FLOAT : TOK_INTEGER);
+    if (!strchr(tok.lexeme, '_')) {
+        return tok;
+    }
+
+    char *normalized = jik_alloc(strlen(tok.lexeme) + 1);
+    char *dst        = normalized;
+    for (char *src = tok.lexeme; *src; src++) {
+        if (*src != '_') {
+            *dst++ = *src;
+        }
+    }
+    *dst       = '\0';
+    tok.lexeme = normalized;
+    return tok;
 }
 
 static JikToken

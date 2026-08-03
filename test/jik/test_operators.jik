@@ -84,10 +84,17 @@ func test_compound_assignments(ts):
     test::suite_assert(ts, y == 5.0, site())
 end
 
+func test_numeric_separators(ts):
+    test::suite_assert(ts, 1_234_567 == 1234567, site())
+    test::suite_assert(ts, 3.141_592 == 3.141592, site())
+    test::suite_assert(ts, 1.25e+1_0 == 12500000000.0, site())
+end
+
 func run_tests(ts):
     test_arithmetic_precedence(ts)
     test_logical_precedence(ts)
     test_short_circuit(ts)
     test_ternary_evaluation_and_typing(ts)
     test_compound_assignments(ts)
+    test_numeric_separators(ts)
 end

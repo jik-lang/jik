@@ -7,12 +7,13 @@ two categories - Primitives and Composites. Composite types are always dynamical
 
 ### 5.1 Primitive types
 
-- **Integers**: `0`, `1`, `42`, `-7`
+- **Integers**: `0`, `1`, `42`, `-7`, `1_000_000`
     - type name: `int`
     - translates to C type: `int32_t`
-- **Doubles**: `3.22`, `0.5`, `3e-5`
+- **Doubles**: `3.22`, `0.5`, `3e-5`, `3.141_592`
     - type name: `double`
     - translates to C type: `double`
+    - `_` may separate digits in integer, fractional, and exponent parts; it must appear between digits
 - **Booleans**: `true`, `false`
     - type name: `bool`
     - translates to C type: `bool`

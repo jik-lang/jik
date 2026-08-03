@@ -42,10 +42,11 @@ Notes:
 ### Literals
 
 ```ebnf
-integer_literal ::= digit { digit }
-float_literal   ::= digit { digit } "." digit { digit }
-                  | digit { digit } [ "." digit { digit } ] exponent
-exponent        ::= ("e" | "E") [ "+" | "-" ] digit { digit }
+digit_sequence  ::= digit { digit | "_" digit }
+integer_literal ::= digit_sequence
+float_literal   ::= digit_sequence "." digit_sequence
+                  | digit_sequence [ "." digit_sequence ] exponent
+exponent        ::= ("e" | "E") [ "+" | "-" ] digit_sequence
 
 char_literal    ::= "'" char-char "'"
 string_literal  ::= '"' { string-char } '"'
@@ -56,6 +57,7 @@ Notes:
 
 - The current lexer requires a float to begin with a digit, so `0.5` is valid
   while `.5` is not.
+- Numeric separators (`_`) are allowed only between digits and are ignored in the value.
 - Character escapes support `\n`, `\t`, `\r`, `\0`, `\xNN`, `\\`, `\'`, and `\"`.
 - Ordinary string literals support `\n`, `\t`, `\r`, `\xNN`, `\\`, `\'`, and `\"`.
 - Ordinary and multiline string literals may contain UTF-8 text.
