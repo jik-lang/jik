@@ -632,8 +632,8 @@ get_callee_args(JikCodeGenerator *cg, JikNode *nd)
     return tr->data;
 }
 
-char *
-get_function_call(JikCodeGenerator *cg, JikNode *nd)
+static char *
+get_function_call_with_error_target(JikCodeGenerator *cg, JikNode *nd, char *error_target)
 {
     if (nd->val_call.builtin) {
         char *bc = get_builtin_call(cg, nd);
@@ -649,8 +649,14 @@ get_function_call(JikCodeGenerator *cg, JikNode *nd)
                                            nd->token->mod_alias);
     assert(func);
     char  *prefix  = *args ? ", " : "";
-    char  *err_arg = jik_function_throws(func) ? JIK_STRING_NCAT(prefix, "&jik_catch_err") : "";
+    char  *err_arg = jik_function_throws(func) ? JIK_STRING_NCAT(prefix, error_target) : "";
     return JIK_STRING_NCAT(func_name, "(", args, err_arg, ")");
+}
+
+char *
+get_function_call(JikCodeGenerator *cg, JikNode *nd)
+{
+    return get_function_call_with_error_target(cg, nd, "&jik_catch_err");
 }
 
 char *
@@ -1653,6 +1659,22 @@ jik_codegen_emit_stmnt_assign(JikCodeGenerator *cg, JikNode *nd)
 static void
 jik_codegen_emit_stmnt_declare(JikCodeGenerator *cg, JikNode *nd)
 {
+    if (nd->val_declare.expr->type == NODE_EXPR_CALL &&
+        nd->val_declare.expr->val_call.propagate) {
+        JikNode *call    = nd->val_declare.expr;
+        char    *id_name = nd->val_declare.id->val_id.mod_alias
+                               ? jik_codegen_mangle_name(nd->val_declare.id->val_id.mod_alias,
+                                                         nd->val_declare.id->val_id.name)
+                               : nd->val_declare.id->val_id.name;
+        char *call_text = get_function_call_with_error_target(cg, call, "jik_err_arg");
+        jik_writer_write_line(&cg->cw,
+                              JIK_STRING_NCAT(call->jik_type->C_name, " ", id_name, " = ", call_text, ";"));
+        jik_writer_begin_block(&cg->cw, "if (jik_error_failed(jik_err_arg)) {");
+        jik_writer_write_line(&cg->cw, "goto __jik_cleanup;");
+        jik_writer_end_block(&cg->cw);
+        return;
+    }
+
     char *te      = jik_codegen_emit_expression(cg, nd->val_declare.expr);
     char *id_name = nd->val_declare.id->val_id.mod_alias
                         ? jik_codegen_mangle_name(nd->val_declare.id->val_id.mod_alias,

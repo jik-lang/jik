@@ -283,6 +283,7 @@ break_stmt     ::= "break"
 continue_stmt  ::= "continue"
 
 decl_stmt      ::= identifier ":=" expr
+                 | identifier ":=" "try" call_expr
                  | identifier ":" type_desc
 
 assign_stmt    ::= lvalue assign_op expr
@@ -333,6 +334,10 @@ try_stmt ::= "try" ( call_expr | identifier ":=" call_expr )
              "except" ":" newline block
              "end"
 ```
+
+`x := try f(...)` propagates a failure from `f` to the enclosing `throws func`.
+Unlike a `try ... except ... end` declaration, `x` belongs to the enclosing
+scope because execution can continue past the declaration only when `f` succeeds.
 
 The parser currently permits only:
 

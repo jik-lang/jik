@@ -313,6 +313,7 @@ jik_node_new_call(struct JikNode *name, VecJikNode *args, JikScope *ctx, JikToke
     nd->val_call.extern_name = NULL;
     nd->val_call.alloc_spec  = (JikAllocSpec){JIK_ALLOC_UNKNOWN, JIK_ALLOC_SRC_UNKNOWN, NULL};
     nd->val_call.must        = false;
+    nd->val_call.propagate   = false;
     nd->val_call.parent_func = NULL;
     nd->val_call.auto_region = false;
     nd->context              = ctx;

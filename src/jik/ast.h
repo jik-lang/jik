@@ -179,6 +179,7 @@ typedef struct JikNode {
             char           *extern_name;
             JikAllocSpec    alloc_spec;
             bool            must;
+            bool            propagate;
             struct JikNode *parent_func;
             bool            auto_region;
         } val_call;

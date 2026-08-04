@@ -23,6 +23,11 @@ throws func div_safe_code(x, y):
     return x / y
 end
 
+throws func propagated_div(x, y):
+    value := try div_safe(x, y)
+    return value
+end
+
 
 func test_error(ts):
     try x := div_safe(3, 0):   
@@ -52,6 +57,15 @@ func test_error(ts):
     test::suite_assert(ts, x == 3, site())
     test::suite_assert(ts, div_safe_code(3, 1)! == 3, site())
     test::suite_assert(ts, div_safe(div_safe(3, 1)!, 1)! == 3, site())
+
+    x = must propagated_div(3, 1)
+    test::suite_assert(ts, x == 3, site())
+
+    try propagated_div(3, 0):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg(_) == "division by 0", site())
+    end
 
 end
 

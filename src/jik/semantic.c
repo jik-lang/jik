@@ -2201,8 +2201,17 @@ jik_check_error_handling(VecJikNode *nodes)
                                                    nd->val_call.name->val_id.mod_alias,
                                                    nd->token->mod_alias);
             assert(func);
-            jik_diag_fatal_error_if(jik_function_throws(func) && !nd->val_call.must,
+            jik_diag_fatal_error_if(jik_function_throws(func) && !nd->val_call.must &&
+                                        !nd->val_call.propagate,
                                     "throwable function must be handled with \"must\" or \"try\"",
+                                    jik_token_to_text(nd->token));
+            jik_diag_fatal_error_if(nd->val_call.propagate && !jik_function_throws(func),
+                                    "non-throwable function cannot be handled with \"try\"",
+                                    jik_token_to_text(nd->token));
+            jik_diag_fatal_error_if(nd->val_call.propagate &&
+                                        (!nd->val_call.parent_func ||
+                                         !jik_function_throws(nd->val_call.parent_func)),
+                                    "\"try\" propagation requires a throwing function",
                                     jik_token_to_text(nd->token));
             jik_diag_fatal_error_if(strcmp(nd->val_call.name->val_id.name, "fail") == 0 &&
                                         func->jik_type->val_func.builtin &&

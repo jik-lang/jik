@@ -58,7 +58,23 @@ except:
 end
 ```
 
-### 15.3 Requiring success with `must`
+### 15.3 Propagating failures
+
+Within a `throws func`, `try` can be used in a declaration to pass a failure to
+the caller instead of handling it locally:
+
+```jik
+throws func half_of_safe_value():
+    x := try div_safe(10, 2)
+    return x / 2
+end
+```
+
+The value declared by `x := try ...` is in the enclosing scope. If the call
+fails, the function returns through its error path before any following
+statement runs.
+
+### 15.4 Requiring success with `must`
 
 When a failure does not need to be handled separately, use `must`:
 
@@ -79,7 +95,7 @@ print(div_safe(10, 2)! == 5)
 `!` applies only to function calls. Use `try ... except ... end` when failure
 needs local recovery.
 
-### 15.4 Inspecting the current error
+### 15.5 Inspecting the current error
 
 Inside an `except` block, the current error can be inspected with:
 
@@ -99,7 +115,7 @@ except:
 end
 ```
 
-### 15.5 Example
+### 15.6 Example
 
 ```jik
 throws func div_safe(x, y):
