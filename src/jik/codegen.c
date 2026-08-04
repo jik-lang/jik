@@ -1763,6 +1763,14 @@ jik_codegen_emit_catch(JikCodeGenerator *cg, JikNode *nd)
 static void
 jik_codegen_emit_stmnt_call(JikCodeGenerator *cg, JikNode *nd)
 {
+    if (nd->val_call.propagate) {
+        char *call_text = get_function_call_with_error_target(cg, nd, "jik_err_arg");
+        jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(call_text, ";", NULL));
+        jik_writer_begin_block(&cg->cw, "if (jik_error_failed(jik_err_arg)) {");
+        jik_writer_write_line(&cg->cw, "goto __jik_cleanup;");
+        jik_writer_end_block(&cg->cw);
+        return;
+    }
     jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(get_function_call(cg, nd), ";"));
 }
 

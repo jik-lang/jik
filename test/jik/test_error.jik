@@ -28,6 +28,16 @@ throws func propagated_div(x, y):
     return value
 end
 
+throws func fail_if_true(should_fail):
+    if should_fail:
+        fail("expected failure")
+    end
+end
+
+throws func propagated_call(should_fail):
+    try fail_if_true(should_fail)
+end
+
 
 func test_error(ts):
     try x := div_safe(3, 0):   
@@ -65,6 +75,13 @@ func test_error(ts):
         test::suite_assert(ts, false, site())
     except:
         test::suite_assert(ts, error_msg(_) == "division by 0", site())
+    end
+
+    must propagated_call(false)
+    try propagated_call(true):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg(_) == "expected failure", site())
     end
 
 end

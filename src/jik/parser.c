@@ -872,6 +872,17 @@ jik_parser_parse_try(JikParser *p)
                                 stmnt->val_declare.expr->type != NODE_EXPR_CALL,
                             "expected function call",
                             jik_token_to_text(stmnt->token));
+
+    // Without a block introducer, `try call()` propagates the error from a
+    // throwing function. A following ':' selects the existing try/except form.
+    if (jik_parser_current_token(p)->type != TOK_COLON) {
+        jik_diag_fatal_error_if(stmnt->type != NODE_EXPR_CALL,
+                                "expected function call",
+                                jik_token_to_text(stmnt->token));
+        stmnt->val_call.propagate = true;
+        return stmnt;
+    }
+
     if (stmnt->type == NODE_STMNT_DECLARE) {
         stmnt->val_declare.expr->val_call.must = true;
     }

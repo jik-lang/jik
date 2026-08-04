@@ -60,8 +60,9 @@ end
 
 ### 15.3 Propagating failures
 
-Within a `throws func`, `try` can be used in a declaration to pass a failure to
-the caller instead of handling it locally:
+Within a `throws func`, `try` can pass a failure to the caller instead of
+handling it locally. It can be used with either a declaration or a call that
+does not return a value:
 
 ```jik
 throws func half_of_safe_value():
@@ -70,9 +71,16 @@ throws func half_of_safe_value():
 end
 ```
 
-The value declared by `x := try ...` is in the enclosing scope. If the call
-fails, the function returns through its error path before any following
-statement runs.
+```jik
+throws func save_record(record):
+    try write_record(record)
+end
+```
+
+The value declared by `x := try ...` is in the enclosing scope. In either form,
+if the call fails, the function returns through its error path before any
+following statement runs. The propagation form has no trailing colon; a colon
+starts a local `try ... except ... end` handler.
 
 ### 15.4 Requiring success with `must`
 

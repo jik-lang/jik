@@ -329,22 +329,20 @@ In the two-name form, vectors bind `index, value` and dictionaries bind `key, va
 ### Try / Except
 
 ```ebnf
-try_stmt ::= "try" ( call_expr | identifier ":=" call_expr )
+try_stmt ::= "try" call_expr
+           | "try" ( call_expr | identifier ":=" call_expr )
              ":" newline block
              "except" ":" newline block
              "end"
 ```
 
-`x := try f(...)` propagates a failure from `f` to the enclosing `throws func`.
-Unlike a `try ... except ... end` declaration, `x` belongs to the enclosing
-scope because execution can continue past the declaration only when `f` succeeds.
+`try f(...)` and `x := try f(...)` propagate a failure from `f` to the enclosing
+`throws func`. Unlike a `try ... except ... end` declaration, `x` belongs to the
+enclosing scope because execution can continue past the declaration only when `f`
+succeeds.
 
-The parser currently permits only:
-
-- a direct call, or
-- a declaration initialized by a direct call
-
-after `try`.
+The call-only propagation form has no trailing colon. A colon starts the local
+`try ... except ... end` form.
 
 ### Match
 
