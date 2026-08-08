@@ -75,6 +75,15 @@ extern throws func jik_impl_string_to_double as
 extern func jik_impl_string_concat as
     concat(foreign left: String, foreign right: String, region: Region) -> String
 
+/// Compare two strings lexicographically by byte value.
+///
+/// @param left Left string.
+/// @param right Right string.
+/// @returns A value less than zero if `left` precedes `right`, zero if they are
+/// equal, or a value greater than zero if `left` follows `right`.
+extern func jik_string_cmp as
+    compare(foreign left: String, foreign right: String) -> int
+
 /// Replace all occurrences of `needle` in `s` with `repl`.
 ///
 /// If `needle` is empty, the function returns a copy of `s`.

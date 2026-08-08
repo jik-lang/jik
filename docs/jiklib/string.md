@@ -77,6 +77,19 @@ Concatenate two strings.
 
 ---
 
+### `compare(foreign left: String, foreign right: String) -> int`
+
+Compare two strings lexicographically by byte value.
+
+**Parameters**
+1. `left: String` - Left string.
+2. `right: String` - Right string.
+
+**Returns**
+- A value less than zero if `left` precedes `right`, zero if they are equal, or a value greater than zero if `left` follows `right`.
+
+---
+
 ### `ends_with(foreign s: String, foreign suffix: String) -> bool`
 
 Return whether `s` ends with `suffix`.

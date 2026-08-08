@@ -106,6 +106,15 @@ func test_string_find(ts):
     test::suite_assert(ts, string::find(s, "foo bar baz!") == -1, site())
 end
 
+func test_string_compare(ts):
+    test::suite_assert(ts, string::compare("", "") == 0, site())
+    test::suite_assert(ts, string::compare("abc", "abc") == 0, site())
+    test::suite_assert(ts, string::compare("abc", "abd") < 0, site())
+    test::suite_assert(ts, string::compare("abd", "abc") > 0, site())
+    test::suite_assert(ts, string::compare("abc", "abcd") < 0, site())
+    test::suite_assert(ts, string::compare("abcd", "abc") > 0, site())
+end
+
 func test_string_starts_with(ts):
     s := "foo bar baz"
     test::suite_assert(ts, string::starts_with(s, "") == true, site())
@@ -231,6 +240,7 @@ func run_tests(ts):
     test_string_split(ts)
     test_string_join(ts)
     test_string_find(ts)
+    test_string_compare(ts)
     test_string_starts_with(ts)
     test_string_ends_with(ts)
     test_builtin_concat(ts)
