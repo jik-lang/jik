@@ -21,6 +21,9 @@ two categories - Primitives and Composites. Composite types are always dynamical
     - type name: `char`
     - translates to C type: `unsigned char`
     - `char` is a single-byte value; it is not a Unicode code-point type
+- **Enumerations**: `State.ON`, `State.OFF`
+    - type name: the declared enum name, such as `State`
+    - translates to a C `enum`
 
 
 ### 5.2 Composite types
