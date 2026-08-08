@@ -47,8 +47,28 @@ func test_path_absolute(ts):
     end
 end
 
+func test_path_normalize(ts):
+    test::suite_assert(ts, path::normalize("", _) == ".", site())
+
+    if _windows():
+        test::suite_assert(ts, path::normalize("a//b/./c", _) == "a\\b\\c", site())
+        test::suite_assert(ts, path::normalize("a\\b\\..\\c", _) == "a\\c", site())
+        test::suite_assert(ts, path::normalize("a\\..\\..\\b", _) == "..\\b", site())
+        test::suite_assert(ts, path::normalize("C:\\a\\..\\b", _) == "C:\\b", site())
+        test::suite_assert(ts, path::normalize("C:foo\\..\\bar", _) == "C:bar", site())
+        test::suite_assert(ts, path::normalize("C:\\..\\b", _) == "C:\\b", site())
+    else:
+        test::suite_assert(ts, path::normalize("a//b/./c", _) == "a/b/c", site())
+        test::suite_assert(ts, path::normalize("a/b/../c", _) == "a/c", site())
+        test::suite_assert(ts, path::normalize("a/../../b", _) == "../b", site())
+        test::suite_assert(ts, path::normalize("/a/../b", _) == "/b", site())
+        test::suite_assert(ts, path::normalize("/../../b", _) == "/b", site())
+    end
+end
+
 func run_tests(ts):
     test_path_join(ts)
     test_path_components(ts)
     test_path_absolute(ts)
+    test_path_normalize(ts)
 end

@@ -88,6 +88,97 @@ func join(foreign parts: Vec[String], r: Region) -> String:
     return strbuf::to_string(sb, r)
 end
 
+/// Normalize a path lexically.
+///
+/// Repeated separators and `.` components are removed. `..` components remove
+/// the preceding normal component when possible. Unresolved `..` components are
+/// preserved in relative paths and discarded at an absolute root.
+///
+/// This function does not access the filesystem. It does not resolve symlinks,
+/// expand home or environment references, or support Windows UNC and device
+/// paths specially.
+///
+/// @param path Input path. Foreign parameter.
+/// @param r Allocation region for the result.
+/// @returns Lexically normalized path.
+func normalize(foreign path: String, r: Region) -> String:
+    windows := _is_windows()
+    n := len(path)
+    absolute := false
+    drive_relative := false
+    start := 0
+    sb := strbuf::new("", r)
+
+    if windows and _has_drive_prefix(path):
+        strbuf::append_char(sb, path[0])
+        strbuf::append_char(sb, ':')
+        start = 2
+        if start < n and _is_sep(path[start], windows):
+            absolute = true
+            strbuf::append_char(sb, _sep_char())
+            while start < n and _is_sep(path[start], windows):
+                start += 1
+            end
+        else:
+            drive_relative = true
+        end
+    else:
+        if n > 0 and _is_sep(path[0], windows):
+            absolute = true
+            strbuf::append_char(sb, _sep_char())
+            while start < n and _is_sep(path[start], windows):
+                start += 1
+            end
+        end
+    end
+
+    parts := [0 of ""][r]
+    i := start
+    while i < n:
+        while i < n and _is_sep(path[i], windows):
+            i += 1
+        end
+
+        component_start := i
+        while i < n and not _is_sep(path[i], windows):
+            i += 1
+        end
+        if component_start == i:
+            continue
+        end
+
+        component := must string::slice(path, component_start, i, r)
+        if component == ".":
+            continue
+        end
+        if component == "..":
+            if len(parts) > 0 and parts[len(parts) - 1] != "..":
+                pop(parts)
+            else:
+                if not absolute:
+                    push(parts, component)
+                end
+            end
+            continue
+        end
+        push(parts, component)
+    end
+
+    first := true
+    for part in parts:
+        if not first:
+            strbuf::append_char(sb, _sep_char())
+        end
+        strbuf::append(sb, part)
+        first = false
+    end
+
+    if len(parts) == 0 and not absolute and not drive_relative:
+        return "."[r]
+    end
+    return strbuf::to_string(sb, r)
+end
+
 /// Return the last path component.
 ///
 /// @param path Input path. Foreign parameter.

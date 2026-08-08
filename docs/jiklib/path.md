@@ -24,6 +24,24 @@ Join path segments using the platform separator.
 
 ---
 
+### `normalize(foreign path: String, r: Region) -> String`
+
+Normalize a path lexically.
+
+**Parameters**
+1. `path: String` - Input path.
+2. `r: Region` - Allocation region for the result.
+
+**Returns**
+- Lexically normalized path.
+
+**Notes**
+- Repeated separators and `.` components are removed.
+- `..` components remove the preceding normal component when possible. Unresolved `..` components are preserved in relative paths and discarded at an absolute root.
+- This function does not access the filesystem, resolve symlinks, expand home or environment references, or support Windows UNC and device paths.
+
+---
+
 ### `basename(foreign path: String, r: Region) -> String`
 
 Return the last path component.
