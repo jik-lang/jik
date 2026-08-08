@@ -15,7 +15,7 @@ static JikType *
 jik_semantic_resolve_type_or_error(JikNode *nd);
 static JikNode *
 jik_make_init_call_for_extern_struct(JikType  *t,
-                                     char     *mod_alias,
+                                     char     *module_id,
                                      JikScope *context,
                                      JikToken *token);
 
@@ -63,7 +63,7 @@ bool
 is_main_function(JikNode *nd)
 {
     assert(nd->type == NODE_FUNCTION);
-    return strcmp(nd->val_function.name, "main") == 0 && strcmp(nd->token->mod_alias, "main") == 0;
+    return strcmp(nd->val_function.name, "main") == 0 && strcmp(nd->token->module_id, "main") == 0;
 }
 
 static bool
@@ -105,27 +105,13 @@ jik_semantic_reject_builtin_name_collision(JikSemanticAnalyzer *sa, char *name, 
 }
 
 void
-jik_semantic_ensure_module_used(JikNode *nd)
-{
-    assert(nd->type == NODE_EXPR_IDENTIFIER);
-    if (!nd->val_id.mod_alias || strcmp(nd->val_id.mod_alias, nd->token->mod_alias) == 0) {
-        return;
-    }
-    bool *res = TabBool_get(nd->token->used_aliases, nd->val_id.mod_alias);
-    jik_diag_fatal_error_if(!res,
-                            JIK_STRING_NCAT("unknown module: ", nd->val_id.mod_alias),
-                            jik_token_to_text(nd->token));
-}
-
-void
 jik_ensure_valid_variant_tag(JikNode *nd)
 {
     assert(nd->type == NODE_EXPR_VARIANT_NEW);
     JikNode *s = jik_scope_get_symbol(nd->context,
                                       nd->val_variant_new.name->val_id.name,
-                                      nd->val_variant_new.name->val_id.mod_alias,
-                                      nd->token->mod_alias);
-    jik_semantic_ensure_module_used(nd->val_variant_new.name);
+                                      nd->val_variant_new.name->val_id.module_id,
+                                      nd->token->module_id);
     jik_diag_fatal_error_if(
         !s,
         JIK_STRING_NCAT("variant \"", nd->val_variant_new.name->val_id.name, "\" not defined"),
@@ -146,7 +132,7 @@ jik_semantic_reject_invalid_value_expr(JikNode *nd)
     }
     if (nd->type == NODE_EXPR_IDENTIFIER) {
         JikNode *sym = jik_scope_get_symbol(
-            nd->context, nd->val_id.name, nd->val_id.mod_alias, nd->token->mod_alias);
+            nd->context, nd->val_id.name, nd->val_id.module_id, nd->token->module_id);
         if (!sym) {
             return;
         }
@@ -183,8 +169,8 @@ jik_semantic_reject_invalid_value_expr(JikNode *nd)
     if (nd->type == NODE_EXPR_VARIANT_NEW) {
         JikNode *variant = jik_scope_get_symbol(nd->context,
                                                  nd->val_variant_new.name->val_id.name,
-                                                 nd->val_variant_new.name->val_id.mod_alias,
-                                                 nd->token->mod_alias);
+                                                 nd->val_variant_new.name->val_id.module_id,
+                                                 nd->token->module_id);
         if (variant && variant->type == NODE_VARIANT &&
             jik_variant_tag_is_payloadless(variant, nd->val_variant_new.tag)) {
             jik_diag_fatal_error_if(nd->val_variant_new.has_initializer_syntax,
@@ -208,8 +194,8 @@ jik_semantic_reject_invalid_value_expr(JikNode *nd)
         nd->val_member_access.node->type == NODE_EXPR_IDENTIFIER) {
         JikNode *sym = jik_scope_get_symbol(nd->context,
                                             nd->val_member_access.node->val_id.name,
-                                            nd->val_member_access.node->val_id.mod_alias,
-                                            nd->token->mod_alias);
+                                            nd->val_member_access.node->val_id.module_id,
+                                            nd->token->module_id);
         if (sym && sym->type == NODE_VARIANT) {
             jik_diag_fatal_error(JIK_STRING_NCAT("variant tag cannot be used as a value; use ",
                                                  nd->val_member_access.node->val_id.name,
@@ -302,12 +288,12 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             assert(nd->context->parent == NULL);
             jik_semantic_reject_reserved_prefix(nd->val_enum.name, nd->token);
             jik_semantic_reject_builtin_name_collision(sa, nd->val_enum.name, nd->token);
-            bool res = jik_scope_add_global_symbol(nd->val_enum.name, nd->token->mod_alias, nd);
+            bool res = jik_scope_add_global_symbol(nd->val_enum.name, nd->token->module_id, nd);
             jik_diag_fatal_error_if(!res,
                                     JIK_STRING_NCAT("symbol \"",
                                                     nd->val_enum.name,
                                                     "\" already defined in module \"",
-                                                    nd->token->mod_alias,
+                                                    nd->token->module_id,
                                                     "\""),
                                     "");
         }
@@ -320,12 +306,12 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             while (TabJikNode_iter_next(&it_fields, &item_field)) {
                 jik_semantic_reject_reserved_prefix(item_field.key, item_field.value->token);
             }
-            bool res = jik_scope_add_global_symbol(nd->val_struct.name, nd->token->mod_alias, nd);
+            bool res = jik_scope_add_global_symbol(nd->val_struct.name, nd->token->module_id, nd);
             jik_diag_fatal_error_if(!res,
                                     JIK_STRING_NCAT("symbol \"",
                                                     nd->val_struct.name,
                                                     "\" already defined in module \"",
-                                                    nd->token->mod_alias,
+                                                    nd->token->module_id,
                                                     "\""),
                                     "");
         }
@@ -343,12 +329,12 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                                         VecString_size(nd->val_variant.member_order),
                                 "variant has no payloads; use an enum instead",
                                 jik_token_to_text(nd->token));
-            bool res = jik_scope_add_global_symbol(nd->val_variant.name, nd->token->mod_alias, nd);
+            bool res = jik_scope_add_global_symbol(nd->val_variant.name, nd->token->module_id, nd);
             jik_diag_fatal_error_if(!res,
                                     JIK_STRING_NCAT("symbol \"",
                                                     nd->val_variant.name,
                                                     "\" already defined in module \"",
-                                                    nd->token->mod_alias,
+                                                    nd->token->module_id,
                                                     "\""),
                                     "");
         }
@@ -374,12 +360,12 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                                         "main function cannot throw",
                                         jik_token_to_text(nd->token));
             }
-            bool res = jik_scope_add_global_symbol(nd->val_function.name, nd->token->mod_alias, nd);
+            bool res = jik_scope_add_global_symbol(nd->val_function.name, nd->token->module_id, nd);
             jik_diag_fatal_error_if(!res,
                                     JIK_STRING_NCAT("symbol \"",
                                                     nd->val_function.name,
                                                     "\" already defined in module \"",
-                                                    nd->token->mod_alias,
+                                                    nd->token->module_id,
                                                     "\""),
                                     "");
         }
@@ -390,12 +376,12 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
         else if (nd->type == NODE_EXTERN_FUNCTION) {
             jik_semantic_reject_reserved_prefix(nd->val_extern_function.name, nd->token);
             bool res =
-                jik_scope_add_global_symbol(nd->val_extern_function.name, nd->token->mod_alias, nd);
+                jik_scope_add_global_symbol(nd->val_extern_function.name, nd->token->module_id, nd);
             jik_diag_fatal_error_if(!res,
                                     JIK_STRING_NCAT("symbol \"",
                                                     nd->val_function.name,
                                                     "\" already defined in module \"",
-                                                    nd->token->mod_alias,
+                                                    nd->token->module_id,
                                                     "\""),
                                     "");
         }
@@ -406,19 +392,19 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                 sa, nd->val_declare.id->val_id.name, nd->val_declare.id->token);
             if (nd->val_declare.global) {
                 bool res = jik_scope_add_global_symbol(
-                    nd->val_declare.id->val_id.name, nd->token->mod_alias, nd->val_declare.expr);
+                    nd->val_declare.id->val_id.name, nd->token->module_id, nd->val_declare.expr);
                 jik_diag_fatal_error_if(!res,
                                         JIK_STRING_NCAT("symbol \"",
                                                         nd->val_declare.id->val_id.name,
                                                         "\" already defined in module \"",
-                                                        nd->token->mod_alias,
+                                                        nd->token->module_id,
                                                         "\""),
                                         "");
             }
             else {
                 // No shadowing of globals
                 JikNode *gs = jik_scope_get_global_symbol(nd->val_declare.id->val_id.name,
-                                                          nd->token->mod_alias);
+                                                          nd->token->module_id);
                 jik_diag_fatal_error_if(gs,
                                         "shadowing of global symbols not allowed",
                                         jik_token_to_text(nd->val_declare.id->token));
@@ -435,7 +421,7 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
         }
         else if (nd->type == NODE_STMNT_ASSIGN) {
             JikNode *gs =
-                jik_scope_get_global_symbol(nd->val_assign.id->val_id.name, nd->token->mod_alias);
+                jik_scope_get_global_symbol(nd->val_assign.id->val_id.name, nd->token->module_id);
             jik_diag_fatal_error_if(
                 gs, "global bindings are immutable", jik_token_to_text(nd->val_assign.id->token));
             JikNode *ls = jik_scope_get_local_symbol(nd->context, nd->val_assign.id->val_id.name);
@@ -532,18 +518,17 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             // TODO: here, also identifier Node from Node.FOO will come in, may be a problem or at
             // best redundant
             JikNode *s = jik_scope_get_symbol(
-                nd->context, nd->val_id.name, nd->val_id.mod_alias, nd->token->mod_alias);
+                nd->context, nd->val_id.name, nd->val_id.module_id, nd->token->module_id);
             if (s == NULL) {
                 jik_diag_fatal_error(jik_string_cat("undefined symbol: ", nd->val_id.name),
                                      jik_token_to_text(nd->token));
             }
-            jik_semantic_ensure_module_used(nd);
         }
         else if (nd->type == NODE_EXPR_CALL) {
             JikNode *s = jik_scope_get_symbol(nd->context,
                                               nd->val_call.name->val_id.name,
-                                              nd->val_call.name->val_id.mod_alias,
-                                              nd->token->mod_alias);
+                                              nd->val_call.name->val_id.module_id,
+                                              nd->token->module_id);
             if (!s) {
                 s = jik_scope_get_builtin_symbol(nd->val_call.name->val_id.name);
                 jik_diag_fatal_error_if(!s,
@@ -554,7 +539,6 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                 nd->val_call.builtin = true;
             }
             else {
-                jik_semantic_ensure_module_used(nd->val_call.name);
                 if (s->type == NODE_EXTERN_FUNCTION) {
                     nd->val_call.extern_name = s->val_extern_function.C_func_name;
                 }
@@ -563,8 +547,8 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
         else if (nd->type == NODE_EXPR_STRUCT_NEW) {
             JikNode *s = jik_scope_get_symbol(nd->context,
                                               nd->val_struct_new.name->val_id.name,
-                                              nd->val_struct_new.name->val_id.mod_alias,
-                                              nd->token->mod_alias);
+                                              nd->val_struct_new.name->val_id.module_id,
+                                              nd->token->module_id);
             jik_diag_fatal_error_if(!s,
                                     JIK_STRING_NCAT("struct \"",
                                                     nd->val_struct_new.name->val_id.name,
@@ -575,7 +559,6 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                                                     nd->val_struct_new.name->val_id.name,
                                                     "\" not defined"),
                                     jik_token_to_text(nd->token));
-            jik_semantic_ensure_module_used(nd->val_struct_new.name);
             if (s->val_struct.is_extern) {
                 jik_diag_fatal_error_if(!jik_tab_jik_node_is_empty(nd->val_struct_new.init_vals),
                                         "external structs cannot be instantiated with fields",
@@ -586,8 +569,8 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
         else if (nd->type == NODE_EXPR_VARIANT_NEW) {
             JikNode *s = jik_scope_get_symbol(nd->context,
                                               nd->val_variant_new.name->val_id.name,
-                                              nd->val_variant_new.name->val_id.mod_alias,
-                                              nd->token->mod_alias);
+                                              nd->val_variant_new.name->val_id.module_id,
+                                              nd->token->module_id);
             jik_diag_fatal_error_if(!s,
                                     JIK_STRING_NCAT("variant \"",
                                                     nd->val_variant_new.name->val_id.name,
@@ -598,8 +581,8 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                                                     nd->val_variant_new.name->val_id.name,
                                                     "\" not defined"),
                                     jik_token_to_text(nd->token));
-            if (!nd->val_variant_new.name->val_id.mod_alias) {
-                nd->val_variant_new.name->val_id.mod_alias = nd->token->mod_alias;
+            if (!nd->val_variant_new.name->val_id.module_id) {
+                nd->val_variant_new.name->val_id.module_id = nd->token->module_id;
             }
         }
         else if ((nd->type == NODE_EXPR_SUBSCRIPT_GET &&
@@ -613,11 +596,11 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             JikNode *member = nd->type == NODE_EXPR_SUBSCRIPT_GET
                                   ? nd->val_subscript_get.expr
                                   : nd->val_subscript_set.sub_expr;
-            char    *mod_alias = member->val_member_access.node->val_id.mod_alias
-                                     ? member->val_member_access.node->val_id.mod_alias
-                                     : member->val_member_access.node->token->mod_alias;
+            char    *module_id = member->val_member_access.node->val_id.module_id
+                                     ? member->val_member_access.node->val_id.module_id
+                                     : member->val_member_access.node->token->module_id;
             JikNode *variant = jik_scope_get_global_symbol(
-                member->val_member_access.node->val_id.name, mod_alias);
+                member->val_member_access.node->val_id.name, module_id);
             if (variant && variant->type == NODE_VARIANT) {
                 JikNode *tag = jik_node_new_variant_tag(member->val_member_access.node,
                                                         member->val_member_access.member_name,
@@ -635,8 +618,8 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             JikNode *variant = jik_scope_get_symbol(
                 nd->context,
                 member->val_member_access.node->val_id.name,
-                member->val_member_access.node->val_id.mod_alias,
-                nd->token->mod_alias);
+                member->val_member_access.node->val_id.module_id,
+                nd->token->module_id);
             if (variant && variant->type == NODE_VARIANT &&
                 jik_variant_tag_is_payloadless(variant, member->val_member_access.member_name)) {
                 JikNode *ret = jik_node_new_variant_new(member->val_member_access.node,
@@ -644,7 +627,7 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                                                         member->val_member_access.member_name,
                                                         nd->context,
                                                         nd->token);
-                ret->val_variant_new.name->val_id.mod_alias = variant->token->mod_alias;
+                ret->val_variant_new.name->val_id.module_id = variant->token->module_id;
                 jik_set_alloc_spec(ret,
                                    (JikAllocSpec){.kind = JIK_ALLOC_NAMED_REGION,
                                                   .src = JIK_ALLOC_SRC_UNKNOWN,
@@ -655,11 +638,11 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
         }
         else if (nd->type == NODE_EXPR_MEMBER_ACCESS) {
             if (nd->val_member_access.node->type == NODE_EXPR_IDENTIFIER) {
-                char    *mod_alias = nd->val_member_access.node->val_id.mod_alias
-                                         ? nd->val_member_access.node->val_id.mod_alias
-                                         : nd->val_member_access.node->token->mod_alias;
+                char    *module_id = nd->val_member_access.node->val_id.module_id
+                                         ? nd->val_member_access.node->val_id.module_id
+                                         : nd->val_member_access.node->token->module_id;
                 JikNode *enum_node =
-                    jik_scope_get_global_symbol(nd->val_member_access.node->val_id.name, mod_alias);
+                    jik_scope_get_global_symbol(nd->val_member_access.node->val_id.name, module_id);
                 // TODO: this is not so nice, needing to explicitly copy out this stuff
                 if (enum_node && enum_node->type == NODE_ENUM) {
                     JikNode *enum_new_nd = jik_node_new_enum_new(
@@ -682,7 +665,7 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                             nd->val_member_access.member_name,
                             nd->context,
                             nd->token);
-                        var_new_nd->val_variant_new.name->val_id.mod_alias = mod_alias;
+                        var_new_nd->val_variant_new.name->val_id.module_id = module_id;
                         jik_set_alloc_spec(var_new_nd,
                                            (JikAllocSpec){.kind = JIK_ALLOC_LOCAL,
                                                           .src = JIK_ALLOC_SRC_LOCAL});
@@ -820,7 +803,7 @@ jik_get_composite_kind(JikNode *nd)
 static char *
 jik_get_composite_key(JikNode *nd)
 {
-    return JIK_STRING_NCAT(nd->token->mod_alias, "::", jik_get_composite_name(nd));
+    return JIK_STRING_NCAT(nd->token->module_id, "::", jik_get_composite_name(nd));
 }
 
 static JikNode *
@@ -830,10 +813,10 @@ jik_resolve_type_desc_composite(JikNode *td)
     if (td->val_type_desc.kind != TYPE_UNKNOWN || !td->val_type_desc.name) {
         return NULL;
     }
-    char    *mod_alias = td->val_type_desc.name->val_id.mod_alias
-                             ? td->val_type_desc.name->val_id.mod_alias
-                             : td->token->mod_alias;
-    JikNode *sym = jik_scope_get_global_symbol(td->val_type_desc.name->val_id.name, mod_alias);
+    char    *module_id = td->val_type_desc.name->val_id.module_id
+                             ? td->val_type_desc.name->val_id.module_id
+                             : td->token->module_id;
+    JikNode *sym = jik_scope_get_global_symbol(td->val_type_desc.name->val_id.name, module_id);
     if (!sym) {
         return NULL;
     }
@@ -1094,7 +1077,7 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
     }
     else if (nd->type == NODE_EXPR_IDENTIFIER) {
         JikNode *n = jik_scope_get_symbol(
-            nd->context, nd->val_id.name, nd->val_id.mod_alias, nd->token->mod_alias);
+            nd->context, nd->val_id.name, nd->val_id.module_id, nd->token->module_id);
         assert(n);
         if (jik_node_is_type_inferred(n)) {
             nd->jik_type = n->jik_type;
@@ -1103,8 +1086,8 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
     else if (nd->type == NODE_EXPR_CALL) {
         JikNode *func = jik_scope_get_function(nd->context,
                                                nd->val_call.name->val_id.name,
-                                               nd->val_call.name->val_id.mod_alias,
-                                               nd->token->mod_alias);
+                                               nd->val_call.name->val_id.module_id,
+                                               nd->token->module_id);
         if (nd->val_call.builtin) {
             if (jik_type_is_inferred(func->jik_type->val_func.ret_type)) {
                 nd->jik_type = func->jik_type->val_func.ret_type;
@@ -1185,11 +1168,11 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
     else if (nd->type == NODE_EXPR_STRUCT_NEW) {
         JikNode *st = jik_scope_get_symbol(nd->context,
                                            nd->val_struct_new.name->val_id.name,
-                                           nd->val_struct_new.name->val_id.mod_alias,
-                                           nd->token->mod_alias);
+                                           nd->val_struct_new.name->val_id.module_id,
+                                           nd->token->module_id);
         if (st->val_struct.is_extern) {
             JikNode *call = jik_make_init_call_for_extern_struct(
-                st->jik_type, nd->val_struct_new.name->val_id.mod_alias, nd->context, nd->token);
+                st->jik_type, nd->val_struct_new.name->val_id.module_id, nd->context, nd->token);
             *nd                 = *call;
             sa->needs_recollect = true;
             return;
@@ -1199,8 +1182,8 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
     else if (nd->type == NODE_EXPR_VARIANT_NEW) {
         JikNode *st  = jik_scope_get_symbol(nd->context,
                                            nd->val_variant_new.name->val_id.name,
-                                           nd->val_variant_new.name->val_id.mod_alias,
-                                           nd->token->mod_alias);
+                                           nd->val_variant_new.name->val_id.module_id,
+                                           nd->token->module_id);
         nd->jik_type = st->jik_type;
         if (st->jik_type->name == TYPE_VARIANT) {
             jik_ensure_valid_variant_tag(nd);
@@ -1274,9 +1257,8 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
                 JikNode *variant_nd = jik_scope_get_symbol(
                     nd->context,
                     nd->val_subscript_get.expr->val_variant_tag.name->val_id.name,
-                    nd->val_subscript_get.expr->val_variant_tag.name->val_id.mod_alias,
-                    nd->token->mod_alias);
-                jik_semantic_ensure_module_used(nd->val_subscript_get.expr->val_variant_tag.name);
+                    nd->val_subscript_get.expr->val_variant_tag.name->val_id.module_id,
+                    nd->token->module_id);
                 jik_diag_fatal_error_if(
                     !variant_nd,
                     JIK_STRING_NCAT("variant \"",
@@ -1424,8 +1406,8 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
                 JikNode *s = jik_scope_get_symbol(
                     nd->context,
                     case_nd->val_case.variant->val_variant_new.name->val_id.name,
-                    case_nd->val_case.variant->val_variant_new.name->val_id.mod_alias,
-                    nd->token->mod_alias);
+                    case_nd->val_case.variant->val_variant_new.name->val_id.module_id,
+                    nd->token->module_id);
                 jik_diag_fatal_error_if(!jik_type_equal(s->jik_type, variant_type),
                                         JIK_STRING_NCAT("wrong variant type: expected ",
                                                         jik_type_pretty_name(variant_type)),
@@ -1467,8 +1449,8 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
             }
             JikNode *func = jik_scope_get_function(nd->context,
                                                    nd->val_call.name->val_id.name,
-                                                   nd->val_call.name->val_id.mod_alias,
-                                                   nd->token->mod_alias);
+                                                   nd->val_call.name->val_id.module_id,
+                                                   nd->token->module_id);
             assert(func);
             size_t n_args   = VecJikNode_size(nd->val_call.args);
             size_t n_params = VecJikType_size(func->jik_type->val_func.param_types);
@@ -1482,8 +1464,8 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
         if (nd->type == NODE_STMNT_ASSIGN) {
             JikNode *target = jik_scope_get_symbol(nd->context,
                                                    nd->val_assign.id->val_id.name,
-                                                   nd->val_assign.id->val_id.mod_alias,
-                                                   nd->val_assign.id->token->mod_alias);
+                                                   nd->val_assign.id->val_id.module_id,
+                                                   nd->val_assign.id->token->module_id);
             if (target && jik_node_is_type_inferred(target)) {
                 jik_semantic_apply_option_context(nd->val_assign.expr, target->jik_type);
             }
@@ -1645,8 +1627,8 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
         if (nd->type == NODE_EXPR_CALL) {
             JikNode *func = jik_scope_get_function(nd->context,
                                                    nd->val_call.name->val_id.name,
-                                                   nd->val_call.name->val_id.mod_alias,
-                                                   nd->token->mod_alias);
+                                                   nd->val_call.name->val_id.module_id,
+                                                   nd->token->module_id);
             if (func->type == NODE_BUILTIN_FUNCTION || func->type == NODE_EXTERN_FUNCTION) {
                 continue;
             }
@@ -1668,7 +1650,7 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
                 if (jik_node_is_type_inferred(arg)) {
                     char    *param_name = VecJikNode_get(func->val_function.params, i)->val_id.name;
                     JikNode *arg_nd     = jik_scope_get_symbol(
-                        func->val_function.body->context, param_name, NULL, func->token->mod_alias);
+                        func->val_function.body->context, param_name, NULL, func->token->module_id);
                     JikType *param_type = VecJikType_get(func->jik_type->val_func.param_types, i);
                     if (jik_type_is_inferred(param_type) &&
                         !jik_type_equal(param_type, arg->jik_type)) {
@@ -1745,7 +1727,7 @@ jik_semantic_resolve_type(JikNode *nd)
         }
         else {
             JikNode *s = jik_scope_get_symbol(
-                nd->context, type_id->val_id.name, type_id->val_id.mod_alias, nd->token->mod_alias);
+                nd->context, type_id->val_id.name, type_id->val_id.module_id, nd->token->module_id);
             if (s) {
                 return s->jik_type;
             }
@@ -1807,7 +1789,7 @@ jik_semantic_resolve_type_or_error(JikNode *nd)
 
 static JikNode *
 jik_make_init_call_for_extern_struct(JikType  *t,
-                                     char     *mod_alias,
+                                     char     *module_id,
                                      JikScope *context,
                                      JikToken *token)
 {
@@ -1818,9 +1800,9 @@ jik_make_init_call_for_extern_struct(JikType  *t,
     }
 
     JikNode *func = t->init_func;
-    mod_alias     = mod_alias ? mod_alias : func->token->mod_alias;
+    module_id     = module_id ? module_id : func->token->module_id;
     JikNode *name =
-        jik_node_new_identifier(func->val_extern_function.name, mod_alias, context, token);
+        jik_node_new_identifier(func->val_extern_function.name, module_id, context, token);
     VecJikNode *args = VecJikNode_new_empty();
     VecJikNode_push(args, jik_node_new_local_region(context, token));
 
@@ -1834,7 +1816,7 @@ static JikNode *
 jik_get_default_initializer_for_extern_struct(JikNode *type_desc, JikType *t)
 {
     return jik_make_init_call_for_extern_struct(
-        t, type_desc->val_type_desc.name->val_id.mod_alias, type_desc->context, type_desc->token);
+        t, type_desc->val_type_desc.name->val_id.module_id, type_desc->context, type_desc->token);
 }
 
 static JikNode *
@@ -1901,15 +1883,15 @@ jik_get_default_initializer_for_type_desc(JikSemanticAnalyzer *sa, JikNode *nd)
         if (jik_type_is_extern_struct(t)) {
             return jik_get_default_initializer_for_extern_struct(nd, t);
         }
-        if (!nd->val_type_desc.name->val_id.mod_alias) {
-            nd->val_type_desc.name->val_id.mod_alias = nd->token->mod_alias;
+        if (!nd->val_type_desc.name->val_id.module_id) {
+            nd->val_type_desc.name->val_id.module_id = nd->token->module_id;
         }
         JikNode *ret = jik_node_new_struct_new(
             nd->val_type_desc.name, TabJikNode_new(), nd->context, nd->token);
         JikNode *s = jik_scope_get_symbol(ret->context,
                                           ret->val_struct_new.name->val_id.name,
-                                          ret->val_struct_new.name->val_id.mod_alias,
-                                          ret->token->mod_alias);
+                                          ret->val_struct_new.name->val_id.module_id,
+                                          ret->token->module_id);
         assert(s);
         jik_semantic_infer_type(sa, s);
         ret->val_struct_new.struct_node = s;
@@ -1918,11 +1900,11 @@ jik_get_default_initializer_for_type_desc(JikSemanticAnalyzer *sa, JikNode *nd)
         return ret;
     }
     else if (t->name == TYPE_ENUM) {
-        char    *mod_alias = nd->val_type_desc.name->val_id.mod_alias
-                                 ? nd->val_type_desc.name->val_id.mod_alias
-                                 : nd->token->mod_alias;
+        char    *module_id = nd->val_type_desc.name->val_id.module_id
+                                 ? nd->val_type_desc.name->val_id.module_id
+                                 : nd->token->module_id;
         JikNode *enum_node =
-            jik_scope_get_global_symbol(nd->val_member_access.node->val_id.name, mod_alias);
+            jik_scope_get_global_symbol(nd->val_member_access.node->val_id.name, module_id);
         assert(enum_node);
         JikNode *ret =
             jik_node_new_enum_new(enum_node->val_enum.first_enumerator, nd->context, nd->token);
@@ -1930,13 +1912,13 @@ jik_get_default_initializer_for_type_desc(JikSemanticAnalyzer *sa, JikNode *nd)
         return ret;
     }
     else if (t->name == TYPE_VARIANT) {
-        if (!nd->val_type_desc.name->val_id.mod_alias) {
-            nd->val_type_desc.name->val_id.mod_alias = nd->token->mod_alias;
+        if (!nd->val_type_desc.name->val_id.module_id) {
+            nd->val_type_desc.name->val_id.module_id = nd->token->module_id;
         }
         JikNode *s = jik_scope_get_symbol(nd->context,
                                           nd->val_type_desc.name->val_id.name,
-                                          nd->val_type_desc.name->val_id.mod_alias,
-                                          nd->token->mod_alias);
+                                          nd->val_type_desc.name->val_id.module_id,
+                                          nd->token->module_id);
         assert(s);
         jik_semantic_infer_type(sa, s);
         JikNode *ret = jik_node_new_variant_new(
@@ -1983,7 +1965,7 @@ jik_semantic_apply_type_annotations(JikSemanticAnalyzer *sa)
                 VecJikType_set(nd->jik_type->val_func.param_types, i, t);
                 char    *param_name = VecJikNode_get(nd->val_function.params, i)->val_id.name;
                 JikNode *arg_nd     = jik_scope_get_symbol(
-                    nd->val_function.body->context, param_name, NULL, nd->token->mod_alias);
+                    nd->val_function.body->context, param_name, NULL, nd->token->module_id);
                 arg_nd->jik_type = t;
             }
             if (!nd->val_function.ret_type_annot) {
@@ -2188,8 +2170,8 @@ jik_check_error_handling(VecJikNode *nodes)
             JikNode *call_expr = nd->val_must.expr;
             JikNode *func      = jik_scope_get_function(call_expr->context,
                                                    call_expr->val_call.name->val_id.name,
-                                                   call_expr->val_call.name->val_id.mod_alias,
-                                                   call_expr->token->mod_alias);
+                                                   call_expr->val_call.name->val_id.module_id,
+                                                   call_expr->token->module_id);
             assert(func);
             jik_diag_fatal_error_if(!jik_function_throws(func),
                                     "non-throwable function cannot be handled with \"must\"",
@@ -2198,8 +2180,8 @@ jik_check_error_handling(VecJikNode *nodes)
         else if (nd->type == NODE_EXPR_CALL) {
             JikNode *func = jik_scope_get_function(nd->context,
                                                    nd->val_call.name->val_id.name,
-                                                   nd->val_call.name->val_id.mod_alias,
-                                                   nd->token->mod_alias);
+                                                   nd->val_call.name->val_id.module_id,
+                                                   nd->token->module_id);
             assert(func);
             jik_diag_fatal_error_if(jik_function_throws(func) && !nd->val_call.must &&
                                         !nd->val_call.propagate,
@@ -2225,8 +2207,8 @@ jik_check_error_handling(VecJikNode *nodes)
                                      : nd->val_catch.stmnt;
             JikNode *func      = jik_scope_get_function(call_expr->context,
                                                    call_expr->val_call.name->val_id.name,
-                                                   call_expr->val_call.name->val_id.mod_alias,
-                                                   call_expr->token->mod_alias);
+                                                   call_expr->val_call.name->val_id.module_id,
+                                                   call_expr->token->module_id);
             assert(func);
             jik_diag_fatal_error_if(!jik_function_throws(func),
                                     "non-throwable function cannot be handled with \"try\"",

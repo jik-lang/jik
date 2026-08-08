@@ -164,8 +164,8 @@ call_requires_region_injection(JikNode *nd)
     assert(nd->type == NODE_EXPR_CALL);
     JikNode *func = jik_scope_get_function(nd->context,
                                            nd->val_call.name->val_id.name,
-                                           nd->val_call.name->val_id.mod_alias,
-                                           nd->token->mod_alias);
+                                           nd->val_call.name->val_id.module_id,
+                                           nd->token->module_id);
     assert(func);
     JikType *func_type = func->jik_type;
     if (func_type->val_func.num_params <= 0) {
@@ -203,8 +203,8 @@ jik_check_types(VecJikNode *nodes)
             }
             JikNode *n = jik_scope_get_symbol(nd->context,
                                               nd->val_assign.id->val_id.name,
-                                              nd->val_assign.id->val_id.mod_alias,
-                                              nd->val_assign.id->token->mod_alias);
+                                              nd->val_assign.id->val_id.module_id,
+                                              nd->val_assign.id->token->module_id);
             if (jik_node_is_type_inferred(n) &&
                 !jik_type_equal(n->jik_type, nd->val_assign.expr->jik_type)) {
                 char *details = JIK_STRING_NCAT("cannot assign ",
@@ -307,8 +307,8 @@ jik_check_types(VecJikNode *nodes)
                     JikNode *builtin_func =
                         jik_scope_get_function(nd->context,
                                                nd->val_call.name->val_id.name,
-                                               nd->val_call.name->val_id.mod_alias,
-                                               nd->token->mod_alias);
+                                               nd->val_call.name->val_id.module_id,
+                                               nd->token->module_id);
                     assert(builtin_func);
                     JikType *func_type = builtin_func->jik_type;
                     if (func_type->val_func.num_params == -1) {
@@ -340,8 +340,8 @@ jik_check_types(VecJikNode *nodes)
             else if (nd->val_call.extern_name) {
                 JikNode *ext_func = jik_scope_get_function(nd->context,
                                                            nd->val_call.name->val_id.name,
-                                                           nd->val_call.name->val_id.mod_alias,
-                                                           nd->token->mod_alias);
+                                                           nd->val_call.name->val_id.module_id,
+                                                           nd->token->module_id);
                 assert(ext_func && ext_func->type == NODE_EXTERN_FUNCTION);
                 size_t n_req = VecJikNode_size(ext_func->val_extern_function.params);
                 size_t n_arg = VecJikNode_size(nd->val_call.args);
@@ -367,8 +367,8 @@ jik_check_types(VecJikNode *nodes)
             else {
                 JikNode *func = jik_scope_get_function(nd->context,
                                                        nd->val_call.name->val_id.name,
-                                                       nd->val_call.name->val_id.mod_alias,
-                                                       nd->token->mod_alias);
+                                                       nd->val_call.name->val_id.module_id,
+                                                       nd->token->module_id);
                 assert(func);
                 size_t n_req = VecJikType_size(func->jik_type->val_func.param_types);
                 size_t n_arg = VecJikNode_size(nd->val_call.args);
@@ -569,12 +569,11 @@ jik_check_types(VecJikNode *nodes)
         else if (nd->type == NODE_EXPR_VARIANT_TAG_CHECK) {
             JikNode *s = jik_scope_get_symbol(nd->context,
                                               nd->val_variant_tag_check.id_node->val_id.name,
-                                              nd->val_variant_tag_check.id_node->val_id.mod_alias,
-                                              nd->token->mod_alias);
+                                              nd->val_variant_tag_check.id_node->val_id.module_id,
+                                              nd->token->module_id);
             jik_diag_fatal_error_if(s->type != NODE_VARIANT,
                                     JIK_STRING_NCAT("expected variant"),
                                     jik_token_to_text(nd->token));
-            jik_semantic_ensure_module_used(nd->val_variant_tag_check.id_node);
             jik_diag_fatal_error_if(!s,
                                     JIK_STRING_NCAT("variant \"",
                                                     nd->val_variant_tag_check.id_node->val_id.name,

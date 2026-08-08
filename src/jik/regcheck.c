@@ -414,8 +414,8 @@ mark_foreign_container_literal_args_specs(JikNode *nd)
 
     JikNode *func = jik_scope_get_function(nd->context,
                                            nd->val_call.name->val_id.name,
-                                           nd->val_call.name->val_id.mod_alias,
-                                           nd->token->mod_alias);
+                                           nd->val_call.name->val_id.module_id,
+                                           nd->token->module_id);
     assert(func);
 
     size_t n = VecJikNode_size(nd->val_call.args);
@@ -434,8 +434,8 @@ get_allocated_args(JikNode *nd)
 
     JikNode *func = jik_scope_get_function(nd->context,
                                            nd->val_call.name->val_id.name,
-                                           nd->val_call.name->val_id.mod_alias,
-                                           nd->token->mod_alias);
+                                           nd->val_call.name->val_id.module_id,
+                                           nd->token->module_id);
     assert(func);
 
     size_t      n           = VecJikNode_size(nd->val_call.args);
@@ -527,8 +527,8 @@ get_expression_alloc_spec(JikNode *nd, TabJikAllocSpec *tvs)
         if (res) {
             return *res;
         }
-        char    *mod_alias = nd->val_id.mod_alias ? nd->val_id.mod_alias : nd->token->mod_alias;
-        JikNode *gs        = jik_scope_get_global_symbol(nd->val_id.name, mod_alias);
+        char    *module_id = nd->val_id.module_id ? nd->val_id.module_id : nd->token->module_id;
+        JikNode *gs        = jik_scope_get_global_symbol(nd->val_id.name, module_id);
         if (!gs) {
             jik_diag_fatal_error("internal error: unresolved global symbol in region check", "");
         }
@@ -816,8 +816,8 @@ is_region_safe_function_call(JikNode *nd)
     }
     JikNode *func = jik_scope_get_function(nd->context,
                                         nd->val_call.name->val_id.name,
-                                        nd->val_call.name->val_id.mod_alias,
-                                        nd->token->mod_alias);
+                                        nd->val_call.name->val_id.module_id,
+                                        nd->token->module_id);
     assert(func);
     if (func->type == NODE_EXTERN_FUNCTION) {
         return false;

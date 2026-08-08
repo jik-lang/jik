@@ -7,6 +7,7 @@
 #include "vec.h"
 
 JIK_HTAB_DECLARE(TabBool, bool);
+JIK_HTAB_DECLARE(TabString, char *);
 JIK_VEC_DECLARE(VecString, char *);
 
 void

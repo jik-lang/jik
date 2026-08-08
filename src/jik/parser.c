@@ -71,7 +71,7 @@ jik_parser_eat_token(JikParser *p, JikTokenType type)
 }
 
 static JikNode *
-jik_parser_parse_function_call(JikParser *p, JikToken *func_name_tok, char *mod_name);
+jik_parser_parse_function_call(JikParser *p, JikToken *func_name_tok, char *module_id);
 static JikNode *
 jik_parser_parse_option_unwrap_call(JikParser *p, JikToken *unwrap_tok);
 
@@ -80,6 +80,24 @@ typedef struct ParsedIdentifier {
     JikToken *name_tok;
     JikToken *mod_name_tok;
 } ParsedIdentifier;
+
+static char *
+jik_parser_resolve_module_id(JikParser *p, JikToken *alias_tok)
+{
+    char *owner_id = alias_tok->module_id;
+    // Allow main::name to qualify symbols in the main module directly
+    if (strcmp(alias_tok->lexeme, owner_id) == 0) {
+        return owner_id;
+    }
+
+    JikModule *owner = jik_context_find_module(p->ctx, owner_id);
+    assert(owner);
+    char **module_id = TabString_get(owner->imports, alias_tok->lexeme);
+    jik_diag_fatal_error_if(module_id == NULL,
+                            JIK_STRING_NCAT("unknown module: ", alias_tok->lexeme),
+                            jik_token_to_text(alias_tok));
+    return *module_id;
+}
 
 static ParsedIdentifier
 jik_parser_get_parsed_identifier(JikParser *p)
@@ -99,9 +117,9 @@ jik_parser_get_parsed_identifier(JikParser *p)
 static JikNode *
 jik_parser_parse_expr(JikParser *p);
 static JikNode *
-jik_parser_parse_struct_new(JikParser *p, JikToken *struct_name_tok, JikToken *mod_name_tok);
+jik_parser_parse_struct_new(JikParser *p, JikToken *struct_name_tok, char *module_id);
 static JikNode *
-jik_parser_parse_variant_new(JikParser *p, JikToken *var_name_tok, JikToken *mod_name_tok);
+jik_parser_parse_variant_new(JikParser *p, JikToken *var_name_tok, char *module_id);
 
 static void
 jik_parser_eat_newlines_if_found(JikParser *p)
@@ -268,24 +286,25 @@ jik_parser_parse_atom(JikParser *p)
     else if (tok->type == TOK_ID) {
         ParsedIdentifier id = jik_parser_get_parsed_identifier(p);
         tok                 = jik_parser_current_token(p);
-        char *mod_name      = id.mod_name_tok ? id.mod_name_tok->lexeme : NULL;
+        char *module_id     = id.mod_name_tok ? jik_parser_resolve_module_id(p, id.mod_name_tok)
+                                              : NULL;
         if (tok->type == TOK_LPAREN) {
-            if (!mod_name && strcmp(id.name_tok->lexeme, "unwrap") == 0) {
+            if (!module_id && strcmp(id.name_tok->lexeme, "unwrap") == 0) {
                 return jik_parser_parse_option_unwrap_call(p, id.name_tok);
             }
-            return jik_parser_parse_function_call(p, id.name_tok, mod_name);
+            return jik_parser_parse_function_call(p, id.name_tok, module_id);
         }
         if (tok->type == TOK_LCURL) {
-            JikNode *struct_nd = jik_parser_parse_struct_new(p, id.name_tok, id.mod_name_tok);
+            JikNode *struct_nd = jik_parser_parse_struct_new(p, id.name_tok, module_id);
             jik_set_alloc_spec(struct_nd, jik_parser_get_region_spec(p));
             return struct_nd;
         }
         if (jik_parser_match_token_sequence(
                 p, (JikTokenType[]){TOK_DOT, TOK_ID, TOK_LCURL, TOK_ERROR})) {
-            return jik_parser_parse_variant_new(p, id.name_tok, id.mod_name_tok);
+            return jik_parser_parse_variant_new(p, id.name_tok, module_id);
         }
         return jik_node_new_identifier(
-            id.name_tok->lexeme, mod_name, jik_parser_current_context(p), tok);
+            id.name_tok->lexeme, module_id, jik_parser_current_context(p), tok);
     }
     else if (tok->type == TOK_LPAREN) {
         JikToken *lpar_tok = jik_parser_eat_token(p, TOK_LPAREN);
@@ -555,19 +574,19 @@ jik_parser_parse_args(JikParser *p)
 }
 
 static JikNode *
-jik_parser_parse_function_call(JikParser *p, JikToken *func_name_tok, char *mod_name)
+jik_parser_parse_function_call(JikParser *p, JikToken *func_name_tok, char *module_id)
 {
     jik_parser_eat_token(p, TOK_LPAREN);
     jik_parser_eat_newlines_if_found(p);
     VecJikNode *args = jik_parser_parse_args(p);
     jik_parser_eat_newlines_if_found(p);
     jik_parser_eat_token(p, TOK_RPAREN);
-    if (!mod_name) {
-        mod_name = func_name_tok->mod_alias;
+    if (!module_id) {
+        module_id = func_name_tok->module_id;
     }
     JikNode *nd_call = jik_node_new_call(
         jik_node_new_identifier(
-            func_name_tok->lexeme, mod_name, jik_parser_current_context(p), func_name_tok),
+            func_name_tok->lexeme, module_id, jik_parser_current_context(p), func_name_tok),
         args,
         jik_parser_current_context(p),
         func_name_tok);
@@ -939,7 +958,7 @@ jik_parser_parse_loop_for(JikParser *p)
         jik_parser_eat_newlines(p);
         // VecJikScope_push(p->contexts, jik_scope_new(jik_parser_current_context(p)));
         JikNode *var_name = jik_node_new_identifier(var_name_tok->lexeme,
-                                                    var_name_tok->mod_alias,
+                                                    var_name_tok->module_id,
                                                     jik_parser_current_context(p),
                                                     var_name_tok);
         JikNode *body     = jik_parser_parse_block(p);
@@ -957,11 +976,11 @@ jik_parser_parse_loop_for(JikParser *p)
         jik_parser_eat_newlines(p);
         // VecJikScope_push(p->contexts, jik_scope_new(jik_parser_current_context(p)));
         JikNode *var_name  = jik_node_new_identifier(var_name_tok->lexeme,
-                                                    var_name_tok->mod_alias,
+                                                    var_name_tok->module_id,
                                                     jik_parser_current_context(p),
                                                     var_name_tok);
         JikNode *var_name2 = jik_node_new_identifier(var_name_tok2->lexeme,
-                                                     var_name_tok2->mod_alias,
+                                                     var_name_tok2->module_id,
                                                      jik_parser_current_context(p),
                                                      var_name_tok2);
         JikNode *body      = jik_parser_parse_block(p);
@@ -972,7 +991,7 @@ jik_parser_parse_loop_for(JikParser *p)
     }
 
     JikNode *var_name = jik_node_new_identifier(
-        var_name_tok->lexeme, var_name_tok->mod_alias, jik_parser_current_context(p), var_name_tok);
+        var_name_tok->lexeme, var_name_tok->module_id, jik_parser_current_context(p), var_name_tok);
     var_name->jik_type = &JIK_TYPE_INT;
     jik_parser_eat_token(p, TOK_ASSIGN);
     JikNode *start_expr = jik_parser_parse_expr(p);
@@ -1048,7 +1067,7 @@ jik_parser_parse_global(JikParser *p)
     jik_parser_eat_token(p, TOK_DECLARE);
     JikNode *expr = jik_parser_parse_expr(p);
     JikNode *id   = jik_node_new_identifier(global_name_tok->lexeme,
-                                          global_name_tok->mod_alias,
+                                          global_name_tok->module_id,
                                           jik_parser_current_context(p),
                                           global_name_tok);
     if (jik_node_is_allocated_literal(expr)) {
@@ -1072,9 +1091,10 @@ jik_parser_parse_type_desc(JikParser *p)
     JikToken *tok = jik_parser_current_token(p);
     if (tok->type == TOK_ID) {
         ParsedIdentifier id        = jik_parser_get_parsed_identifier(p);
-        char            *mod_name  = id.mod_name_tok ? id.mod_name_tok->lexeme : NULL;
+        char            *module_id = id.mod_name_tok ? jik_parser_resolve_module_id(p, id.mod_name_tok)
+                                                      : NULL;
         JikNode         *type_name = jik_node_new_identifier(
-            id.name_tok->lexeme, mod_name, jik_parser_current_context(p), tok);
+            id.name_tok->lexeme, module_id, jik_parser_current_context(p), tok);
         return jik_node_new_type_desc(type_name,
                                       NULL,
                                       TYPE_UNKNOWN,
@@ -1296,13 +1316,13 @@ jik_parser_parse_enum(JikParser *p)
 }
 
 static JikNode *
-jik_parser_parse_struct_new(JikParser *p, JikToken *struct_name_tok, JikToken *mod_name_tok)
+jik_parser_parse_struct_new(JikParser *p, JikToken *struct_name_tok, char *module_id)
 {
     p->container_depth++;
-    char    *mod_name    = mod_name_tok != NULL ? mod_name_tok->lexeme : struct_name_tok->mod_alias;
+    module_id             = module_id != NULL ? module_id : struct_name_tok->module_id;
     char    *struct_name = struct_name_tok->lexeme;
     JikNode *id          = jik_node_new_identifier(
-        struct_name, mod_name, jik_parser_current_context(p), struct_name_tok);
+        struct_name, module_id, jik_parser_current_context(p), struct_name_tok);
     jik_parser_eat_token(p, TOK_LCURL);
     jik_parser_eat_newlines_if_found(p);
     JikToken   *tok;
@@ -1324,12 +1344,12 @@ jik_parser_parse_struct_new(JikParser *p, JikToken *struct_name_tok, JikToken *m
 }
 
 static JikNode *
-jik_parser_parse_variant_new(JikParser *p, JikToken *var_name_tok, JikToken *mod_name_tok)
+jik_parser_parse_variant_new(JikParser *p, JikToken *var_name_tok, char *module_id)
 {
-    char    *mod_name = mod_name_tok != NULL ? mod_name_tok->lexeme : var_name_tok->mod_alias;
+    module_id         = module_id != NULL ? module_id : var_name_tok->module_id;
     char    *var_name = var_name_tok->lexeme;
     JikNode *id =
-        jik_node_new_identifier(var_name, mod_name, jik_parser_current_context(p), var_name_tok);
+        jik_node_new_identifier(var_name, module_id, jik_parser_current_context(p), var_name_tok);
     jik_parser_eat_token(p, TOK_DOT);
     JikToken *variant = jik_parser_eat_token(p, TOK_ID);
     jik_parser_eat_token(p, TOK_LCURL);

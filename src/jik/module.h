@@ -10,10 +10,11 @@
 typedef struct JikModule {
     char        *filepath;
     char        *alias;
+    char        *module_id;
     VecJikToken *tokens;
     bool         is_leaf;
     TabBool     *usages;
-    TabBool     *used_aliases;
+    TabString   *imports;
 } JikModule;
 
 JIK_VEC_DECLARE(VecJikModule, JikModule);

@@ -29,13 +29,13 @@ jik_init_namespaces(void);
 JikScope *
 jik_scope_new(JikScope *parent);
 bool
-jik_scope_add_global_symbol(char *name, char *mod_alias, struct JikNode *nd);
+jik_scope_add_global_symbol(char *name, char *module_id, struct JikNode *nd);
 bool
 jik_scope_add_local_symbol(JikScope *ctx, char *name, struct JikNode *nd);
 void
 jik_scope_overwrite_local_symbol(JikScope *ctx, char *name, struct JikNode *nd);
 struct JikNode *
-jik_scope_get_global_symbol(char *name, char *mod_alias);
+jik_scope_get_global_symbol(char *name, char *module_id);
 struct JikNode *
 jik_scope_get_builtin_symbol(char *name);
 bool
@@ -45,8 +45,8 @@ jik_scope_get_symbol_in_block(JikScope *sc, char *name);
 struct JikNode *
 jik_scope_get_local_symbol(JikScope *sc, char *name);
 struct JikNode *
-jik_scope_get_symbol(JikScope *sc, char *name, char *mod_alias, char *home_mod_alias);
+jik_scope_get_symbol(JikScope *sc, char *name, char *module_id, char *home_module_id);
 struct JikNode *
-jik_scope_get_function(JikScope *sc, char *name, char *mod_alias, char *home_mod_alias);
+jik_scope_get_function(JikScope *sc, char *name, char *module_id, char *home_module_id);
 
 #endif

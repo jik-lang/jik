@@ -13,7 +13,44 @@ func test_compile_fail_modules_02(ts):
         "module import cycle detected")
 end
 
+func test_compile_fail_modules_03(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+use "../support/module_shapes" as shapes
+use "../support/parts/../module_shapes" as duplicate
+
+func main():
+end
+""",
+        "reuse of module test/jik/support/module_shapes")
+end
+
+func test_compile_fail_modules_04(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+use "jik/../foo" as foo
+
+func main():
+end
+""",
+        "stdlib import path cannot contain '.' or '..' path segments")
+end
+
+func test_compile_fail_modules_05(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+use "C:../foo" as foo
+
+func main():
+end
+""",
+        "drive-relative module paths are not supported")
+end
+
 func run_tests(ts):
     test_compile_fail_modules_01(ts)
     test_compile_fail_modules_02(ts)
+    test_compile_fail_modules_03(ts)
+    test_compile_fail_modules_04(ts)
+    test_compile_fail_modules_05(ts)
 end

@@ -24,13 +24,13 @@ jik_init_namespaces(void)
 }
 
 bool
-jik_scope_add_global_symbol(char *name, char *mod_alias, struct JikNode *nd)
+jik_scope_add_global_symbol(char *name, char *module_id, struct JikNode *nd)
 {
-    JikNamespace *ns = TabJikNamespace_get(GLOBAL_NSP, mod_alias);
+    JikNamespace *ns = TabJikNamespace_get(GLOBAL_NSP, module_id);
     if (!ns) {
         JikNamespace n = (JikNamespace){.symbols = TabJikNode_new()};
         TabJikNode_set(n.symbols, name, nd);
-        TabJikNamespace_set(GLOBAL_NSP, mod_alias, n);
+        TabJikNamespace_set(GLOBAL_NSP, module_id, n);
     }
     else {
         struct JikNode **n1 = TabJikNode_get(ns->symbols, name);
@@ -39,14 +39,14 @@ jik_scope_add_global_symbol(char *name, char *mod_alias, struct JikNode *nd)
         }
         TabJikNode_set(ns->symbols, name, nd);
     }
-    // printf("added global: %s::%s\n", mod_alias, name);
+    // printf("added global: %s::%s\n", module_id, name);
     return true;
 }
 
 struct JikNode *
-jik_scope_get_global_symbol(char *name, char *mod_alias)
+jik_scope_get_global_symbol(char *name, char *module_id)
 {
-    JikNamespace *ns = TabJikNamespace_get(GLOBAL_NSP, mod_alias);
+    JikNamespace *ns = TabJikNamespace_get(GLOBAL_NSP, module_id);
     if (!ns) {
         return NULL;
     }
@@ -105,10 +105,10 @@ jik_scope_new(JikScope *parent)
 }
 
 struct JikNode *
-jik_scope_get_symbol(JikScope *sc, char *name, char *mod_alias, char *home_mod_alias)
+jik_scope_get_symbol(JikScope *sc, char *name, char *module_id, char *home_module_id)
 {
-    if (mod_alias) {
-        return jik_scope_get_global_symbol(name, mod_alias);
+    if (module_id) {
+        return jik_scope_get_global_symbol(name, module_id);
     }
     struct JikNode **s = TabJikNode_get(sc->symbols, name);
     if (s != NULL) {
@@ -121,7 +121,7 @@ jik_scope_get_symbol(JikScope *sc, char *name, char *mod_alias, char *home_mod_a
             return *s;
         sc = sc->parent;
     }
-    return jik_scope_get_global_symbol(name, home_mod_alias);
+    return jik_scope_get_global_symbol(name, home_module_id);
 }
 
 struct JikNode *
@@ -154,9 +154,9 @@ jik_scope_get_symbol_in_block(JikScope *sc, char *name)
 }
 
 struct JikNode *
-jik_scope_get_function(JikScope *sc, char *name, char *mod_alias, char *home_mod_alias)
+jik_scope_get_function(JikScope *sc, char *name, char *module_id, char *home_module_id)
 {
-    struct JikNode *s = jik_scope_get_symbol(sc, name, mod_alias, home_mod_alias);
+    struct JikNode *s = jik_scope_get_symbol(sc, name, module_id, home_module_id);
     if (s) {
         return s;
     }

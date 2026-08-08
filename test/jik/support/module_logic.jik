@@ -1,25 +1,25 @@
-use "module_shapes" as shapes
+use "./parts/../module_shapes" as defs
 
 
-func nickname_or_fallback(p: shapes::Person, r: Region) -> String:
+func nickname_or_fallback(p: defs::Person, r: Region) -> String:
     if p.nickname is Some:
         return p.nickname?
     end
-    return shapes::fallback_name(r)
+    return defs::fallback_name(r)
 end
 
-func message_name(msg: shapes::Message, r: Region) -> String:
+func message_name(msg: defs::Message, r: Region) -> String:
     match msg:
-        case shapes::Message.PERSON{p}:
+        case defs::Message.PERSON{p}:
             return p.name
-        case shapes::Message.TEXT{text}:
+        case defs::Message.TEXT{text}:
             return text
-        case shapes::Message.NONE{}:
-            return shapes::fallback_name(r)
+        case defs::Message.NONE{}:
+            return defs::fallback_name(r)
     end
 end
 
-func has_tag(p: shapes::Person, expect: String) -> bool:
+func has_tag(p: defs::Person, expect: String) -> bool:
     for tag in p.tags:
         if tag == expect:
             return true

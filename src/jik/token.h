@@ -107,8 +107,7 @@ struct JikToken {
     size_t       colno;
     char        *filepath;
     char        *codeline;
-    char        *mod_alias;
-    TabBool     *used_aliases; // TODO: clumsy
+    char        *module_id;
 };
 
 JIK_VEC_DECLARE(VecJikToken, JikToken);

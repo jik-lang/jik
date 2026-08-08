@@ -43,6 +43,9 @@ typedef struct JikContext {
     VecJikToken          *tokens;
     VecJikModule         *leaves;
     VecJikModule         *branches;
+    VecJikModule         *modules;
+    TabString            *module_ids;
+    TabString            *module_paths;
     VecJikBuildDirective *build_directives;
 
     JikNode    *ast;
@@ -55,5 +58,8 @@ typedef struct JikContext {
 
 void
 jik_context_init(JikContext *ctx, JikConfig conf);
+
+JikModule *
+jik_context_find_module(JikContext *ctx, char *module_id);
 
 #endif

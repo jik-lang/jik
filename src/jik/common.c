@@ -1,6 +1,7 @@
 #include "common.h"
 
 JIK_HTAB_DEFINE(TabBool, bool);
+JIK_HTAB_DEFINE(TabString, char *);
 JIK_VEC_DEFINE(VecString, char *);
 
 void

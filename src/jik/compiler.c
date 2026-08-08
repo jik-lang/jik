@@ -8,6 +8,7 @@
 #include "compiler.h"
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,14 +36,138 @@ jik_compiler_verbose(JikConfig *conf, char *phase, char *details)
     printf("[jik] %-9s %s\n", phase, details);
 }
 
+static bool
+jik_module_path_is_absolute(char *path);
+
 static char *
 alias_from_filepath(char *filepath)
 {
-    char *last_slash = strrchr(filepath, '/');
-    if (last_slash)
-        return last_slash + 1;
-    else
-        return filepath;
+    char *last_slash     = strrchr(filepath, '/');
+    char *last_backslash = strrchr(filepath, '\\');
+    char *last_separator  = last_slash;
+    if (last_backslash && (!last_separator || last_backslash > last_separator)) {
+        last_separator = last_backslash;
+    }
+    return last_separator ? last_separator + 1 : filepath;
+}
+
+static char *
+jik_module_normalize_path(char *path)
+{
+    size_t  len      = strlen(path);
+    char   *result   = jik_alloc(len + 2);
+    size_t *segments = (size_t *)jik_alloc((len + 1) * sizeof(size_t));
+    bool   *parents  = (bool *)jik_alloc((len + 1) * sizeof(bool));
+    size_t  result_len = 0;
+    size_t  segment_count = 0;
+    size_t  i = 0;
+    bool    absolute = jik_module_path_is_absolute(path);
+
+    if (path[0] == '/' || path[0] == '\\') {
+        result[result_len++] = '/';
+        i++;
+        // Preserve a UNC root while still normalizing its separators to '/'.
+        if (path[i] == '/' || path[i] == '\\') {
+            result[result_len++] = '/';
+            i++;
+        }
+    }
+    else if (len > 1 && path[1] == ':') {
+        result[result_len++] = path[0];
+        result[result_len++] = ':';
+        i = 2;
+        if (path[i] == '/' || path[i] == '\\') {
+            result[result_len++] = '/';
+            i++;
+        }
+    }
+
+    while (i < len) {
+        while (i < len && (path[i] == '/' || path[i] == '\\')) {
+            i++;
+        }
+        size_t segment_start = i;
+        while (i < len && path[i] != '/' && path[i] != '\\') {
+            i++;
+        }
+        size_t segment_len = i - segment_start;
+        if (segment_len == 0 || (segment_len == 1 && path[segment_start] == '.')) {
+            continue;
+        }
+
+        if (segment_len == 2 && path[segment_start] == '.' && path[segment_start + 1] == '.') {
+            if (segment_count > 0 && !parents[segment_count - 1]) {
+                result_len = segments[--segment_count];
+            }
+            else if (!absolute) {
+                segments[segment_count] = result_len;
+                parents[segment_count++] = true;
+                if (result_len > 0 && result[result_len - 1] != ':' && result[result_len - 1] != '/') {
+                    result[result_len++] = '/';
+                }
+                result[result_len++] = '.';
+                result[result_len++] = '.';
+            }
+            continue;
+        }
+
+        segments[segment_count] = result_len;
+        parents[segment_count++] = false;
+        if (result_len > 0 && result[result_len - 1] != ':' && result[result_len - 1] != '/') {
+            result[result_len++] = '/';
+        }
+        memcpy(result + result_len, path + segment_start, segment_len);
+        result_len += segment_len;
+    }
+
+    if (result_len == 0) {
+        result[result_len++] = '.';
+    }
+    result[result_len] = '\0';
+    return result;
+}
+
+static uint64_t
+jik_module_path_hash(char *filepath)
+{
+    uint64_t hash = UINT64_C(14695981039346656037);
+    for (char *p = filepath; *p; p++) {
+        unsigned char c = (unsigned char)*p;
+        hash ^= c;
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static char *
+jik_compiler_get_module_id(JikContext *ctx, char *filepath)
+{
+    char **existing = TabString_get(ctx->module_ids, filepath);
+    if (existing != NULL) {
+        return *existing;
+    }
+
+    if (strcmp(filepath, ctx->conf.input_file) == 0) {
+        TabString_set(ctx->module_ids, filepath, "main");
+        TabString_set(ctx->module_paths, "main", filepath);
+        return "main";
+    }
+
+    uint64_t hash = jik_module_path_hash(filepath);
+
+    char *module_id = jik_alloc(17);
+    snprintf(module_id, 17, "%016llx", (unsigned long long)hash);
+    char **other_filepath = TabString_get(ctx->module_paths, module_id);
+    if (other_filepath != NULL && strcmp(*other_filepath, filepath) != 0) {
+        jik_diag_fatal_error(JIK_STRING_NCAT("module path hash collision: ",
+                                              filepath,
+                                              " and ",
+                                              *other_filepath),
+                             "use a different module path");
+    }
+    TabString_set(ctx->module_ids, filepath, module_id);
+    TabString_set(ctx->module_paths, module_id, filepath);
+    return module_id;
 }
 
 static bool
@@ -123,7 +248,14 @@ jik_module_dirname(char *filepath)
 static bool
 jik_module_path_is_absolute(char *path)
 {
-    return path[0] == '/' || path[0] == '\\' || (strlen(path) > 2 && path[1] == ':');
+    return path[0] == '/' || path[0] == '\\' ||
+           (strlen(path) > 2 && path[1] == ':' && (path[2] == '/' || path[2] == '\\'));
+}
+
+static bool
+jik_module_path_is_drive_relative(char *path)
+{
+    return strlen(path) >= 2 && path[1] == ':' && !jik_module_path_is_absolute(path);
 }
 
 static bool
@@ -207,44 +339,55 @@ jik_module_resolve_use_path(char *use_path, char *current_source_path)
 {
     if (jik_module_path_is_stdlib(use_path) || jik_module_path_is_package(use_path) ||
         jik_module_path_is_absolute(use_path)) {
-        return use_path;
+        return jik_module_normalize_path(use_path);
     }
 
     char *dir = jik_module_dirname(current_source_path);
     if (dir[0] == '\0') {
-        return use_path;
+        return jik_module_normalize_path(use_path);
     }
 
-    return JIK_STRING_NCAT(dir, "/", use_path);
+    return jik_module_normalize_path(JIK_STRING_NCAT(dir, "/", use_path));
 }
 
 static void
 jik_compiler_validate_use_path(char *path, JikToken *tok)
 {
+    if (jik_module_path_is_drive_relative(path)) {
+        jik_diag_fatal_error("drive-relative module paths are not supported; use an absolute path",
+                             jik_token_to_text(tok));
+    }
+
     if (strchr(path, '\\') != NULL) {
         jik_diag_fatal_error("module paths in use declarations must use '/' separators",
                              jik_token_to_text(tok));
     }
 
-    if (!jik_module_path_is_package(path)) {
+    bool is_stdlib  = jik_module_path_is_stdlib(path);
+    bool is_package = jik_module_path_is_package(path);
+    if (!is_stdlib && !is_package) {
         return;
     }
 
+    char *path_kind = is_stdlib ? "stdlib" : "package";
     char *segment = path + 4;
     if (*segment == '\0') {
-        jik_diag_fatal_error("package import path must include a package name", jik_token_to_text(tok));
+        jik_diag_fatal_error(is_stdlib ? "stdlib import path must include a module name"
+                                         : "package import path must include a package name",
+                             jik_token_to_text(tok));
     }
 
     while (true) {
         char *segment_end = strchr(segment, '/');
         size_t segment_len = segment_end ? (size_t)(segment_end - segment) : strlen(segment);
         if (segment_len == 0) {
-            jik_diag_fatal_error("package import path contains an empty path segment",
+            jik_diag_fatal_error(JIK_STRING_NCAT(path_kind, " import path contains an empty path segment"),
                                  jik_token_to_text(tok));
         }
         if ((segment_len == 1 && segment[0] == '.') ||
             (segment_len == 2 && segment[0] == '.' && segment[1] == '.')) {
-            jik_diag_fatal_error("package import path cannot contain '.' or '..' path segments",
+            jik_diag_fatal_error(
+                JIK_STRING_NCAT(path_kind, " import path cannot contain '.' or '..' path segments"),
                                  jik_token_to_text(tok));
         }
         if (segment_end == NULL) {
@@ -273,7 +416,8 @@ jik_compiler_get_usages(JikContext *ctx, JikModule *mod)
 {
     VecJikModule *usages = VecJikModule_new_empty();
     char         *full_path =
-        strcmp(mod->alias, "main") == 0 ? mod->filepath : jik_string_cat(mod->filepath, ".jik");
+        strcmp(mod->module_id, "main") == 0 ? mod->filepath
+                                                : jik_string_cat(mod->filepath, ".jik");
     char    *pp = get_proper_path(full_path, ctx);
     JikLexer lex;
     char    *code = jik_read_file(pp);
@@ -288,11 +432,10 @@ jik_compiler_get_usages(JikContext *ctx, JikModule *mod)
         VecJikToken_size(mod->tokens) == 0, "empty module cannot be compiled", mod->filepath);
 
     JikToken *t1;
-    // Add module aliases to tokens
+    // Attach module IDs to tokens.
     for (size_t i = 0; i < VecJikToken_size(mod->tokens); i++) {
         t1               = VecJikToken_get_ptr(mod->tokens, i);
-        t1->mod_alias    = mod->alias;
-        t1->used_aliases = mod->used_aliases;
+        t1->module_id    = mod->module_id;
     }
     mod->usages = TabBool_new();
     size_t    i = 0;
@@ -313,7 +456,7 @@ jik_compiler_get_usages(JikContext *ctx, JikModule *mod)
         else if (tok->type == TOK_KWD_USE) {
             JikModule used_mod = {.usages       = TabBool_new(),
                                   .tokens       = VecJikToken_new_empty(),
-                                  .used_aliases = TabBool_new()};
+                                  .imports      = TabString_new()};
             if (usage_not_first) {
                 jik_diag_fatal_error(
                     "use declarations must precede build directives and other top-level declarations",
@@ -327,13 +470,27 @@ jik_compiler_get_usages(JikContext *ctx, JikModule *mod)
                 jik_diag_fatal_error("expected string", jik_token_to_text(tok));
             }
             jik_compiler_validate_use_path(tok->lexeme, tok);
-            used_mod.filepath = jik_module_resolve_use_path(tok->lexeme, pp);
+            bool relative_use = !jik_module_path_is_stdlib(tok->lexeme) &&
+                                !jik_module_path_is_package(tok->lexeme) &&
+                                !jik_module_path_is_absolute(tok->lexeme);
+            used_mod.filepath = jik_module_resolve_use_path(tok->lexeme, mod->filepath);
+            if (relative_use && jik_module_path_is_stdlib(mod->filepath) &&
+                !jik_module_path_is_stdlib(used_mod.filepath)) {
+                jik_diag_fatal_error("relative import cannot escape the stdlib root",
+                                     jik_token_to_text(tok));
+            }
+            if (relative_use && jik_module_path_is_package(mod->filepath) &&
+                !jik_module_path_is_package(used_mod.filepath)) {
+                jik_diag_fatal_error("relative import cannot escape the package root",
+                                     jik_token_to_text(tok));
+            }
             bool *fp          = TabBool_get(seen_filepaths, used_mod.filepath);
             if (fp != NULL) {
                 char *msg = jik_string_cat("reuse of module ", used_mod.filepath);
                 jik_diag_fatal_error(msg, jik_token_to_text(tok));
             }
             TabBool_set(seen_filepaths, used_mod.filepath, true);
+            used_mod.module_id = jik_compiler_get_module_id(ctx, used_mod.filepath);
             TabBool_set(mod->usages, used_mod.filepath, true);
 
             if (i + 3 < n && VecJikToken_get_ptr(mod->tokens, i + 2)->type == TOK_KWD_AS) {
@@ -352,10 +509,10 @@ jik_compiler_get_usages(JikContext *ctx, JikModule *mod)
                 }
                 used_mod.alias = tok->lexeme;
                 jik_diag_fatal_error_if(
-                    TabBool_get(mod->used_aliases, used_mod.alias) != NULL,
+                    TabString_get(mod->imports, used_mod.alias) != NULL,
                     JIK_STRING_NCAT("alias already used in module: ", used_mod.alias),
                     jik_token_to_text(tok));
-                TabBool_set(mod->used_aliases, used_mod.alias, true);
+                TabString_set(mod->imports, used_mod.alias, used_mod.module_id);
                 jik_compiler_require_use_newline(mod->tokens, i + 4);
                 i += 5;
             }
@@ -368,10 +525,10 @@ jik_compiler_get_usages(JikContext *ctx, JikModule *mod)
                                          jik_token_to_text(tok));
                 }
                 jik_diag_fatal_error_if(
-                    TabBool_get(mod->used_aliases, used_mod.alias) != NULL,
+                    TabString_get(mod->imports, used_mod.alias) != NULL,
                     JIK_STRING_NCAT("alias already used in module: ", used_mod.alias),
                     jik_token_to_text(tok));
-                TabBool_set(mod->used_aliases, used_mod.alias, true);
+                TabString_set(mod->imports, used_mod.alias, used_mod.module_id);
                 jik_compiler_require_use_newline(mod->tokens, i + 2);
                 i += 3;
             }
@@ -390,7 +547,8 @@ jik_compiler_tokenize_modules(JikContext *ctx)
     VecJikModule_push(unprocessed_modules,
                       (JikModule){.filepath     = ctx->conf.input_file,
                                   .alias        = "main",
-                                  .used_aliases = TabBool_new()});
+                                  .module_id = jik_compiler_get_module_id(ctx, ctx->conf.input_file),
+                                  .imports      = TabString_new()});
     TabBool      *seen_filepaths = TabBool_new();
     JikModule     current;
     VecJikModule *usages;
@@ -404,6 +562,7 @@ jik_compiler_tokenize_modules(JikContext *ctx)
         TabBool_set(seen_filepaths, current.filepath, true);
 
         usages = jik_compiler_get_usages(ctx, &current);
+        VecJikModule_push(ctx->modules, current);
         if (current.is_leaf) {
             VecJikModule_push(ctx->leaves, current);
         }
@@ -890,6 +1049,7 @@ jik_compiler_run(JikConfig conf)
 
     JikContext ctx;
     jik_context_init(&ctx, conf);
+    ctx.conf.input_file = jik_module_normalize_path(ctx.conf.input_file);
     jik_compiler_verbose(&conf, "tokenize", conf.input_file);
     jik_compiler_tokenize_modules(&ctx);
     jik_compiler_verbose(&conf, "merge", "resolving module order");

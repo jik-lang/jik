@@ -34,7 +34,5 @@ bool
 is_main_function(JikNode *nd);
 void
 jik_ensure_valid_variant_tag(JikNode *nd);
-void
-jik_semantic_ensure_module_used(JikNode *nd);
 
 #endif

@@ -130,7 +130,7 @@ typedef struct JikNode {
         // Identifier
         struct {
             char *name;
-            char *mod_alias;
+            char *module_id;
             char *mangled_name;
             // TODO: is this needed ?
             bool            is_global;
@@ -569,7 +569,7 @@ jik_node_new_boolean(bool val, JikScope *ctx, JikToken *tok);
 JikNode *
 jik_node_new_string(char *val, bool literal, bool multiline, JikScope *ctx, JikToken *tok);
 JikNode *
-jik_node_new_identifier(char *name, char *mod_alias, JikScope *ctx, JikToken *tok);
+jik_node_new_identifier(char *name, char *module_id, JikScope *ctx, JikToken *tok);
 JikNode *
 jik_node_new_grouping(JikNode *expr, JikScope *ctx, JikToken *tok);
 JikNode *

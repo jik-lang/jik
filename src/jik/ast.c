@@ -532,13 +532,13 @@ jik_node_new_string(char *val, bool literal, bool multiline, JikScope *ctx, JikT
 }
 
 JikNode *
-jik_node_new_identifier(char *name, char *mod_alias, JikScope *ctx, JikToken *tok)
+jik_node_new_identifier(char *name, char *module_id, JikScope *ctx, JikToken *tok)
 {
     JikNode *nd              = (JikNode *)jik_alloc(sizeof(JikNode));
     nd->jik_type             = jik_type_new(TYPE_UNKNOWN);
     nd->type                 = NODE_EXPR_IDENTIFIER;
     nd->val_id.name          = name;
-    nd->val_id.mod_alias     = mod_alias;
+    nd->val_id.module_id     = module_id;
     nd->val_id.is_global     = false;
     nd->val_id.mangled_name  = NULL;
     nd->val_id.is_func_param = false;

@@ -7,8 +7,6 @@
 #include "htab.h"
 #include "writer.h"
 
-JIK_HTAB_DECLARE(TabString, char *);
-
 typedef struct JikCodeGenerator {
     JikContext *ctx;
     JikNode    *ast;

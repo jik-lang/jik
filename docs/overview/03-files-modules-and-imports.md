@@ -19,6 +19,9 @@ use "pkg/csv"
 - `as` gives the module a short alias (`test` in this example).
 - If you omit `as`, the module is referred to by its basename (`utils` in the example above).
 - Import aliases must be unique within a module. This applies to both explicit `as` aliases and implicit basename aliases.
+- Import aliases are local to the module containing the `use` declaration. Different modules may
+  refer to the same file using different aliases; those aliases still refer to the same module
+  symbols and types.
 
 The `use` syntax is the same for all module imports. The module path determines which resolver is
 used.
