@@ -1,0 +1,78 @@
+use "jik/testing" as test
+use "jik/argparse" as argparse
+use "jik/bytes"
+use "jik/io"
+use "jik/rand"
+use "jik/strbuf"
+
+
+func test_test_suite(ts):
+    ts.suite_assert(true, site())
+end
+
+func test_argparse(ts):
+    parser := argparse::new(_)
+    parser.add_positional("input", "Input file.")
+    output := parser.add_option("--output", "-o", "Output file.")
+    output.add_option_positional("file", "Output path.")
+
+    result := must parser.parse(["--output", "out.txt", "in.txt"], _)
+    test::suite_assert(ts, result.positionals["input"]? == "in.txt", site())
+    test::suite_assert(ts, result.options["--output"]?["file"]? == "out.txt", site())
+    test::suite_assert(ts, parser.format_help("tool", _) != "", site())
+end
+
+func test_file(ts):
+    f := must io::open("test/jik/input/data.txt", "r", _)
+    test::suite_assert(ts, must f.read(_) == "foobar\n", site())
+    must f.close()
+end
+
+func test_strbuf(ts):
+    buf := strbuf::new("a", _)
+    buf.append("b")
+    buf.append_char('c')
+    test::suite_assert(ts, buf.len() == 3, site())
+    test::suite_assert(ts, buf.pop() == 'c', site())
+    test::suite_assert(ts, buf.to_string(_) == "ab", site())
+    buf.clear()
+    test::suite_assert(ts, buf.len() == 0, site())
+end
+
+func test_bytes(ts):
+    b := bytes::from_string("ABC", _)
+    test::suite_assert(ts, b.len() == 3, site())
+    test::suite_assert(ts, b.get(1) == 'B', site())
+    test::suite_assert(ts, b.slice(1, 3, _).equals(bytes::from_string("BC", _)), site())
+    test::suite_assert(ts, b.to_hex(_) == "414243", site())
+    test::suite_assert(ts, must b.to_string_ascii(_) == "ABC", site())
+
+    buf := bytes::buf_new(_)
+    buf.buf_push('A')
+    must buf.buf_push_int(66)
+    buf.buf_append(bytes::from_string("C", _))
+    buf.buf_append_string("D")
+    test::suite_assert(ts, buf.buf_len() == 4, site())
+    test::suite_assert(ts, buf.buf_get(2) == 'C', site())
+    test::suite_assert(ts, buf.to_bytes(_).to_hex(_) == "41424344", site())
+    buf.buf_clear()
+    test::suite_assert(ts, buf.buf_len() == 0, site())
+end
+
+func test_rng(ts):
+    rng := rand::new(123, _)
+    test::suite_assert(ts, rng.next_int() >= 0, site())
+    value := rng.next_double()
+    test::suite_assert(ts, value >= 0.0 and value < 1.0, site())
+    ranged := must rng.range_int(10, 20)
+    test::suite_assert(ts, ranged >= 10 and ranged < 20, site())
+end
+
+func run_tests(ts):
+    test_test_suite(ts)
+    test_argparse(ts)
+    test_file(ts)
+    test_strbuf(ts)
+    test_bytes(ts)
+    test_rng(ts)
+end

@@ -732,10 +732,6 @@ jik_semantic_resolve_ufc_call(JikSemanticAnalyzer *sa, JikNode *call)
     jik_diag_fatal_error_if(receiver_type->name != TYPE_STRUCT,
                             "uniform function call requires a struct receiver",
                             jik_token_to_text(call->token));
-    jik_diag_fatal_error_if(receiver_type->is_extern,
-                            "uniform function call does not support extern structs",
-                            jik_token_to_text(call->token));
-
     JikNode *func = jik_scope_get_global_symbol(call->val_call.name->val_id.name,
                                                  receiver_type->val_struct.module_id);
     jik_diag_fatal_error_if(func == NULL,
@@ -743,14 +739,16 @@ jik_semantic_resolve_ufc_call(JikSemanticAnalyzer *sa, JikNode *call)
                                             call->val_call.name->val_id.name,
                                             "\" not defined"),
                             jik_token_to_text(call->token));
-    jik_diag_fatal_error_if(func->type != NODE_FUNCTION,
+    jik_diag_fatal_error_if(func->type != NODE_FUNCTION && func->type != NODE_EXTERN_FUNCTION,
                             "uniform function call target must be a function",
                             jik_token_to_text(call->token));
     jik_diag_fatal_error_if(VecJikType_size(func->jik_type->val_func.param_types) == 0,
                             "uniform function call target function must have a receiver parameter",
                             jik_token_to_text(call->token));
 
-    JikNode *first_param = VecJikNode_get(func->val_function.params, 0);
+    VecJikNode *params = func->type == NODE_FUNCTION ? func->val_function.params
+                                                      : func->val_extern_function.params;
+    JikNode *first_param = VecJikNode_get(params, 0);
     jik_diag_fatal_error_if(first_param->val_id.type_annot == NULL,
                             "uniform function call receiver parameter must have a type annotation",
                             jik_token_to_text(call->token));
@@ -760,6 +758,9 @@ jik_semantic_resolve_ufc_call(JikSemanticAnalyzer *sa, JikNode *call)
                             "uniform function call receiver does not match the first parameter",
                             jik_token_to_text(call->token));
     call->val_call.name->val_id.module_id = receiver_type->val_struct.module_id;
+    if (func->type == NODE_EXTERN_FUNCTION) {
+        call->val_call.extern_name = func->val_extern_function.C_func_name;
+    }
     return true;
 }
 
