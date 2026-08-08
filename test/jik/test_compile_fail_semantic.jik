@@ -225,6 +225,35 @@ end
         "expected function call")
 end
 
+func test_compile_fail_16(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    value: int
+end
+
+func wrong(value: int):
+end
+
+func main():
+    f := Foo{}
+    f.wrong()
+end
+""",
+        "receiver does not match the first parameter")
+end
+
+func test_compile_fail_17(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    value := 1
+    value.nope()
+end
+""",
+        "uniform function call requires a struct receiver")
+end
+
 func run_tests(ts):
     test_compile_fail_01(ts)
     test_compile_fail_02(ts)
@@ -241,4 +270,6 @@ func run_tests(ts):
     test_compile_fail_13(ts)
     test_compile_fail_14(ts)
     test_compile_fail_15(ts)
+    test_compile_fail_16(ts)
+    test_compile_fail_17(ts)
 end

@@ -31,6 +31,22 @@ c1.host = "foo"
 
 Struct values can be read and updated through their fields using the usual `.` syntax.
 
+### 7.3 Uniform function calls
+
+A function in the same module as a struct may be called through a struct value
+when its first parameter has an explicit annotation for that struct type:
+
+```jik
+func set_port(c: Config, port: int):
+    c.port = port
+end
+
+c1.set_port(8080) // shorthand for set_port(c1, 8080)
+```
+
+For an imported struct, the function is resolved in the module that defines the
+struct. This is just method-like syntactic sugar for an ordinary function call.
+
 Recursive struct cycles must pass through `Option[...]`.
 For example, `next: Option[Node]` is valid, while `next: Node` and `items: Vec[Node]` are compile errors.
 

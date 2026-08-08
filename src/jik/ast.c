@@ -316,6 +316,7 @@ jik_node_new_call(struct JikNode *name, VecJikNode *args, JikScope *ctx, JikToke
     nd->val_call.propagate   = false;
     nd->val_call.parent_func = NULL;
     nd->val_call.auto_region = false;
+    nd->val_call.ufc         = false;
     nd->context              = ctx;
     nd->token                = tok;
     return nd;

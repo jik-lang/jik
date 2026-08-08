@@ -74,6 +74,8 @@ static JikNode *
 jik_parser_parse_function_call(JikParser *p, JikToken *func_name_tok, char *module_id);
 static JikNode *
 jik_parser_parse_option_unwrap_call(JikParser *p, JikToken *unwrap_tok);
+static VecJikNode *
+jik_parser_parse_call_args(JikParser *p);
 
 // A parsed identifier has two token components, the name and the module name token.
 typedef struct ParsedIdentifier {
@@ -347,8 +349,25 @@ jik_parser_parse_primary(JikParser *p)
         if (tok->type == TOK_DOT) {
             jik_parser_eat_token(p, tok->type);
             JikToken *id_tok = jik_parser_eat_token(p, TOK_ID);
-            node             = jik_node_new_member_access(
-                node, id_tok->lexeme, jik_parser_current_context(p), id_tok);
+            if (jik_parser_current_token(p)->type == TOK_LPAREN) {
+                VecJikNode *args = jik_parser_parse_call_args(p);
+                VecJikNode *ufc_args = VecJikNode_new_empty();
+                VecJikNode_push(ufc_args, node);
+                for (size_t i = 0; i < VecJikNode_size(args); i++) {
+                    VecJikNode_push(ufc_args, VecJikNode_get(args, i));
+                }
+                node = jik_node_new_call(
+                    jik_node_new_identifier(id_tok->lexeme, NULL, jik_parser_current_context(p), id_tok),
+                    ufc_args,
+                    jik_parser_current_context(p),
+                    id_tok);
+                node->val_call.ufc         = true;
+                node->val_call.parent_func = p->parsed_function;
+            }
+            else {
+                node = jik_node_new_member_access(
+                    node, id_tok->lexeme, jik_parser_current_context(p), id_tok);
+            }
         }
         else if (tok->type == TOK_LANG) {
             if (node->type == NODE_EXPR_MEMBER_ACCESS &&
@@ -573,14 +592,21 @@ jik_parser_parse_args(JikParser *p)
     return args;
 }
 
-static JikNode *
-jik_parser_parse_function_call(JikParser *p, JikToken *func_name_tok, char *module_id)
+static VecJikNode *
+jik_parser_parse_call_args(JikParser *p)
 {
     jik_parser_eat_token(p, TOK_LPAREN);
     jik_parser_eat_newlines_if_found(p);
     VecJikNode *args = jik_parser_parse_args(p);
     jik_parser_eat_newlines_if_found(p);
     jik_parser_eat_token(p, TOK_RPAREN);
+    return args;
+}
+
+static JikNode *
+jik_parser_parse_function_call(JikParser *p, JikToken *func_name_tok, char *module_id)
+{
+    VecJikNode *args = jik_parser_parse_call_args(p);
     if (!module_id) {
         module_id = func_name_tok->module_id;
     }
@@ -1214,7 +1240,8 @@ jik_parser_parse_extern_struct(JikParser *p)
                                                true,
                                                jik_parser_current_context(p),
                                                tok_struct_name);
-    struct_node->jik_type         = jik_type_new_struct(tok_struct_name->lexeme, TabJikType_new());
+    struct_node->jik_type =
+        jik_type_new_struct(tok_struct_name->lexeme, tok_struct_name->module_id, TabJikType_new());
     struct_node->jik_type->C_name = JIK_STRING_NCAT("struct ", tok_C_struct_name->lexeme, " *");
     struct_node->jik_type->is_extern = true;
     return struct_node;

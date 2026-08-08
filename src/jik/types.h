@@ -68,6 +68,7 @@ typedef struct JikType {
 
         struct {
             char       *name;
+            char       *module_id;
             TabJikType *field_types;
             // TODO: this stuff with metadata for proxy structs for dicts and variants is not so
             // nice
@@ -124,7 +125,7 @@ jik_type_new_param_types(int n);
 JikType *
 jik_type_new_function(int num_params);
 JikType *
-jik_type_new_struct(char *name, TabJikType *field_types);
+jik_type_new_struct(char *name, char *module_id, TabJikType *field_types);
 JikType *
 jik_type_new_vector(JikType *elem_type);
 JikType *

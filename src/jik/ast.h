@@ -182,6 +182,7 @@ typedef struct JikNode {
             bool            propagate;
             struct JikNode *parent_func;
             bool            auto_region;
+            bool            ufc;
         } val_call;
 
         struct {

@@ -106,12 +106,13 @@ jik_type_new_function(int num_params)
 }
 
 JikType *
-jik_type_new_struct(char *name, TabJikType *field_types)
+jik_type_new_struct(char *name, char *module_id, TabJikType *field_types)
 {
     JikType *t = (JikType *)jik_alloc(sizeof(JikType));
     *t         = (JikType){.name                   = TYPE_STRUCT,
                            .C_name                 = NULL,
                            .val_struct.name        = name,
+                           .val_struct.module_id   = module_id,
                            .val_struct.field_types = field_types,
                            .val_struct.visiting    = false};
     return t;

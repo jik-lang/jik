@@ -525,6 +525,9 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             }
         }
         else if (nd->type == NODE_EXPR_CALL) {
+            if (nd->val_call.ufc) {
+                continue;
+            }
             JikNode *s = jik_scope_get_symbol(nd->context,
                                               nd->val_call.name->val_id.name,
                                               nd->val_call.name->val_id.module_id,
@@ -710,6 +713,55 @@ get_field_types(TabJikNode *init_vals, JikType *obj_type)
 
 static void
 jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd);
+
+static bool
+jik_semantic_resolve_ufc_call(JikSemanticAnalyzer *sa, JikNode *call)
+{
+    assert(call->type == NODE_EXPR_CALL && call->val_call.ufc);
+    if (call->val_call.name->val_id.module_id) {
+        return true;
+    }
+
+    JikNode *receiver = VecJikNode_get(call->val_call.args, 0);
+    jik_semantic_infer_type(sa, receiver);
+    if (!jik_node_is_type_inferred(receiver)) {
+        return false;
+    }
+
+    JikType *receiver_type = receiver->jik_type;
+    jik_diag_fatal_error_if(receiver_type->name != TYPE_STRUCT,
+                            "uniform function call requires a struct receiver",
+                            jik_token_to_text(call->token));
+    jik_diag_fatal_error_if(receiver_type->is_extern,
+                            "uniform function call does not support extern structs",
+                            jik_token_to_text(call->token));
+
+    JikNode *func = jik_scope_get_global_symbol(call->val_call.name->val_id.name,
+                                                 receiver_type->val_struct.module_id);
+    jik_diag_fatal_error_if(func == NULL,
+                            JIK_STRING_NCAT("struct function \"",
+                                            call->val_call.name->val_id.name,
+                                            "\" not defined"),
+                            jik_token_to_text(call->token));
+    jik_diag_fatal_error_if(func->type != NODE_FUNCTION,
+                            "uniform function call target must be a function",
+                            jik_token_to_text(call->token));
+    jik_diag_fatal_error_if(VecJikType_size(func->jik_type->val_func.param_types) == 0,
+                            "uniform function call target function must have a receiver parameter",
+                            jik_token_to_text(call->token));
+
+    JikNode *first_param = VecJikNode_get(func->val_function.params, 0);
+    jik_diag_fatal_error_if(first_param->val_id.type_annot == NULL,
+                            "uniform function call receiver parameter must have a type annotation",
+                            jik_token_to_text(call->token));
+    JikType *first_param_type =
+        jik_semantic_resolve_type_or_error(first_param->val_id.type_annot);
+    jik_diag_fatal_error_if(!jik_type_equal(first_param_type, receiver_type),
+                            "uniform function call receiver does not match the first parameter",
+                            jik_token_to_text(call->token));
+    call->val_call.name->val_id.module_id = receiver_type->val_struct.module_id;
+    return true;
+}
 
 static void
 infer_type_builtin_pop(JikSemanticAnalyzer *sa, JikNode *nd)
@@ -1084,6 +1136,9 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
         }
     }
     else if (nd->type == NODE_EXPR_CALL) {
+        if (nd->val_call.ufc && !jik_semantic_resolve_ufc_call(sa, nd)) {
+            return;
+        }
         JikNode *func = jik_scope_get_function(nd->context,
                                                nd->val_call.name->val_id.name,
                                                nd->val_call.name->val_id.module_id,
@@ -1438,6 +1493,9 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
     it = VecJikNode_iter_new(sa->nodes);
     while (VecJikNode_iter_next(&it, &nd)) {
         if (nd->type == NODE_EXPR_CALL) {
+            if (nd->val_call.ufc && !jik_semantic_resolve_ufc_call(sa, nd)) {
+                continue;
+            }
             if (nd->val_call.builtin && strcmp(nd->val_call.name->val_id.name, "push") == 0 &&
                 VecJikNode_size(nd->val_call.args) == 2) {
                 JikNode *vec = VecJikNode_get(nd->val_call.args, 0);
@@ -1625,6 +1683,9 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
     it = VecJikNode_iter_new(sa->nodes);
     while (VecJikNode_iter_next(&it, &nd)) {
         if (nd->type == NODE_EXPR_CALL) {
+            if (nd->val_call.ufc && !jik_semantic_resolve_ufc_call(sa, nd)) {
+                continue;
+            }
             JikNode *func = jik_scope_get_function(nd->context,
                                                    nd->val_call.name->val_id.name,
                                                    nd->val_call.name->val_id.module_id,
@@ -2085,7 +2146,8 @@ jik_semantic_set_named_types(JikSemanticAnalyzer *sa)
     it = VecJikNode_iter_new(sa->nodes);
     while (VecJikNode_iter_next(&it, &nd)) {
         if (nd->type == NODE_STRUCT && nd->jik_type->name == TYPE_UNKNOWN) {
-            nd->jik_type = jik_type_new_struct(nd->val_struct.name, NULL);
+            nd->jik_type =
+                jik_type_new_struct(nd->val_struct.name, nd->token->module_id, NULL);
         }
         else if (nd->type == NODE_VARIANT && nd->jik_type->name == TYPE_UNKNOWN) {
             nd->jik_type = jik_type_new_variant(nd->val_variant.name, NULL);

@@ -1,0 +1,12 @@
+struct Token:
+    value: int
+end
+
+func advance(t: Token, amount: int) -> Token:
+    t.value += amount
+    return t
+end
+
+func get_value(t: Token) -> int:
+    return t.value
+end
