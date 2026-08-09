@@ -11,7 +11,7 @@ func test_test_suite(ts):
 end
 
 func test_argparse(ts):
-    parser := argparse::new(_)
+    parser := argparse::new("tool", _)
     parser.add_positional("input", "Input file.")
     output := parser.add_option("--output", "-o", "Output file.")
     output.add_option_positional("file", "Output path.")
@@ -19,7 +19,7 @@ func test_argparse(ts):
     result := must parser.parse(["--output", "out.txt", "in.txt"], _)
     test::suite_assert(ts, result.positionals["input"]? == "in.txt", site())
     test::suite_assert(ts, result.options["--output"]?["file"]? == "out.txt", site())
-    test::suite_assert(ts, parser.format_help("tool", _) != "", site())
+    test::suite_assert(ts, parser.format_help(_) != "", site())
 end
 
 func test_file(ts):

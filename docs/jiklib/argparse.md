@@ -83,15 +83,14 @@ Add a required positional argument.
 
 ---
 
-### `format_help(parser: Parser, prog: String, r: Region) -> String`
+### `format_help(parser: Parser, r: Region) -> String`
 
 Format generated parser help text.
 
 **Parameters**
 
 1. `parser: Parser` - Configured parser. Foreign parameter.
-2. `prog: String` - Program name shown in the usage line. Foreign parameter.
-3. `r: Region` - Allocation region for the returned string.
+2. `r: Region` - Allocation region for the returned string.
 
 **Returns**
 
@@ -99,13 +98,14 @@ Format generated parser help text.
 
 ---
 
-### `new(r: Region) -> Parser`
+### `new(name: String, r: Region) -> Parser`
 
-Create an empty argument parser.
+Create an empty argument parser with a program name for generated help.
 
 **Parameters**
 
-1. `r: Region` - Allocation region for the parser and all configured data.
+1. `name: String` - Program name shown in the usage line. Foreign parameter.
+2. `r: Region` - Allocation region for the parser and all configured data.
 
 **Returns**
 

@@ -25,6 +25,7 @@ end
 
 /// Configured parser.
 struct Parser:
+    name: String
     positionals: Vec[_ArgSpec]
     options: Vec[ArgumentOption]
 end
@@ -84,11 +85,14 @@ end
 // -------------------------------------------------------------
 
 
-/// Create an empty argument parser.
+/// Create an empty argument parser with a program name for generated help.
 ///
+/// @param name Program name shown in the usage line.
 /// @param r Allocation region for the parser and all configured data.
-func new(r: Region) -> Parser:
-    return Parser{}[r]
+func new(foreign name: String, r: Region) -> Parser:
+    parser := Parser{}[r]
+    parser.name = copy(name, .parser)
+    return parser
 end
 
 /// Add a required positional argument.
@@ -298,22 +302,21 @@ end
 /// Format generated parser help text.
 ///
 /// @param parser Configured parser.
-/// @param prog Program name shown in the usage line.
 /// @param r Allocation region for the returned string.
 /// @returns Help text.
-func format_help(foreign parser: Parser, foreign prog: String, r: Region) -> String:
+func format_help(foreign parser: Parser, r: Region) -> String:
     sb := strbuf::new("", r)
     strbuf::append(sb, "Usage:\n  ")
-    strbuf::append(sb, prog)
-    for option in parser.options:
-        strbuf::append(sb, " [")
-        _append_option_spec(sb, option)
-        strbuf::append(sb, "]")
-    end
+    strbuf::append(sb, parser.name)
     for positional in parser.positionals:
         strbuf::append(sb, " <")
         strbuf::append(sb, positional.name)
         strbuf::append(sb, ">")
+    end
+    for option in parser.options:
+        strbuf::append(sb, " [")
+        _append_option_spec(sb, option)
+        strbuf::append(sb, "]")
     end
     if len(parser.positionals) > 0:
         width := 0
@@ -324,7 +327,7 @@ func format_help(foreign parser: Parser, foreign prog: String, r: Region) -> Str
         end
         strbuf::append(sb, "\n\nPositional arguments:\n")
         for positional in parser.positionals:
-            strbuf::append(sb, "  ")
+            strbuf::append(sb, "    ")
             strbuf::append(sb, positional.name)
             _append_spaces(sb, width - len(positional.name) + 2)
             strbuf::append(sb, positional.help)
@@ -341,13 +344,13 @@ func format_help(foreign parser: Parser, foreign prog: String, r: Region) -> Str
         end
         strbuf::append(sb, "\nOptions:\n")
         for option in parser.options:
-            strbuf::append(sb, "  ")
+            strbuf::append(sb, "    ")
             _append_option_spec(sb, option)
             _append_spaces(sb, width - _option_spec_len(option) + 2)
             strbuf::append(sb, option.help)
             strbuf::append(sb, "\n")
             for positional in option.positionals:
-                strbuf::append(sb, "      <")
+                strbuf::append(sb, "        <")
                 strbuf::append(sb, positional.name)
                 strbuf::append(sb, ">  ")
                 strbuf::append(sb, positional.help)
