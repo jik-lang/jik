@@ -100,4 +100,22 @@ Variants can be placed freely into vectors, dictionaries, and other structs, and
 Recursive cycles involving variant payloads must also pass through `Option[...]`.
 Payloads such as `Expr`, `Vec[Expr]`, or `Dict[Expr]` that recurse back without `Option` are compile errors.
 
+### 11.5 Uniform function calls
+
+A function in the same module as a variant may be called through a value of
+that variant when its first parameter has an explicit annotation for the
+variant type:
+
+```jik
+func is_text(value: Value) -> bool:
+    return value is Value.TEXT
+end
+
+v := Value.TEXT{"hello"}
+assert(v.is_text()) // shorthand for is_text(v)
+```
+
+For an imported variant, the function is resolved in the module that defines
+the variant, just as it is for an imported struct.
+
 ---

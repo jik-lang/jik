@@ -99,6 +99,7 @@ typedef struct JikType {
 
         struct {
             char           *name;
+            char           *module_id;
             TabJikType     *variant_types;
             TabBool        *payloadless_tags;
             struct JikType *enum_type;
@@ -131,7 +132,7 @@ jik_type_new_vector(JikType *elem_type);
 JikType *
 jik_type_new_enum(char *full_name);
 JikType *
-jik_type_new_variant(char *name, TabJikType *variant_types);
+jik_type_new_variant(char *name, char *module_id, TabJikType *variant_types);
 JikType *
 jik_type_new_dict(JikType *elem_type);
 JikType *

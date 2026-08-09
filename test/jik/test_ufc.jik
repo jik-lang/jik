@@ -8,6 +8,11 @@ struct Counter:
     value: int
 end
 
+variant Number:
+    VALUE: int
+    MISSING
+end
+
 func add(c: Counter, amount: int) -> Counter:
     c.value += amount
     return c
@@ -26,6 +31,21 @@ func advance(t: shapes::Token, amount: int) -> shapes::Token:
     return t
 end
 
+func increment(n: Number, amount: int) -> Number:
+    if n is Number.VALUE:
+        n[Number.VALUE] += amount
+    end
+    return n
+end
+
+func number_value(n: Number) -> int:
+    return n[Number.VALUE]
+end
+
+func increase(r: shapes::Reading, amount: int) -> shapes::Reading:
+    return shapes::Reading.VALUE{1000}[.r]
+end
+
 func test_ufc_same_module(ts):
     c := Counter{value=2}
     test::suite_assert(ts, c.value == 2, site())
@@ -38,7 +58,19 @@ func test_ufc_imported_struct(ts):
     test::suite_assert(ts, t.advance(3).get_value() == 7, site())
 end
 
+func test_ufc_same_module_variant(ts):
+    n := Number.VALUE{2}
+    test::suite_assert(ts, n.increment(3).increment(4).number_value() == 9, site())
+end
+
+func test_ufc_imported_variant(ts):
+    r := shapes::Reading.VALUE{4}
+    test::suite_assert(ts, r.increase(3).reading_value() == 7, site())
+end
+
 func run_tests(ts):
     test_ufc_same_module(ts)
     test_ufc_imported_struct(ts)
+    test_ufc_same_module_variant(ts)
+    test_ufc_imported_variant(ts)
 end

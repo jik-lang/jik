@@ -468,9 +468,10 @@ args      ::= expr { "," expr }
 ```
 
 `receiver.name(args)` is a uniform function call. It is valid when `receiver`
-has a struct type and `name` is an ordinary function in that struct's defining
-module whose first parameter has an explicit annotation for the receiver's
-type. It is shorthand for a normal call with `receiver` as the first argument.
+has a struct or variant type and `name` is an ordinary function in that type's
+defining module whose first parameter has an explicit annotation for the
+receiver's type. It is shorthand for a normal call with `receiver` as the first
+argument.
 
 Special implementation rule:
 

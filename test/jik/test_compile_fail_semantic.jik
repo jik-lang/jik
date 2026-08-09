@@ -251,7 +251,25 @@ func main():
     value.nope()
 end
 """,
-        "uniform function call requires a struct receiver")
+        "uniform function call requires a struct or variant receiver")
+end
+
+func test_compile_fail_18(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Choice:
+    VALUE: int
+end
+
+func wrong(value: int):
+end
+
+func main():
+    choice := Choice.VALUE{1}
+    choice.wrong()
+end
+""",
+        "receiver does not match the first parameter")
 end
 
 func run_tests(ts):
@@ -272,4 +290,5 @@ func run_tests(ts):
     test_compile_fail_15(ts)
     test_compile_fail_16(ts)
     test_compile_fail_17(ts)
+    test_compile_fail_18(ts)
 end

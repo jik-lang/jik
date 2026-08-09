@@ -155,16 +155,17 @@ jik_type_new_enum(char *name)
 }
 
 JikType *
-jik_type_new_variant(char *name, TabJikType *variant_types)
+jik_type_new_variant(char *name, char *module_id, TabJikType *variant_types)
 {
     JikType *t = (JikType *)jik_alloc(sizeof(JikType));
-    *t         = (JikType){.name                      = TYPE_VARIANT,
-                           .C_name                    = NULL,
-                           .val_variant.name          = name,
-                           .val_variant.variant_types = variant_types,
+    *t         = (JikType){.name                         = TYPE_VARIANT,
+                           .C_name                       = NULL,
+                           .val_variant.name             = name,
+                           .val_variant.module_id        = module_id,
+                           .val_variant.variant_types    = variant_types,
                            .val_variant.payloadless_tags = NULL,
-                           .val_variant.visiting      = false,
-                           .val_variant.enum_type     = NULL};
+                           .val_variant.visiting         = false,
+                           .val_variant.enum_type        = NULL};
     return t;
 }
 

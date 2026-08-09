@@ -10,3 +10,19 @@ end
 func get_value(t: Token) -> int:
     return t.value
 end
+
+variant Reading:
+    VALUE: int
+    MISSING
+end
+
+func increase(r: Reading, amount: int) -> Reading:
+    if r is Reading.VALUE:
+        r[Reading.VALUE] += amount
+    end
+    return r
+end
+
+func reading_value(r: Reading) -> int:
+    return r[Reading.VALUE]
+end

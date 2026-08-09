@@ -729,16 +729,29 @@ jik_semantic_resolve_ufc_call(JikSemanticAnalyzer *sa, JikNode *call)
     }
 
     JikType *receiver_type = receiver->jik_type;
-    jik_diag_fatal_error_if(receiver_type->name != TYPE_STRUCT,
-                            "uniform function call requires a struct receiver",
-                            jik_token_to_text(call->token));
-    JikNode *func = jik_scope_get_global_symbol(call->val_call.name->val_id.name,
-                                                 receiver_type->val_struct.module_id);
-    jik_diag_fatal_error_if(func == NULL,
-                            JIK_STRING_NCAT("struct function \"",
-                                            call->val_call.name->val_id.name,
-                                            "\" not defined"),
-                            jik_token_to_text(call->token));
+    char    *receiver_kind;
+    char    *receiver_module_id;
+    if (receiver_type->name == TYPE_STRUCT) {
+        receiver_kind      = "struct";
+        receiver_module_id = receiver_type->val_struct.module_id;
+    }
+    else if (receiver_type->name == TYPE_VARIANT) {
+        receiver_kind      = "variant";
+        receiver_module_id = receiver_type->val_variant.module_id;
+    }
+    else {
+        jik_diag_fatal_error("uniform function call requires a struct or variant receiver",
+                             jik_token_to_text(call->token));
+        return false;
+    }
+
+    JikNode *func =
+        jik_scope_get_global_symbol(call->val_call.name->val_id.name, receiver_module_id);
+    jik_diag_fatal_error_if(
+        func == NULL,
+        JIK_STRING_NCAT(
+            receiver_kind, " function \"", call->val_call.name->val_id.name, "\" not defined"),
+        jik_token_to_text(call->token));
     jik_diag_fatal_error_if(func->type != NODE_FUNCTION && func->type != NODE_EXTERN_FUNCTION,
                             "uniform function call target must be a function",
                             jik_token_to_text(call->token));
@@ -757,7 +770,7 @@ jik_semantic_resolve_ufc_call(JikSemanticAnalyzer *sa, JikNode *call)
     jik_diag_fatal_error_if(!jik_type_equal(first_param_type, receiver_type),
                             "uniform function call receiver does not match the first parameter",
                             jik_token_to_text(call->token));
-    call->val_call.name->val_id.module_id = receiver_type->val_struct.module_id;
+    call->val_call.name->val_id.module_id = receiver_module_id;
     if (func->type == NODE_EXTERN_FUNCTION) {
         call->val_call.extern_name = func->val_extern_function.C_func_name;
     }
@@ -2151,7 +2164,7 @@ jik_semantic_set_named_types(JikSemanticAnalyzer *sa)
                 jik_type_new_struct(nd->val_struct.name, nd->token->module_id, NULL);
         }
         else if (nd->type == NODE_VARIANT && nd->jik_type->name == TYPE_UNKNOWN) {
-            nd->jik_type = jik_type_new_variant(nd->val_variant.name, NULL);
+            nd->jik_type = jik_type_new_variant(nd->val_variant.name, nd->token->module_id, NULL);
         }
     }
 }
