@@ -287,7 +287,7 @@ decl_stmt      ::= identifier ":=" expr
                  | identifier ":" type_desc
 
 assign_stmt    ::= lvalue assign_op expr
-assign_op      ::= "=" | "+=" | "-=" | "*=" | "/="
+assign_op      ::= "=" | "+=" | "-=" | "*=" | "/=" | "%="
 
 call_stmt      ::= call_expr
 must_call_stmt ::= "must" call_expr

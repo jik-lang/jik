@@ -776,6 +776,11 @@ jik_lexer_tokenize(JikLexer *lex)
             VecJikToken_push(tokens, tok);
             jik_lexer_advance_by(lex, 2);
         }
+        else if (strncmp(jik_lexer_current_ptr(lex), "%=", 2) == 0) {
+            tok = jik_lexer_make_token(lex, TOK_OP_MOD_EQ, "%=");
+            VecJikToken_push(tokens, tok);
+            jik_lexer_advance_by(lex, 2);
+        }
         else if (strncmp(jik_lexer_current_ptr(lex), ":=", 2) == 0) {
             tok = jik_lexer_make_token(lex, TOK_DECLARE, ":=");
             VecJikToken_push(tokens, tok);

@@ -683,6 +683,11 @@ jik_parser_get_assigned_expr(JikParser *p, JikNode *lhs)
         JikNode  *rhs    = jik_parser_parse_expr(p);
         return jik_node_new_binop(lhs, rhs, "/", jik_parser_current_context(p), op_tok);
     }
+    if (jik_parser_current_token(p)->type == TOK_OP_MOD_EQ) {
+        JikToken *op_tok = jik_parser_eat_token(p, TOK_OP_MOD_EQ);
+        JikNode  *rhs    = jik_parser_parse_expr(p);
+        return jik_node_new_binop(lhs, rhs, "%", jik_parser_current_context(p), op_tok);
+    }
     jik_diag_fatal_error("parse error: expected assignment",
                          jik_token_to_text(jik_parser_current_token(p)));
 }

@@ -59,6 +59,7 @@ typedef struct JikToken JikToken;
     X(TOK_OP_DIV)                                                                                  \
     X(TOK_OP_DIV_EQ)                                                                               \
     X(TOK_OP_MOD)                                                                                  \
+    X(TOK_OP_MOD_EQ)                                                                               \
     X(TOK_OP_LT)                                                                                   \
     X(TOK_OP_GT)                                                                                   \
     X(TOK_OP_EQ)                                                                                   \
