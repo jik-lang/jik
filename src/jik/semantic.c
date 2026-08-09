@@ -715,6 +715,13 @@ static void
 jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd);
 
 static bool
+jik_semantic_is_ufc_builtin(char *name)
+{
+    return strcmp(name, "push") == 0 || strcmp(name, "pop") == 0 || strcmp(name, "len") == 0 ||
+           strcmp(name, "clear") == 0 || strcmp(name, "copy") == 0;
+}
+
+static bool
 jik_semantic_resolve_ufc_call(JikSemanticAnalyzer *sa, JikNode *call)
 {
     assert(call->type == NODE_EXPR_CALL && call->val_call.ufc);
@@ -740,6 +747,10 @@ jik_semantic_resolve_ufc_call(JikSemanticAnalyzer *sa, JikNode *call)
         receiver_module_id = receiver_type->val_variant.module_id;
     }
     else {
+        if (jik_semantic_is_ufc_builtin(call->val_call.name->val_id.name)) {
+            call->val_call.builtin = true;
+            return true;
+        }
         jik_diag_fatal_error("uniform function call requires a struct or variant receiver",
                              jik_token_to_text(call->token));
         return false;
@@ -747,6 +758,10 @@ jik_semantic_resolve_ufc_call(JikSemanticAnalyzer *sa, JikNode *call)
 
     JikNode *func =
         jik_scope_get_global_symbol(call->val_call.name->val_id.name, receiver_module_id);
+    if (func == NULL && jik_semantic_is_ufc_builtin(call->val_call.name->val_id.name)) {
+        call->val_call.builtin = true;
+        return true;
+    }
     jik_diag_fatal_error_if(
         func == NULL,
         JIK_STRING_NCAT(

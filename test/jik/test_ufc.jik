@@ -68,9 +68,22 @@ func test_ufc_imported_variant(ts):
     test::suite_assert(ts, r.increase(3).reading_value() == 7, site())
 end
 
+func test_ufc_builtins(ts):
+    values := [1, 2]
+    values.push(3)
+    test::suite_assert(ts, values.len() == 3, site())
+    test::suite_assert(ts, values.pop() == 3, site())
+
+    copied := values.copy()
+    values.clear()
+    test::suite_assert(ts, values.len() == 0, site())
+    test::suite_assert(ts, copied.len() == 2, site())
+end
+
 func run_tests(ts):
     test_ufc_same_module(ts)
     test_ufc_imported_struct(ts)
     test_ufc_same_module_variant(ts)
     test_ufc_imported_variant(ts)
+    test_ufc_builtins(ts)
 end

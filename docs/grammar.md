@@ -467,11 +467,12 @@ call_expr ::= qualified_identifier "(" [ args ] ")"
 args      ::= expr { "," expr }
 ```
 
-`receiver.name(args)` is a uniform function call. It is valid when `receiver`
-has a struct or variant type and `name` is an ordinary function in that type's
-defining module whose first parameter has an explicit annotation for the
-receiver's type. It is shorthand for a normal call with `receiver` as the first
-argument.
+`receiver.name(args)` is a uniform function call. `push`, `pop`, `len`,
+`clear`, and `copy` support this form for any receiver type accepted by the
+corresponding builtin. Otherwise, `receiver` must have a struct or variant type
+and `name` must be an ordinary function in that type's defining module whose
+first parameter has an explicit annotation for the receiver's type. It is
+shorthand for a normal call with `receiver` as the first argument.
 
 Special implementation rule:
 

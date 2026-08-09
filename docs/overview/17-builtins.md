@@ -97,10 +97,23 @@ d := {"foo": 12, "bar": 13}
 clear(d)
 ```
 
+The container builtins in this section also support uniform function-call
+syntax: `v.push(value)`, `v.pop()`, `v.len()`, and `v.clear()` are equivalent
+to calls with `v` as their first argument.
+
+
+---
+
+### 17.3 Miscellaneous builtins
+
 #### `copy(T[, Region]) -> T`
 Copies a composite value into the destination region. If the final
 `Region` argument is omitted, the copy is allocated in the caller's local
 region.
+
+`copy` also supports uniform function-call syntax: `value.copy()` and
+`value.copy(out_region)` are equivalent to calls with `value` as their first
+argument.
 
 Supported source types:
 
@@ -124,7 +137,7 @@ label2 := copy(label)
 
 ---
 
-### 17.3 Debugging
+### 17.4 Debugging
 
 Debugging builtins return information about a call site. Basic debugging information is obtained
 through the opaque type `Site`.
