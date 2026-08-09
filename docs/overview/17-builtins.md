@@ -104,40 +104,7 @@ to calls with `v` as their first argument.
 
 ---
 
-### 17.3 Miscellaneous builtins
-
-#### `copy(T[, Region]) -> T`
-Copies a composite value into the destination region. If the final
-`Region` argument is omitted, the copy is allocated in the caller's local
-region.
-
-`copy` also supports uniform function-call syntax: `value.copy()` and
-`value.copy(out_region)` are equivalent to calls with `value` as their first
-argument.
-
-Supported source types:
-
-- `String`
-- `Vec[P]`
-- `Dict[P]`
-- `Option[P]`
-- structs whose each field type is `P`
-- variants whose every payload type is `P`
-
-Here `P` means `int`, `double`, `bool`, `char`, `String`, or an enum type.
-Strings inside supported containers and variants are allocated in the
-destination region.
-
-
-**Example**
-```jik
-names2 := copy(names, out_region)
-label2 := copy(label)
-```
-
----
-
-### 17.4 Debugging
+### 17.3 Debugging
 
 Debugging builtins return information about a call site. Basic debugging information is obtained
 through the opaque type `Site`.
@@ -187,7 +154,35 @@ println(site_file(s, _), site_line(s), site_code(s, _))
 
 ---
 
-### 17.4 Misc
+### 17.4 Miscellaneous
+
+#### `copy(T[, Region]) -> T`
+Copies a composite value into the destination region. If the final
+`Region` argument is omitted, the copy is allocated in the caller's local
+region.
+
+`copy` also supports uniform function-call syntax: `value.copy()` and
+`value.copy(out_region)` are equivalent to calls with `value` as their first
+argument.
+
+Supported source types:
+
+- `String`
+- `Vec[P]`
+- `Dict[P]`
+- `Option[P]`
+- structs whose each field type is `P`
+- variants whose every payload type is `P`
+
+Here `P` means `int`, `double`, `bool`, `char`, `String`, or an enum type.
+Strings inside supported containers and variants are allocated in the
+destination region.
+
+**Example**
+```jik
+names2 := copy(names, out_region)
+label2 := copy(label)
+```
 
 #### `assert(bool) -> void`
 Checks a condition and fails (aborts execution) if the condition is false.
