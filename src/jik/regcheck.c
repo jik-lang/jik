@@ -933,6 +933,14 @@ jik_check_region_integrity(JikNode *ast)
                     }
                     continue;
                 }
+                if (jik_is_builtin_call_named(nd, "pop")) {
+                    JikNode     *vec  = VecJikNode_get(nd->val_call.args, 0);
+                    JikAllocSpec spec = get_expression_alloc_spec(vec, spec_tab);
+                    if (jik_alloc_spec_complete(spec)) {
+                        nd->val_call.alloc_spec = spec;
+                    }
+                    continue;
+                }
                 if (is_region_safe_function_call(nd)) {
                     continue;
                 }
