@@ -11,29 +11,26 @@ use "jik/strbuf"
 
 /// A positional value accepted by the parser or an option.
 struct _ArgSpec:
-    name: String
-    help: String
+    _name: String
+    _help: String
 end
 
-/// A long option, optional short alias, and its value specifications.
+/// Configured option handle.
 struct ArgumentOption:
-    name: String
-    short_name: String
-    help: String
-    positionals: Vec[_ArgSpec]
+    _name: String
+    _short_name: String
+    _help: String
+    _positionals: Vec[_ArgSpec]
 end
 
 /// Configured parser.
 struct Parser:
-    name: String
-    positionals: Vec[_ArgSpec]
-    options: Vec[ArgumentOption]
+    _name: String
+    _positionals: Vec[_ArgSpec]
+    _options: Vec[ArgumentOption]
 end
 
 /// Values returned by `parse`.
-///
-/// `positionals` is keyed by positional name. `options` is keyed by the configured long option spelling, including its `--` prefix.
-/// Each option value is keyed by its declared name. A present flag has an empty value dictionary.
 struct ParseResult:
     positionals: Dict[String]
     options: Dict[Dict[String]]
@@ -53,8 +50,8 @@ func _valid_short_name(name: String) -> bool:
 end
 
 func _has_option_name(foreign parser: Parser, foreign name: String) -> bool:
-    for option in parser.options:
-        if option.name == name or option.short_name == name:
+    for option in parser._options:
+        if option._name == name or option._short_name == name:
             return true
         end
     end
@@ -62,8 +59,8 @@ func _has_option_name(foreign parser: Parser, foreign name: String) -> bool:
 end
 
 func _has_positional_name(foreign parser: Parser, foreign name: String) -> bool:
-    for positional in parser.positionals:
-        if positional.name == name:
+    for positional in parser._positionals:
+        if positional._name == name:
             return true
         end
     end
@@ -71,8 +68,8 @@ func _has_positional_name(foreign parser: Parser, foreign name: String) -> bool:
 end
 
 func _has_option_positional_name(foreign option: ArgumentOption, foreign name: String) -> bool:
-    for positional in option.positionals:
-        if positional.name == name:
+    for positional in option._positionals:
+        if positional._name == name:
             return true
         end
     end
@@ -91,7 +88,7 @@ end
 /// @param r Allocation region for the parser and all configured data.
 func new(foreign name: String, r: Region) -> Parser:
     parser := Parser{}[r]
-    parser.name = copy(name, .parser)
+    parser._name = copy(name, .parser)
     return parser
 end
 
@@ -107,10 +104,10 @@ func add_positional(parser: Parser, foreign name: String, foreign help: String):
         std::panic("argparse: duplicate positional name")
     end
     positional := _ArgSpec{
-        name = copy(name, .parser),
-        help = copy(help, .parser)
+        _name = copy(name, .parser),
+        _help = copy(help, .parser)
     }[.parser]
-    push(parser.positionals, positional)
+    push(parser._positionals, positional)
 end
 
 /// Add an option and return it.
@@ -134,11 +131,11 @@ func add_option(parser: Parser, foreign name: String, foreign short_name: String
         std::panic("argparse: duplicate option")
     end
     option := ArgumentOption{
-        name = copy(name, .parser),
-        short_name = copy(short_name, .parser),
-        help = copy(help, .parser)
+        _name = copy(name, .parser),
+        _short_name = copy(short_name, .parser),
+        _help = copy(help, .parser)
     }[.parser]
-    push(parser.options, option)
+    push(parser._options, option)
     return option
 end
 
@@ -156,10 +153,10 @@ func add_option_positional(option: ArgumentOption, foreign name: String, foreign
         std::panic("argparse: duplicate option value name")
     end
     positional := _ArgSpec{
-        name = copy(name, .option),
-        help = copy(help, .option)
+        _name = copy(name, .option),
+        _help = copy(help, .option)
     }[.option]
-    push(option.positionals, positional)
+    push(option._positionals, positional)
 end
 
 
@@ -173,9 +170,9 @@ func _is_option(arg: String) -> bool:
 end
 
 func _get_option_index(foreign parser: Parser, foreign arg: String) -> int:
-    for i = 0, len(parser.options):
-        option := parser.options[i]
-        if option.name == arg or option.short_name == arg:
+    for i = 0, len(parser._options):
+        option := parser._options[i]
+        if option._name == arg or option._short_name == arg:
             return i
         end
     end
@@ -207,11 +204,11 @@ throws func parse(foreign parser: Parser, foreign args: Vec[String], r: Region) 
     while i < len(args):
         arg := args[i]
         if end_options:
-            if current_positional >= len(parser.positionals):
+            if current_positional >= len(parser._positionals):
                 fail(concat("argparse: unexpected positional ", arg, .parser))
             end
-            positional := parser.positionals[current_positional]
-            result.positionals[copy(positional.name, r)] = copy(arg, r)
+            positional := parser._positionals[current_positional]
+            result.positionals[copy(positional._name, r)] = copy(arg, r)
             current_positional += 1
             i += 1
             continue
@@ -226,36 +223,36 @@ throws func parse(foreign parser: Parser, foreign args: Vec[String], r: Region) 
             if option_index == -1:
                 fail(concat("argparse: unknown option ", arg, .parser))
             end
-            option := parser.options[option_index]
-            if result.options[option.name] is Some:
+            option := parser._options[option_index]
+            if result.options[option._name] is Some:
                 fail(concat("argparse: duplicate option ", arg, .parser))
             end
-            required_values := len(option.positionals)
+            required_values := len(option._positionals)
             if i + required_values >= len(args):
                 fail(concat("argparse: missing value for option ", arg, .parser))
             end
             values: Dict[String][r]
             j := 0
             while j < required_values:
-                positional := option.positionals[j]
-                values[copy(positional.name, r)] = copy(args[i + j + 1], r)
+                positional := option._positionals[j]
+                values[copy(positional._name, r)] = copy(args[i + j + 1], r)
                 j += 1
             end
-            result.options[copy(option.name, r)] = values
+            result.options[copy(option._name, r)] = values
             i += required_values + 1
             continue
         end
-        if current_positional >= len(parser.positionals):
+        if current_positional >= len(parser._positionals):
             fail(concat("argparse: unexpected positional ", arg, .parser))
         end
-        positional := parser.positionals[current_positional]
-        result.positionals[copy(positional.name, r)] = copy(arg, r)
+        positional := parser._positionals[current_positional]
+        result.positionals[copy(positional._name, r)] = copy(arg, r)
         current_positional += 1
         i += 1
     end
-    if current_positional < len(parser.positionals):
-        positional := parser.positionals[current_positional]
-        fail(concat("argparse: missing positional ", positional.name, .parser))
+    if current_positional < len(parser._positionals):
+        positional := parser._positionals[current_positional]
+        fail(concat("argparse: missing positional ", positional._name, .parser))
     end
 
     return result
@@ -276,25 +273,25 @@ func _append_spaces(sb: strbuf::StrBuf, count: int):
 end
 
 func _option_spec_len(foreign option: ArgumentOption) -> int:
-    size := len(option.name)
-    if len(option.short_name) > 0:
-        size += len(option.short_name) + 2
+    size := len(option._name)
+    if len(option._short_name) > 0:
+        size += len(option._short_name) + 2
     end
-    for positional in option.positionals:
-        size += len(positional.name) + 3
+    for positional in option._positionals:
+        size += len(positional._name) + 3
     end
     return size
 end
 
 func _append_option_spec(sb: strbuf::StrBuf, foreign option: ArgumentOption):
-    if len(option.short_name) > 0:
-        strbuf::append(sb, option.short_name)
+    if len(option._short_name) > 0:
+        strbuf::append(sb, option._short_name)
         strbuf::append(sb, ", ")
     end
-    strbuf::append(sb, option.name)
-    for positional in option.positionals:
+    strbuf::append(sb, option._name)
+    for positional in option._positionals:
         strbuf::append(sb, " <")
-        strbuf::append(sb, positional.name)
+        strbuf::append(sb, positional._name)
         strbuf::append(sb, ">")
     end
 end
@@ -307,56 +304,56 @@ end
 func format_help(foreign parser: Parser, r: Region) -> String:
     sb := strbuf::new("", r)
     strbuf::append(sb, "Usage:\n  ")
-    strbuf::append(sb, parser.name)
-    for positional in parser.positionals:
+    strbuf::append(sb, parser._name)
+    for positional in parser._positionals:
         strbuf::append(sb, " <")
-        strbuf::append(sb, positional.name)
+        strbuf::append(sb, positional._name)
         strbuf::append(sb, ">")
     end
-    for option in parser.options:
+    for option in parser._options:
         strbuf::append(sb, " [")
         _append_option_spec(sb, option)
         strbuf::append(sb, "]")
     end
-    if len(parser.positionals) > 0:
+    if len(parser._positionals) > 0:
         width := 0
-        for positional in parser.positionals:
-            if len(positional.name) > width:
-                width = len(positional.name)
+        for positional in parser._positionals:
+            if len(positional._name) > width:
+                width = len(positional._name)
             end
         end
         strbuf::append(sb, "\n\nPositional arguments:\n")
-        for positional in parser.positionals:
+        for positional in parser._positionals:
             strbuf::append(sb, "    ")
-            strbuf::append(sb, positional.name)
-            _append_spaces(sb, width - len(positional.name) + 2)
-            strbuf::append(sb, positional.help)
+            strbuf::append(sb, positional._name)
+            _append_spaces(sb, width - len(positional._name) + 2)
+            strbuf::append(sb, positional._help)
             strbuf::append(sb, "\n")
         end
     end
-    if len(parser.options) > 0:
+    if len(parser._options) > 0:
         width := 0
-        for option in parser.options:
+        for option in parser._options:
             size := _option_spec_len(option)
             if size > width:
                 width = size
             end
         end
         strbuf::append(sb, "\nOptions:\n")
-        for option in parser.options:
+        for option in parser._options:
             strbuf::append(sb, "    ")
             _append_option_spec(sb, option)
             _append_spaces(sb, width - _option_spec_len(option) + 2)
-            strbuf::append(sb, option.help)
+            strbuf::append(sb, option._help)
             strbuf::append(sb, "\n")
-            for positional in option.positionals:
+            for positional in option._positionals:
                 strbuf::append(sb, "        <")
-                strbuf::append(sb, positional.name)
+                strbuf::append(sb, positional._name)
                 strbuf::append(sb, ">  ")
-                strbuf::append(sb, positional.help)
+                strbuf::append(sb, positional._help)
                 strbuf::append(sb, "\n")
             end
-            if len(option.positionals) > 0:
+            if len(option._positionals) > 0:
                 strbuf::append(sb, "\n")
             end
         end

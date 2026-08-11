@@ -6,7 +6,7 @@ Command-line argument parser.
 
 ### `ArgumentOption`
 
-A long option, optional short alias, and its value specifications.
+Configured option handle.
 
 ---
 
@@ -20,12 +20,13 @@ Configured parser.
 
 Values returned by `parse`.
 
-**Notes**
+**Fields**
 
-- `positionals` is keyed by positional name. `options` is keyed by the
-  configured long option spelling, including its `--` prefix.
-- Each option value is keyed by its declared name. A present flag has an empty
-  value dictionary.
+- `positionals: Dict[String]` - Values of configured positional arguments,
+  keyed by positional name.
+- `options: Dict[Dict[String]]` - Present options, keyed by configured long
+  option spelling (including `--`). Each value dictionary is keyed by its
+  declared value name; a flag has an empty dictionary.
 
 ## Functions
 
