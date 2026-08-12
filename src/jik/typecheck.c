@@ -64,11 +64,12 @@ static void
 jik_check_builtin_concat(JikNode *nd)
 {
     size_t n = VecJikNode_size(nd->val_call.args);
-    jik_diag_fatal_error_if(n < 2,
-                            "concat expects one or more String arguments followed by Region",
+    size_t n_strings = nd->val_call.auto_region ? n : n - 1;
+    jik_diag_fatal_error_if(n_strings == 0,
+                            "concat expects one or more String arguments",
                             jik_token_to_text(nd->val_call.name->token));
 
-    for (size_t i = 0; i + 1 < n; i++) {
+    for (size_t i = 0; i < n_strings; i++) {
         JikNode *arg = VecJikNode_get(nd->val_call.args, i);
         jik_diag_fatal_error_if(!jik_type_equal(arg->jik_type, &JIK_TYPE_STRING),
                                 JIK_STRING_NCAT("type mismatch: required ",
@@ -78,13 +79,15 @@ jik_check_builtin_concat(JikNode *nd)
                                 jik_token_to_text(arg->token));
     }
 
-    JikNode *reg = VecJikNode_get(nd->val_call.args, n - 1);
-    jik_diag_fatal_error_if(!jik_type_equal(reg->jik_type, &JIK_TYPE_REGION),
-                            JIK_STRING_NCAT("type mismatch: required ",
-                                            jik_type_pretty_name(&JIK_TYPE_REGION),
-                                            ", got ",
-                                            jik_type_pretty_name(reg->jik_type)),
-                            jik_token_to_text(reg->token));
+    if (!nd->val_call.auto_region) {
+        JikNode *reg = VecJikNode_get(nd->val_call.args, n - 1);
+        jik_diag_fatal_error_if(!jik_type_equal(reg->jik_type, &JIK_TYPE_REGION),
+                                JIK_STRING_NCAT("type mismatch: required ",
+                                                jik_type_pretty_name(&JIK_TYPE_REGION),
+                                                ", got ",
+                                                jik_type_pretty_name(reg->jik_type)),
+                                jik_token_to_text(reg->token));
+    }
 }
 
 static void
@@ -162,6 +165,14 @@ static bool
 call_requires_region_injection(JikNode *nd)
 {
     assert(nd->type == NODE_EXPR_CALL);
+    if (nd->val_call.builtin && strcmp(nd->val_call.name->val_id.name, "concat") == 0) {
+        size_t n = VecJikNode_size(nd->val_call.args);
+        if (n == 0) {
+            return false;
+        }
+        JikNode *last_arg = VecJikNode_get(nd->val_call.args, n - 1);
+        return !jik_type_equal(last_arg->jik_type, &JIK_TYPE_REGION);
+    }
     JikNode *func = jik_scope_get_function(nd->context,
                                            nd->val_call.name->val_id.name,
                                            nd->val_call.name->val_id.module_id,

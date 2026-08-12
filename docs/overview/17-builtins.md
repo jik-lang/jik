@@ -29,14 +29,16 @@ Same as `print`, and additionally writes a newline after the arguments.
 
 #### `concat(...String, Region) -> String`
 Concatenates one or more strings and allocates the result in the final `Region`
-argument.
+argument. The region may be omitted, in which case Jik uses the local region
+`_`.
 
-All arguments except the last must be of type `String`. The last argument must
-be a `Region`.
+All string arguments must have type `String`. When supplied, the final argument
+must be a `Region`.
 
 **Example**
 ```jik
-msg := concat("hello", ", ", name, "!", _)
+msg := concat("hello", ", ", name, "!")
+same := concat("hello", ", ", name, "!", _)
 ```
 
 ---

@@ -366,7 +366,7 @@ char *
 get_builtin_call_concat(JikCodeGenerator *cg, JikNode *nd)
 {
     size_t      n  = VecJikNode_size(nd->val_call.args);
-    size_t      ns = n - 1;
+    size_t      ns = nd->val_call.auto_region ? n : n - 1;
     CharBuffer *cb = char_buffer_new("");
     for (size_t i = 0; i < ns; i++) {
         JikNode *arg  = VecJikNode_get(nd->val_call.args, i);
@@ -375,8 +375,9 @@ get_builtin_call_concat(JikCodeGenerator *cg, JikNode *nd)
         char_buffer_append(cb, ", ");
     }
 
-    JikNode *reg    = VecJikNode_get(nd->val_call.args, n - 1);
-    char    *reg_tr = jik_codegen_emit_expression(cg, reg);
+    char *reg_tr = nd->val_call.auto_region
+                       ? get_alloc_dest(nd->val_call.alloc_spec)
+                       : jik_codegen_emit_expression(cg, VecJikNode_get(nd->val_call.args, n - 1));
     return JIK_STRING_NCAT("jik_concat((JikString *[]){",
                            cb->data,
                            "}",

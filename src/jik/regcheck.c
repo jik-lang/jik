@@ -911,9 +911,16 @@ jik_check_region_integrity(JikNode *ast)
             // else if (nd->type == NODE_EXPR_CALL && !nd->val_call.builtin) {
             else if (nd->type == NODE_EXPR_CALL) {
                 if (jik_is_builtin_call_named(nd, "concat")) {
-                    size_t       n       = VecJikNode_size(nd->val_call.args);
-                    JikNode     *reg_arg = VecJikNode_get(nd->val_call.args, n - 1);
-                    JikAllocSpec spec    = get_expression_alloc_spec(reg_arg, spec_tab);
+                    JikAllocSpec spec;
+                    if (nd->val_call.auto_region) {
+                        spec = (JikAllocSpec){.kind = JIK_ALLOC_LOCAL,
+                                              .src = JIK_ALLOC_SRC_LOCAL};
+                    }
+                    else {
+                        size_t   n       = VecJikNode_size(nd->val_call.args);
+                        JikNode *reg_arg = VecJikNode_get(nd->val_call.args, n - 1);
+                        spec             = get_expression_alloc_spec(reg_arg, spec_tab);
+                    }
                     if (jik_alloc_spec_complete(spec)) {
                         nd->val_call.alloc_spec = spec;
                     }

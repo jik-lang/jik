@@ -10,6 +10,7 @@ platform := sys::platform()
 prog := "a" if sys::platform() == "windows" else "b"
 labels := [1 of ""]
 label := "updated"
+joined := concat("global", " value")
 
 
 struct GlobalState:
@@ -32,6 +33,7 @@ end
 func test_globals_01(ts):
     test::suite_assert(ts, x == 3, site())
     test::suite_assert(ts, y == "foo", site())
+    test::suite_assert(ts, joined == "global value", site())
     foo(ts, "abc")
     foo(ts, "")
     test::suite_assert(ts, globals::x == 0, site())

@@ -137,9 +137,14 @@ end
 
 func test_builtin_concat(ts):
     name := "foo"
-    s := concat("hello", ", ", name, "!", _)
+    s := concat("hello", ", ", name, "!")
     test::suite_assert(ts, s == "hello, foo!", site())
     test::suite_assert(ts, len(s) == 11, site())
+end
+
+func test_builtin_concat_explicit_region(ts):
+    s := concat("hello", ", ", "world", "!", _)
+    test::suite_assert(ts, s == "hello, world!", site())
 end
 
 func test_builtin_concat_foreign(ts):
@@ -244,6 +249,7 @@ func run_tests(ts):
     test_string_starts_with(ts)
     test_string_ends_with(ts)
     test_builtin_concat(ts)
+    test_builtin_concat_explicit_region(ts)
     test_builtin_concat_foreign(ts)
     test_string_trim(ts)
     test_string_replace(ts)
