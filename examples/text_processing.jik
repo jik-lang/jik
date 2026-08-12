@@ -1,0 +1,27 @@
+// Example: string and vector slices, indexed iteration, and string comparison.
+
+use "jik/string"
+
+
+func main():
+    text := "alpha\nbeta\ngamma"
+    lines := string::split(text, "\n", _)
+
+    prefix := lines[:2]
+    middle := lines[1:3]
+    suffix := lines[2:]
+    word := text[6:10]
+
+    println("first two lines: ", prefix)
+    println("middle lines:    ", middle)
+    println("last line:       ", suffix[0])
+    println("sliced word:     ", word)
+
+    for line_no, line in lines:
+        println(line_no + 1, ": ", line)
+    end
+
+    if string::compare(lines[0], lines[2]) < 0:
+        println(lines[0], " comes before ", lines[2])
+    end
+end

@@ -1,0 +1,30 @@
+// Example: Command-line parsing, generated help, and path normalization.
+
+use "jik/argparse"
+use "jik/path"
+
+
+func main(args):
+    parser := argparse::new("copy-plan", _)
+    parser.add_positional("source", "File to copy.")
+    parser.add_positional("destination", "Planned destination.")
+    parser.add_option("--verbose", "-v", "Print the normalized paths.")
+
+    if len(args) == 1 or args[1] == "--help":
+        println(parser.format_help())
+    else:
+        try result := parser.parse(args[1:]):
+            source := path::normalize(result.positionals["source"]?, _)
+            destination := path::normalize(result.positionals["destination"]?, _)
+
+            if result.options["--verbose"] is Some:
+                println("source:      ", source)
+                println("destination: ", destination)
+            end
+            println("would copy ", source, " to ", destination)
+        except:
+            println(error_msg())
+            println("\n", parser.format_help())
+        end
+    end
+end

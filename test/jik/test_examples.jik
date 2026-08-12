@@ -20,6 +20,7 @@ end
 
 func test_examples_check(ts):
     examples := [
+        "examples/argparse_demo.jik",
         "examples/cl_args.jik",
         "examples/dijkstra.jik",
         "examples/error_handling.jik",
@@ -31,7 +32,9 @@ func test_examples_check(ts):
         "examples/newton.jik",
         "examples/primes.jik",
         "examples/process_capture.jik",
+        "examples/regions_copy.jik",
         "examples/testing_demo.jik",
+        "examples/text_processing.jik",
         "examples/variants.jik",
         "examples/word_count.jik",
         "examples/modules/main.jik"

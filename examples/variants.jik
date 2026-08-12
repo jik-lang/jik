@@ -8,6 +8,7 @@ end
 variant CalcResult:
     OK: int
     ERR: String
+    END
 end
 
 func compute(op, x, y, r):
@@ -20,6 +21,10 @@ func compute(op, x, y, r):
     return CalcResult.OK{x * y}[r]
 end
 
+func is_done(res: CalcResult) -> bool:
+    return res is CalcResult.END
+end
+
 func show_result(res):
     match res:
         case CalcResult.OK{v}:
@@ -27,6 +32,8 @@ func show_result(res):
         case CalcResult.ERR{msg}:
             print("error: ", msg)
             print("\n")
+        case CalcResult.END:
+            println("calculation finished")
     end
 end
 
@@ -34,4 +41,7 @@ func main():
     show_result(compute(Op.ADD, 2, 3, _))
     show_result(compute(Op.MUL, 4, 5, _))
     show_result(compute(Op.MUL, 7, 0, _))
+    finished := CalcResult.END
+    show_result(finished)
+    println("done: ", finished.is_done())
 end

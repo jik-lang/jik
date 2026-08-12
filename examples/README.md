@@ -7,15 +7,18 @@ standard library.
 
 1. `hello.jik` - the smallest complete Jik program
 2. `fib.jik` - functions, loops, recursion, and region-based allocation
-3. `primes.jik` - loops and vectors
-4. `word_count.jik` - structs, file I/O, and standard library use
-5. `modules/main.jik` - multi-file programs, modules, and imports
-6. `variants.jik` - enums, variants, and `match`
-7. `error_handling.jik` - `throws`, `try/except`, `error_msg`, `error_code`, and `must`
-8. `ffi_demo.jik` - calling C functions through Jik's FFI
-9. `testing_demo.jik` - basic use of `jik/testing`
-10. `cl_args.jik` - command-line argument handling
-11. `process_capture.jik` - capture a process and inspect stdout/stderr
+3. `regions_copy.jik` - returning copied composite values in a caller-chosen region
+4. `primes.jik` - loops and vectors
+5. `word_count.jik` - structs, file I/O, and standard library use
+6. `text_processing.jik` - string/vector slices, indexed iteration, and comparisons
+7. `modules/main.jik` - multi-file programs, modules, and imports
+8. `variants.jik` - enums, payload-less variants, `match`, and UFCS
+9. `error_handling.jik` - `throws`, recovery, propagation, `must`, and postfix `!`
+10. `ffi_demo.jik` - calling C functions and opaque C structs through Jik's FFI
+11. `testing_demo.jik` - basic use of `jik/testing`
+12. `cl_args.jik` - raw command-line argument handling
+13. `argparse_demo.jik` - parsed arguments, generated help, and path normalization
+14. `process_capture.jik` - capture a process and inspect stdout/stderr
 
 The remaining examples are larger demonstrations:
 
@@ -32,6 +35,14 @@ From the repository root:
 jik run examples/hello.jik
 jik run examples/fib.jik
 jik run examples/modules/main.jik
+```
+
+`argparse_demo.jik` prints its generated help with no arguments. To pass arguments to it, build it
+first and run the resulting executable:
+
+```text
+jik build examples/argparse_demo.jik
+examples/argparse_demo.exe source.txt out/../target.txt --verbose
 ```
 
 Some examples are interactive or terminal-dependent:

@@ -1,0 +1,30 @@
+// Example: copy composite values into the caller's region before returning them.
+
+struct Note:
+    text: String
+    pinned: bool
+end
+
+
+func make_note(foreign source: String, r: Region) -> Note:
+    // The source may belong to another region, so make an owned copy for the
+    // returned struct. source.copy(r) is shorthand for copy(source, r).
+    // The caller chooses the destination region through r.
+    return Note{text = source.copy(r), pinned = true}[r]
+end
+
+
+func default_names(r: Region) -> Vec[String]:
+    names := ["Ada", "Grace"]
+    // names is local to this helper; copying makes it safe to return.
+    return names.copy(r)
+end
+
+
+func main():
+    note := make_note("remember who owns this value", _)
+    names := default_names(_)
+
+    println(note.text, " (pinned: ", note.pinned, ")")
+    println("names: ", names)
+end

@@ -1,4 +1,4 @@
-// Example: throwing functions, try/except, and must
+// Example: throwing functions, recovery, propagation, must, and postfix !
 
 throws func parse_count(s):
     if s == "many":
@@ -20,6 +20,12 @@ func show_parse(s):
     end
 end
 
+throws func half_count(s):
+    // A declaration with try propagates a failure to half_count's caller.
+    count := try parse_count(s)
+    return count / 2
+end
+
 func main():
     show_parse("ok")
     show_parse("many")
@@ -27,4 +33,11 @@ func main():
 
     value := must parse_count("ok")
     println("must succeeded with value ", value)
+    println("postfix ! succeeded with value ", parse_count("ok")!)
+
+    try half := half_count("many"):
+        println("half: ", half)
+    except:
+        println("propagated failure: ", error_msg())
+    end
 end

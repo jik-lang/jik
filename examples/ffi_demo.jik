@@ -8,13 +8,40 @@ impl_adder(int32_t x, int32_t y)
     return x + y;
 }
 
+typedef struct impl_Point {
+    double x;
+    double y;
+} impl_Point;
+
+impl_Point *
+impl_point_new(double x, double y, JikRegion *r)
+{
+    impl_Point *p = jik_region_alloc(r, sizeof(impl_Point));
+    p->x = x;
+    p->y = y;
+    return p;
+}
+
+double
+impl_point_x(impl_Point *p)
+{
+    return p->x;
+}
+
 C_END
 
 extern func impl_adder as adder(x: int, y: int) -> int
 extern func toupper as toupper(ch: char) -> char
+extern struct impl_Point as Point
+extern func impl_point_new as point_new(x: double, y: double, r: Region) -> Point
+extern func impl_point_x as point_x(p: Point) -> double
 
 func main():
     println("adder(0, 1) = ", adder(0, 1))
     println("adder(5, -3) = ", adder(5, -3))
     println(toupper('a'))
+
+    point := point_new(3.5, 4.25, _)
+    // Extern structs are opaque; UFCS calls the exported accessor function.
+    println("point x = ", point.point_x())
 end

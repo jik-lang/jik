@@ -1,6 +1,6 @@
 // Example: Dijkstra's algorithm
 
-INF := 1000000000
+INF := 1_000_000_000
 
 
 func dijkstra_calc(w, src):
