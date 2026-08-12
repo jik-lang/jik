@@ -53,6 +53,12 @@
         .help_desc = "Embed Jik support library (core.h) into the translation.", .num_args = 0,    \
     }
 
+#define JIK_OPT_EMIT_SOURCE_LOC                                                                    \
+    {                                                                                              \
+        .name      = "--emit-source-loc",                                                        \
+        .help_desc = "Emit Jik source-location comments in the generated C.", .num_args = 0,    \
+    }
+
 #define JIK_OPT_FORMAT_C                                                                           \
     {                                                                                              \
         .name      = "--format-c",                                                                 \
@@ -107,11 +113,12 @@ const JikCommand JIK_COMMANDS[] = {
             {
                 JIK_ARG_INPUT_FILE,
             },
-        .num_options = 6,
+        .num_options = 7,
         .options =
             {
                 JIK_OPT_OUT,
                 JIK_OPT_EMBED_CORE,
+                JIK_OPT_EMIT_SOURCE_LOC,
                 JIK_OPT_FORMAT_C,
                 JIK_OPT_UNSAFE_NO_BOUNDS_CHECKS,
                 JIK_OPT_REGION_STATS,

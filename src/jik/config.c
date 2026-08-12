@@ -135,6 +135,9 @@ jik_config_make(int argc, char **argv)
             else if (strcmp(argv[i], "--embed-core") == 0) {
                 conf.embed_core = true;
             }
+            else if (strcmp(argv[i], "--emit-source-loc") == 0) {
+                conf.emit_source_loc = true;
+            }
             else if (strcmp(argv[i], "--format-c") == 0) {
                 conf.format_c = true;
             }

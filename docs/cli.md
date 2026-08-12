@@ -82,6 +82,8 @@ Options:
 - `--out <filepath>`: Write the generated C to this path. When omitted, the
   default output path is `<input-basename>.c`.
 - `--embed-core`: Embed the Jik support library into the generated translation.
+- `--emit-source-loc`: Emit `// source: path:line:column` comments before generated
+  declarations that correspond to Jik source declarations.
 - `--format-c`: Format the generated C file in place with `clang-format`.
 - `--unsafe-no-bounds-checks`: Disable runtime vector bounds checks
 - `--region-stats`: Print runtime region statistics at program exit.

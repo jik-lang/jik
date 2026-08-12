@@ -138,6 +138,16 @@ jik_codegen_format_site(JikToken *tok)
         filepath, ":", size_t_to_string(tok->lineno), ":", size_t_to_string(tok->colno));
 }
 
+static void
+jik_codegen_emit_source_location(JikCodeGenerator *cg, JikNode *nd)
+{
+    if (!cg->ctx->conf.emit_source_loc || !nd || !nd->token) {
+        return;
+    }
+    jik_writer_write_line(
+        &cg->cw, JIK_STRING_NCAT("// source: ", jik_codegen_format_site(nd->token)));
+}
+
 static char *
 jik_codegen_quote_site(JikToken *tok)
 {
@@ -1930,6 +1940,7 @@ static void
 jik_codegen_emit_function(JikCodeGenerator *cg, JikNode *nd, bool throws)
 {
     jik_writer_blank_line(&cg->cw);
+    jik_codegen_emit_source_location(cg, nd);
     jik_codegen_emit_function_signature(cg, nd, throws);
     jik_writer_blank_line(&cg->cw);
     jik_writer_begin_block(&cg->cw, "{");
@@ -1944,6 +1955,7 @@ static void
 jik_codegen_emit_function_must(JikCodeGenerator *cg, JikNode *nd)
 {
     jik_writer_blank_line(&cg->cw);
+    jik_codegen_emit_source_location(cg, nd);
     jik_codegen_emit_function_signature_must(cg, nd);
     jik_writer_blank_line(&cg->cw);
     jik_writer_begin_block(&cg->cw, "{");
@@ -1979,6 +1991,7 @@ static void
 jik_codegen_emit_function_must_extern(JikCodeGenerator *cg, JikNode *nd)
 {
     jik_writer_blank_line(&cg->cw);
+    jik_codegen_emit_source_location(cg, nd);
     jik_codegen_emit_function_signature_must_extern(cg, nd);
     jik_writer_blank_line(&cg->cw);
     jik_writer_begin_block(&cg->cw, "{");
@@ -2324,6 +2337,7 @@ jik_codegen_emit_enum(JikCodeGenerator *cg, JikNode *nd)
 {
     char *mn = jik_codegen_mangle_name(nd->token->module_id, nd->val_enum.name);
     jik_writer_write_line(&cg->cw, "\n");
+    jik_codegen_emit_source_location(cg, nd);
     jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(JIK_C_ENUM_PREFIX, mn, " {"));
     jik_writer_indent(&cg->cw);
 
@@ -2355,6 +2369,7 @@ jik_codegen_emit_struct(JikCodeGenerator *cg, JikNode *nd)
 {
     char *mn = jik_codegen_mangle_name(nd->token->module_id, nd->val_struct.name);
     jik_writer_write_line(&cg->cw, "\n");
+    jik_codegen_emit_source_location(cg, nd);
     jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(JIK_C_STRUCT_PREFIX, mn, " {"));
     jik_writer_indent(&cg->cw);
     for (size_t i = 0; i < VecString_size(nd->val_struct.field_order); i++) {
@@ -2377,6 +2392,7 @@ jik_codegen_emit_variant(JikCodeGenerator *cg, JikNode *nd)
 {
     char *mn = jik_codegen_mangle_name(nd->token->module_id, nd->val_variant.name);
     jik_writer_write_line(&cg->cw, "\n");
+    jik_codegen_emit_source_location(cg, nd);
     jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(JIK_C_STRUCT_PREFIX, mn, " {"));
     jik_writer_indent(&cg->cw);
     char *men =
@@ -2607,6 +2623,7 @@ jik_codegen_emit_global_declarations(JikCodeGenerator *cg)
         nd                                     = VecJikNode_get(cg->ast->val_program.globals, i);
         nd->val_assign.id->val_id.mangled_name = jik_codegen_mangle_name(
             nd->val_assign.id->val_id.module_id, nd->val_assign.id->val_id.name);
+        jik_codegen_emit_source_location(cg, nd);
         jik_writer_write_line(&cg->cw,
                               JIK_STRING_NCAT(nd->val_assign.expr->jik_type->C_name,
                                               " ",
@@ -2617,6 +2634,7 @@ jik_codegen_emit_global_declarations(JikCodeGenerator *cg)
     for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.structs); i++) {
         nd       = VecJikNode_get(cg->ast->val_program.structs, i);
         char *mn = jik_codegen_mangle_name(nd->token->module_id, nd->val_struct.name);
+        jik_codegen_emit_source_location(cg, nd);
         jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(JIK_C_STRUCT_PREFIX, mn, ";"));
         jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("JIK_DECLARE_STRUCT_NEW(", mn, ");"));
         jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("JIK_DECLARE_STRUCT_TOSTR(", mn, ");"));
@@ -2626,6 +2644,7 @@ jik_codegen_emit_global_declarations(JikCodeGenerator *cg)
     for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.variants); i++) {
         nd       = VecJikNode_get(cg->ast->val_program.variants, i);
         char *mn = jik_codegen_mangle_name(nd->token->module_id, nd->val_variant.name);
+        jik_codegen_emit_source_location(cg, nd);
         jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(JIK_C_STRUCT_PREFIX, mn, ";"));
         jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("JIK_DECLARE_STRUCT_NEW(", mn, ");"));
         jik_writer_write_line(&cg->cw, JIK_STRING_NCAT("JIK_DECLARE_STRUCT_TOSTR(", mn, ");"));
@@ -2692,9 +2711,11 @@ jik_codegen_emit_global_declarations(JikCodeGenerator *cg)
     // Functions
     for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.functions); i++) {
         nd = VecJikNode_get(cg->ast->val_program.functions, i);
+        jik_codegen_emit_source_location(cg, nd);
         jik_codegen_emit_function_signature(cg, nd, jik_function_throws(nd));
         jik_writer_write_line(&cg->cw, ";");
         if (jik_function_throws(nd)) {
+            jik_codegen_emit_source_location(cg, nd);
             jik_codegen_emit_function_signature_must(cg, nd);
             jik_writer_write_line(&cg->cw, ";");
         }
@@ -2704,6 +2725,7 @@ jik_codegen_emit_global_declarations(JikCodeGenerator *cg)
     for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.extern_functions); i++) {
         nd = VecJikNode_get(cg->ast->val_program.extern_functions, i);
         if (jik_function_throws(nd)) {
+            jik_codegen_emit_source_location(cg, nd);
             jik_codegen_emit_function_signature_must_extern(cg, nd);
             jik_writer_write_line(&cg->cw, ";");
         }

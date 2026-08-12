@@ -17,6 +17,7 @@ typedef struct JikConfig {
     char *jik_core_h_path;
     char *jik_pkg_path;
     bool  embed_core;
+    bool  emit_source_loc;
     bool  format_c;
     bool  preview;
     bool  release;
