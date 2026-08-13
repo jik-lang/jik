@@ -1051,6 +1051,15 @@ infer_ternary(JikNode *nd)
     jik_diag_fatal_error("ternary branches have incompatible types", jik_token_to_text(nd->token));
 }
 
+static char *
+make_binop_error_msg(JikNode *nd)
+{
+    return JIK_STRING_NCAT("unsupported binop between ",
+        jik_type_pretty_name(nd->val_binop.left->jik_type),
+        " and ",
+        jik_type_pretty_name(nd->val_binop.right->jik_type));
+}
+
 static void
 infer_binop(JikNode *nd)
 {
@@ -1064,7 +1073,7 @@ infer_binop(JikNode *nd)
         // TODO: simpligy this to numeric types or similar
         if (!binop_operands_are_of_type(nd,
                                         (JikTypeName[]){TYPE_INTEGER, TYPE_FLOAT, TYPE_NOTYPE})) {
-            jik_diag_fatal_error("unsupported type for binop", jik_token_to_text(nd->token));
+            jik_diag_fatal_error(make_binop_error_msg(nd), jik_token_to_text(nd->token));
         }
         if (nd->val_binop.left->jik_type == &JIK_TYPE_FLOAT ||
             nd->val_binop.right->jik_type == &JIK_TYPE_FLOAT) {
@@ -1076,7 +1085,7 @@ infer_binop(JikNode *nd)
     }
     else if (strcmp(nd->val_binop.val, "%") == 0) {
         if (!binop_operands_are_of_type(nd, (JikTypeName[]){TYPE_INTEGER, TYPE_NOTYPE})) {
-            jik_diag_fatal_error("unsupported type for binop", jik_token_to_text(nd->token));
+            jik_diag_fatal_error(make_binop_error_msg(nd), jik_token_to_text(nd->token));
         }
         nd->jik_type = &JIK_TYPE_INT;
     }
@@ -1084,7 +1093,7 @@ infer_binop(JikNode *nd)
              strcmp(nd->val_binop.val, ">=") == 0 || strcmp(nd->val_binop.val, "<=") == 0) {
         if (!binop_operands_are_of_type(nd,
                                         (JikTypeName[]){TYPE_INTEGER, TYPE_FLOAT, TYPE_NOTYPE})) {
-            jik_diag_fatal_error("unsupported type for binop", jik_token_to_text(nd->token));
+            jik_diag_fatal_error(make_binop_error_msg(nd), jik_token_to_text(nd->token));
         }
         nd->jik_type = &JIK_TYPE_BOOL;
     }
@@ -1097,18 +1106,18 @@ infer_binop(JikNode *nd)
                                                         TYPE_CHAR,
                                                         TYPE_ENUM,
                                                         TYPE_NOTYPE}))
-            jik_diag_fatal_error("unsupported type for binop", jik_token_to_text(nd->token));
+            jik_diag_fatal_error(make_binop_error_msg(nd), jik_token_to_text(nd->token));
         nd->jik_type = &JIK_TYPE_BOOL;
         if (binop_operands_are_of_type(nd, (JikTypeName[]){TYPE_INTEGER, TYPE_FLOAT, TYPE_NOTYPE}))
             return;
         if (!jik_node_types_equal(nd->val_binop.left, nd->val_binop.right)) {
-            jik_diag_fatal_error("binary operator between different types",
+            jik_diag_fatal_error(make_binop_error_msg(nd),
                                  jik_token_to_text(nd->token));
         }
     }
     else if (strcmp(nd->val_binop.val, "and") == 0 || strcmp(nd->val_binop.val, "or") == 0) {
         if (!binop_operands_are_of_type(nd, (JikTypeName[]){TYPE_BOOL, TYPE_NOTYPE})) {
-            jik_diag_fatal_error("unsupported type for binop", jik_token_to_text(nd->token));
+            jik_diag_fatal_error(make_binop_error_msg(nd), jik_token_to_text(nd->token));
         }
         nd->jik_type = &JIK_TYPE_BOOL;
     }

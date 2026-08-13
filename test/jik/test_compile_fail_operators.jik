@@ -19,7 +19,7 @@ func main():
     x := 1 and true
 end
 """,
-        "unsupported type for binop")
+        "unsupported binop between")
 end
 
 func test_compile_fail_03(ts):
@@ -29,7 +29,7 @@ func main():
     x := 1 + true
 end
 """,
-        "unsupported type for binop")
+        "unsupported binop between")
 end
 
 func test_compile_fail_04(ts):
