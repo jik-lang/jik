@@ -42,15 +42,12 @@ extern throws func jik_impl_process_run as
 /// @param region Allocation region for the returned result and captured bytes.
 /// @returns Child exit code, stdout, and stderr.
 throws func capture(foreign program: String, foreign args: Vec[String], region: Region) -> Result:
-    try raw := _capture_raw(program, args, region):
-        return Result{
-            code = _result_code(raw),
-            out = _result_out(raw),
-            err = _result_err(raw)
-        }[region]
-    except:
-        fail(error_msg(region), error_code())
-    end
+    raw := try _capture_raw(program, args, region)
+    return Result{
+        code = _result_code(raw),
+        out = _result_out(raw),
+        err = _result_err(raw)
+    }[region]
 end
 
 extern throws func jik_impl_process_capture_raw as

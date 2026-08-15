@@ -8,7 +8,13 @@ func test_fileio(ts):
         test::suite_assert(ts, false, site())
     except:
         test::suite_assert(ts, true, site())
-    end       
+    end
+
+    try io::read_file("foo", _):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
 
     try f := io::open("test/jik/input/data.txt", "r", _):
         data := must io::read(f, _)

@@ -59,9 +59,9 @@ throws func read_file(foreign path: String, region: Region) -> String:
         try close(f)
         return text
     except:
-        msg := error_msg(region)
+        msg := error_msg()
         code := error_code()
-        must close(f)
+        try close(f)
         fail(msg, code)
     end
 end
@@ -76,9 +76,9 @@ throws func write_file(foreign path: String, foreign text: String, region: Regio
     try write(f, text):
         try close(f)
     except:
-        msg := error_msg(region)
+        msg := error_msg()
         code := error_code()
-        must close(f)
+        try close(f)
         fail(msg, code)
     end
 end
@@ -133,7 +133,13 @@ jik_impl_io_close(jik_impl_io_File *fh, JikError *e)
         jik_error_set(e, 1, "io::close: cannot close invalid file");
         return;
     }
-    fclose(fh->file);
+    if (fclose(fh->file) != 0) {
+        fh->file = NULL;
+        fh->valid = false;
+        jik_error_set(e, 1, "io::close: could not close file");
+        return;
+    }
+    fh->file = NULL;
     fh->valid = false;
 }
 
@@ -149,13 +155,28 @@ jik_impl_io_read(jik_impl_io_File *fh, JikRegion *r, JikError *e)
         return jik_string_new("", r);
     }
 
-    fseek(fh->file, 0L, SEEK_END);
-    size_t file_size = (size_t)ftell(fh->file);
-    rewind(fh->file);
+    if (fseek(fh->file, 0L, SEEK_END) != 0) {
+        jik_error_set(e, 1, "io::read: could not seek to end of file");
+        return jik_string_new("", r);
+    }
+    long end = ftell(fh->file);
+    if (end < 0) {
+        jik_error_set(e, 1, "io::read: could not determine file size");
+        return jik_string_new("", r);
+    }
+    if (fseek(fh->file, 0L, SEEK_SET) != 0) {
+        jik_error_set(e, 1, "io::read: could not rewind file");
+        return jik_string_new("", r);
+    }
 
+    size_t file_size = (size_t)end;
     char *buffer = jik_region_alloc(r, file_size + 1);
     size_t bytes = fread(buffer, sizeof(char), file_size, fh->file);
     buffer[bytes] = '\0';
+    if (bytes < file_size && ferror(fh->file)) {
+        jik_error_set(e, 1, "io::read: failed to read file");
+        return jik_string_new("", r);
+    }
 
     return jik_string_new(buffer, r);
 }

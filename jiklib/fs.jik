@@ -50,16 +50,10 @@ throws func mkdir_all(path: String) -> void:
 
     parent := path::dirname(path, _)
     if parent != "." and parent != path and not is_dir(parent):
-        try mkdir_all(parent):
-        except:
-            fail(error_msg(_), error_code())
-        end
+        try mkdir_all(parent)
     end
 
-    try mkdir(path):
-    except:
-        fail(error_msg(_), error_code())
-    end
+    try mkdir(path)
 end
 
 /// Remove a file.
@@ -85,29 +79,17 @@ throws func remove_dir_all(path: String) -> void:
         fail("fs::remove_dir_all: path is not a directory")
     end
 
-    try entries := read_dir(path, _):
-        for entry in entries:
-            child := path::join([string::copy(path), entry])
-            if is_dir(child):
-                try remove_dir_all(child):
-                except:
-                    fail(error_msg(_), error_code())
-                end
-            else:
-                try remove_file(child):
-                except:
-                    fail(error_msg(_), error_code())
-                end
-            end
+    entries := try read_dir(path, _)
+    for entry in entries:
+        child := path::join([string::copy(path), entry])
+        if is_dir(child):
+            try remove_dir_all(child)
+        else:
+            try remove_file(child)
         end
-    except:
-        fail(error_msg(_), error_code())
     end
 
-    try remove_dir(path):
-    except:
-        fail(error_msg(_), error_code())
-    end
+    try remove_dir(path)
 end
 
 /// Rename or move a filesystem object.
@@ -144,30 +126,24 @@ extern throws func jik_impl_fs_read_dir_close as
 /// @param region Allocation region for the returned vector and strings.
 /// @returns Directory entry names.
 throws func read_dir(foreign path: String, region: Region) -> Vec[String]:
-    try dir := _read_dir_open(path, region):
-        entries := [0 of ""][region]
-        while true:
-            try name := _read_dir_next(dir, region):
-                if name == "":
-                    break
-                end
-                push(entries, name)
-            except:
-                try _read_dir_close(dir):
-                except:
-                end
-                fail(error_msg(region), error_code())
+    dir := try _read_dir_open(path, region)
+    entries := [0 of ""][region]
+    while true:
+        try name := _read_dir_next(dir, region):
+            if name == "":
+                break
             end
-        end
-
-        try _read_dir_close(dir):
-            return entries
+            push(entries, name)
         except:
-            fail(error_msg(region), error_code())
+            msg := error_msg()
+            code := error_code()
+            try _read_dir_close(dir)
+            fail(msg, code)
         end
-    except:
-        fail(error_msg(region), error_code())
     end
+
+    try _read_dir_close(dir)
+    return entries
 end
 
 /// Return the platform temporary directory path.
@@ -189,6 +165,7 @@ extern func jik_impl_fs_temp_dir as
 #include <direct.h>
 #include <io.h>
 #else
+#include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <dirent.h>
@@ -600,8 +577,12 @@ jik_impl_fs_read_dir_next(jik_impl_fs_Dir *dir, JikRegion *a, JikError *e)
     }
 #else
     for (;;) {
+        errno = 0;
         struct dirent *entry = readdir(dir->dir);
         if (!entry) {
+            if (errno != 0) {
+                jik_error_set(e, 1, "fs::read_dir: could not read directory");
+            }
             dir->done = true;
             return jik_string_new("", a);
         }
