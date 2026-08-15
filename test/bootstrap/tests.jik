@@ -1,0 +1,10 @@
+use "jik/testing" as test
+
+use "test_lexer"
+
+
+func main():
+    ts := test::suite_new()
+    test_lexer::run_tests(ts)
+    test::suite_finish(ts)
+end

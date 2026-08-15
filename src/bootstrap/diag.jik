@@ -1,0 +1,56 @@
+use "source"
+
+
+enum MessageLevel:
+    ERROR
+    WARNING
+end
+
+struct Message:
+    level: MessageLevel
+    summary: String
+    detail: String
+    span: Option[source::Span]
+end
+
+struct Diagnostics:
+    messages: Vec[Message]
+    error_count: int
+end
+
+
+func new_message(level: MessageLevel, summary: String, detail: String, span: Option[source::Span], r: Region) -> Message:
+    return Message{
+        level = level,
+        summary = copy(summary, r),
+        detail = copy(detail, r),
+        span = span
+    }[r]
+end
+
+
+func error(diag: Diagnostics, summary: String, detail: String, span: Option[source::Span]) -> void:
+    message := new_message(MessageLevel.ERROR, summary, detail, span, .diag)
+    diag.messages.push(message)
+    diag.error_count += 1
+end
+
+
+func level_name(level: MessageLevel, r: Region) -> String:
+    if level == MessageLevel.ERROR:
+        return "error"[r]
+    end
+    return "warning"[r]
+end
+
+
+func print_message(message: Message) -> void:
+    println("jik ", level_name(message.level, .message), ": ", message.summary, "\n    ", message.detail)
+end
+
+
+func print_all(diag: Diagnostics) -> void:
+    for m in diag.messages:
+        print_message(m)
+    end
+end

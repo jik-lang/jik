@@ -940,6 +940,21 @@ jik_check_region_integrity(JikNode *ast)
                     }
                     continue;
                 }
+                if (jik_is_builtin_call_named(nd, "error_msg")) {
+                    JikAllocSpec spec;
+                    if (VecJikNode_size(nd->val_call.args) == 0) {
+                        spec = (JikAllocSpec){.kind = JIK_ALLOC_LOCAL,
+                                              .src = JIK_ALLOC_SRC_LOCAL};
+                    }
+                    else {
+                        JikNode *reg_arg = VecJikNode_get(nd->val_call.args, 0);
+                        spec             = get_expression_alloc_spec(reg_arg, spec_tab);
+                    }
+                    if (jik_alloc_spec_complete(spec)) {
+                        nd->val_call.alloc_spec = spec;
+                    }
+                    continue;
+                }
                 if (jik_is_builtin_call_named(nd, "pop")) {
                     JikNode     *vec  = VecJikNode_get(nd->val_call.args, 0);
                     JikAllocSpec spec = get_expression_alloc_spec(vec, spec_tab);

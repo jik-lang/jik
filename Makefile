@@ -34,9 +34,11 @@ endif
 
 
 TARGET      = jik$(EXE)
+BOOTSTRAP_TARGET = jik1$(EXE)
 
 OBJ_DIR  = obj
 SRC_DIR  = src/jik
+BOOTSTRAP_DIR = src/bootstrap
 
 BIN_DIR = release
 ARTIFACT_DIR = artifacts
@@ -55,7 +57,7 @@ CORE_OBJS := $(filter-out $(OBJ_DIR)/jik.o,$(OBJS))
 DEPS = $(OBJS:.o=.d) $(TEST_OBJS:.o=.d)
 ARCHIVE_BASENAME = jik-$(VERSION)-$(PLATFORM)-$(ARCH)
 
-.PHONY: all run test clean ensuredirs testlang release release-archive force-version
+.PHONY: all run test test-core test-bootstrap bootstrap clean ensuredirs testlang release release-archive force-version
 
 all: ensuredirs $(TARGET)
 
@@ -77,8 +79,16 @@ $(OBJ_DIR)/test_%.o: $(TEST_DIR)/%.c
 run: $(TARGET)
 	$(RUN)
 
-test:
+bootstrap: ensuredirs $(TARGET)
+	$(RUN) build $(BOOTSTRAP_DIR)/main.jik --out $(BOOTSTRAP_TARGET)
+
+test: test-core
+
+test-core: $(TARGET)
 	$(RUN) run test/jik/tests.jik
+
+test-bootstrap: $(TARGET)
+	$(RUN) run test/bootstrap/tests.jik
 
 testlang: ensuredirs $(TEST_TARGET)
 
@@ -87,7 +97,7 @@ $(TEST_TARGET): $(CORE_OBJS) $(TEST_OBJS)
 
 
 clean:
-	$(RM) $(OBJ_DIR)/* $(TARGET) $(TEST_TARGET)
+	$(RM) $(OBJ_DIR)/* $(TARGET) $(BOOTSTRAP_TARGET) $(TEST_TARGET)
 	$(RMDIR) $(OBJ_DIR)
 	$(RMDIR) $(BIN_DIR)
 	$(RMDIR) $(ARTIFACT_DIR)

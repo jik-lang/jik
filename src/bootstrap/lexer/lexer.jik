@@ -1,0 +1,135 @@
+use "jik/char"
+use "jik/string"
+
+use "../source"
+use "token"
+
+
+struct Lexer:
+	file: source::SourceFile
+	pos: int
+end
+
+
+func new(file: source::SourceFile, r: Region) -> Lexer:
+	return Lexer{file = file, pos = 0}[r]
+end
+
+
+func at_end(l: Lexer) -> bool:
+	return l.pos >= len(l.file.text)
+end
+
+
+func peek(l: Lexer) -> Option[char]:
+	if l.at_end():
+		return None[.l]
+	end
+	return Some{l.file.text[l.pos]}[.l]
+end
+
+
+func advance(l: Lexer) -> void:
+	l.pos += 1
+end
+
+
+func is_whitespace(ch: char) -> bool:
+	return ch == ' ' or ch == '\t' or ch == '\r'
+end
+
+
+func is_identifier_start(ch: char) -> bool:
+	return char::isalpha(ch) or ch == '_'
+end
+
+
+func valid_identifier_char(ch: char) -> bool:
+	return char::isalnum(ch) or ch == '_'
+end
+
+
+func span(l: Lexer, start: int, stop: int, r: Region) -> source::Span:
+	return source::Span{source_id = l.file.id, start = start, stop = stop}[r]
+end
+
+
+func get_identifier_type(l: Lexer, start: int, stop: int, r: Region) -> token::TokenType:
+	text := must string::slice(l.file.text, start, stop, r)
+	if text == "func":
+		return token::TokenType.KWD_FUNC
+	end
+	return token::TokenType.IDENTIFIER
+end
+
+
+func scan_integer(l: Lexer, r: Region) -> token::Token:
+    start := l.pos
+	while not l.at_end():
+        ch := l.peek()?
+        if not char::isdigit(ch):
+            break
+		end
+        l.advance()
+    end
+	return token::Token{type = token::TokenType.INTEGER, span = l.span(start, l.pos, r)}[r]
+end
+
+
+func scan_identifier_or_keyword(l: Lexer, r: Region) -> token::Token:
+	start := l.pos
+	while not l.at_end():
+		ch := l.peek()?
+		if not valid_identifier_char(ch):
+			break
+		end
+		l.advance()
+	end
+	return token::Token{type = get_identifier_type(l, start, l.pos, r), span = l.span(start, l.pos, r)}[r]
+end
+
+
+func next_token(l: Lexer, r: Region) -> token::Token:
+	while not l.at_end():
+		ch := l.peek()?
+		if is_whitespace(ch):
+			l.advance()
+			continue
+		end
+
+		start := l.pos
+		if ch == '\n':
+			l.advance()
+			return token::Token{type = token::TokenType.NEWLINE, span = l.span(start, l.pos, r)}[r]
+		elif ch == '=':
+			l.advance()
+			return token::Token{type = token::TokenType.ASSIGN, span = l.span(start, l.pos, r)}[r]
+		elif char::isdigit(ch):
+			return l.scan_integer(r)
+		elif is_identifier_start(ch):
+			return l.scan_identifier_or_keyword(r)
+		else:
+			l.advance()
+			return token::Token{type = token::TokenType.ERROR, span = l.span(start, l.pos, r)}[r]
+		end
+	end
+	return token::Token{type = token::TokenType.EOF, span = l.span(l.pos, l.pos, r)}[r]
+end
+
+
+func lex(l: Lexer, r: Region) -> Vec[token::Token]:
+	tokens: Vec[token::Token][r]
+	t := l.next_token(r)
+	while t.type != token::TokenType.EOF:
+		tokens.push(t)
+		t = l.next_token(r)
+	end
+    tokens.push(t)
+	return tokens
+end
+
+
+func tokenize(file: source::SourceFile, r: Region) -> Vec[token::Token]:
+	lexer := new(file, r)
+	return lexer.lex(r)
+end

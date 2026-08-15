@@ -1,0 +1,27 @@
+use "jik/io"
+use "jik/fs"
+
+
+struct SourceFile:
+    id: int
+    path: String
+    text: String
+    line_starts: Vec[int]
+end
+
+
+struct Span:
+    source_id: int
+    start: int
+    stop: int
+end
+
+
+throws func new_from_file(id: int, foreign path: String, r: Region) -> SourceFile:
+    text := try io::read_file(path, r)
+    return SourceFile{
+        id = id,
+        path = copy(path, r),
+        text = text
+    }[r]
+end

@@ -1,0 +1,18 @@
+use "../source"
+
+
+enum TokenType:
+	INTEGER
+	IDENTIFIER	
+	ASSIGN
+	NEWLINE
+	KWD_FUNC
+	ERROR
+	EOF
+end
+
+
+struct Token:
+	type: TokenType
+	span: source::Span
+end

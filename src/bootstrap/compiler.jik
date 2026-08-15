@@ -1,0 +1,6 @@
+use "diag"
+
+
+struct Compiler:
+    diagnostics: diag::Diagnostics
+end

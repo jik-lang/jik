@@ -1,0 +1,90 @@
+use "jik/testing" as test
+
+use "../../src/bootstrap/lexer/lexer" as lex
+use "../../src/bootstrap/lexer/token"
+use "../../src/bootstrap/source"
+
+
+func lex_source(text: String, source_id: int, r: Region) -> Vec[token::Token]:
+    file := source::SourceFile{id = source_id, path = "<test>", text = text}[r]
+    return lex::tokenize(file, r)
+end
+
+
+func test_empty_input(ts):
+    tokens := lex_source("", 0, _)
+    test::suite_assert(ts, len(tokens) == 1, site())
+    test::suite_assert(ts, tokens[0].type == token::TokenType.EOF, site())
+    test::suite_assert(ts, tokens[0].span.source_id == 0, site())
+    test::suite_assert(ts, tokens[0].span.start == 0, site())
+    test::suite_assert(ts, tokens[0].span.stop == 0, site())
+end
+
+
+func test_integers_and_offsets(ts):
+    tokens := lex_source("  12 333", 42, _)
+    test::suite_assert(ts, len(tokens) == 3, site())
+
+    test::suite_assert(ts, tokens[0].type == token::TokenType.INTEGER, site())
+    test::suite_assert(ts, tokens[0].span.source_id == 42, site())
+    test::suite_assert(ts, tokens[0].span.start == 2, site())
+    test::suite_assert(ts, tokens[0].span.stop == 4, site())
+
+    test::suite_assert(ts, tokens[1].type == token::TokenType.INTEGER, site())
+    test::suite_assert(ts, tokens[1].span.source_id == 42, site())
+    test::suite_assert(ts, tokens[1].span.start == 5, site())
+    test::suite_assert(ts, tokens[1].span.stop == 8, site())
+    test::suite_assert(ts, tokens[2].type == token::TokenType.EOF, site())
+    test::suite_assert(ts, tokens[2].span.source_id == 42, site())
+    test::suite_assert(ts, tokens[2].span.start == 8, site())
+    test::suite_assert(ts, tokens[2].span.stop == 8, site())
+end
+
+
+func test_identifiers_and_keywords(ts):
+    tokens := lex_source("func hello_123 function", 1, _)
+    test::suite_assert(ts, len(tokens) == 4, site())
+
+    test::suite_assert(ts, tokens[0].type == token::TokenType.KWD_FUNC, site())
+    test::suite_assert(ts, tokens[0].span.start == 0, site())
+    test::suite_assert(ts, tokens[0].span.stop == 4, site())
+
+    test::suite_assert(ts, tokens[1].type == token::TokenType.IDENTIFIER, site())
+    test::suite_assert(ts, tokens[1].span.start == 5, site())
+    test::suite_assert(ts, tokens[1].span.stop == 14, site())
+
+    test::suite_assert(ts, tokens[2].type == token::TokenType.IDENTIFIER, site())
+    test::suite_assert(ts, tokens[2].span.start == 15, site())
+    test::suite_assert(ts, tokens[2].span.stop == 23, site())
+    test::suite_assert(ts, tokens[3].type == token::TokenType.EOF, site())
+end
+
+
+func test_newline_and_error(ts):
+    tokens := lex_source("\n=@", 7, _)
+    test::suite_assert(ts, len(tokens) == 4, site())
+    test::suite_assert(ts, tokens[0].type == token::TokenType.NEWLINE, site())
+    test::suite_assert(ts, tokens[0].span.source_id == 7, site())
+    test::suite_assert(ts, tokens[0].span.start == 0, site())
+    test::suite_assert(ts, tokens[0].span.stop == 1, site())
+
+    test::suite_assert(ts, tokens[1].type == token::TokenType.ASSIGN, site())
+    test::suite_assert(ts, tokens[1].span.start == 1, site())
+    test::suite_assert(ts, tokens[1].span.stop == 2, site())
+
+    test::suite_assert(ts, tokens[2].type == token::TokenType.ERROR, site())
+    test::suite_assert(ts, tokens[2].span.start == 2, site())
+    test::suite_assert(ts, tokens[2].span.stop == 3, site())
+
+    test::suite_assert(ts, tokens[3].type == token::TokenType.EOF, site())
+    test::suite_assert(ts, tokens[3].span.start == 3, site())
+    test::suite_assert(ts, tokens[3].span.stop == 3, site())
+end
+
+
+func run_tests(ts):
+	test_empty_input(ts)
+	test_integers_and_offsets(ts)
+	test_identifiers_and_keywords(ts)
+	test_newline_and_error(ts)
+end

@@ -44,6 +44,10 @@ func test_error(ts):
         test::suite_assert(ts, false, site())
     except:
         test::suite_assert(ts, true, site())
+        message := error_msg(_)
+        message_auto := error_msg()
+        test::suite_assert(ts, message == "division by 0", site())
+        test::suite_assert(ts, message_auto == "division by 0", site())
         test::suite_assert(ts, error_msg(_) == "division by 0", site())
         test::suite_assert(ts, error_msg() == "division by 0", site())
         test::suite_assert(ts, error_code() == 1, site())
