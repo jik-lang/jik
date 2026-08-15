@@ -1,3 +1,4 @@
+use "jik/argparse" as ap
 use "jik/strbuf"
 
 use "command"
@@ -32,7 +33,21 @@ end
 func _append_spaces(sb: strbuf::StrBuf, count: int) -> void:
     i := 0
     while i < count:
-        strbuf::append(sb, " ")
+        strbuf::append_char(sb, ' ')
         i += 1
     end
+end
+
+
+func make_parser(r: Region) -> ap::Parser:
+    parser := ap::new("jik help", r)
+    ap::add_positional(parser, "topic", "Show help for a command or documentation topic.")
+    return parser
+end
+
+
+func run(args: Vec[String]):
+    p := make_parser()
+    res := must ap::parse(p, args)
+    println(res)
 end

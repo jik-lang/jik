@@ -1,3 +1,5 @@
+use "jik/argparse" as ap
+
 use "help"
 
 
@@ -7,7 +9,11 @@ func run(args: Vec[String]) -> void:
         return
     end
 
-    if len(args) == 2 and args[1] == "help":
-        println(help::format_help())
+    if args[1] == "help":
+        if len(args) == 2:
+            println(help::format_help())
+        else:
+            help::run(args[2:])
+        end
     end
 end

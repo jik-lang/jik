@@ -5,5 +5,6 @@ end
 
 
 COMMANDS := [
+    Command{name = "help", summary = "show help for command or topic"},
     Command{name = "tran", summary = "translate Jik source to C"}
 ]
