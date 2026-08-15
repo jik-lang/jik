@@ -1,0 +1,13 @@
+use "help"
+
+
+func run(args: Vec[String]) -> void:
+    if len(args) == 1:
+        println(help::format_help())
+        return
+    end
+
+    if len(args) == 2 and args[1] == "help":
+        println(help::format_help())
+    end
+end

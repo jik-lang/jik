@@ -1,0 +1,9 @@
+struct Command:
+    name: String
+    summary: String
+end
+
+
+COMMANDS := [
+    Command{name = "tran", summary = "translate Jik source to C"}
+]

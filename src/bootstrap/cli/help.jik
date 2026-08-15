@@ -1,0 +1,38 @@
+use "jik/strbuf"
+
+use "command"
+
+
+func format_help(r: Region) -> String:
+    sb := strbuf::new("", r)
+    strbuf::append(sb, "The command-line toolchain for the Jik programming language.\n\n")
+    strbuf::append(sb, "Usage:\n\n")
+    strbuf::append(sb, "    jik <command> [<args>...] [--<option> [<value>]]...\n\n")
+    strbuf::append(sb, "Available commands:\n\n")
+
+    width := 12
+    for command in command::COMMANDS:
+        if len(command.name) > width:
+            width = len(command.name)
+        end
+    end
+
+    for command in command::COMMANDS:
+        strbuf::append(sb, "    ")
+        strbuf::append(sb, command.name)
+        _append_spaces(sb, width - len(command.name) + 2)
+        strbuf::append(sb, command.summary)
+        strbuf::append(sb, "\n")
+    end
+
+    return strbuf::to_string(sb, r)
+end
+
+
+func _append_spaces(sb: strbuf::StrBuf, count: int) -> void:
+    i := 0
+    while i < count:
+        strbuf::append(sb, " ")
+        i += 1
+    end
+end

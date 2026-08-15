@@ -1,27 +1,6 @@
-use "jik/fs"
-
-use "source"
-use "diag"
+use "cli/cli"
 
 
 func main(args):
-	diagnostics := diag::Diagnostics{}
-
-	if len(args) == 1:
-		println("todo: show help")
-		return 0
-	end
-
-	command := args[1]
-	if command == "tran":
-		if len(args) == 2:
-			diagnostics.error("no input file", "type `jik help` for help", None)
-			diagnostics.print_all()
-			return 1
-		end
-	else:
-		diagnostics.error("unknown command", "type `jik help` for help", None)
-		diagnostics.print_all()
-		return 1
-	end
+	cli::run(args)
 end
