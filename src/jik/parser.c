@@ -184,12 +184,14 @@ jik_parser_parse_vector_literal(JikParser *p)
     if (jik_parser_current_token(p)->type == TOK_KWD_OF) {
         jik_parser_eat_token(p, TOK_KWD_OF);
         JikNode *elem_expr = jik_parser_parse_expr(p);
+        jik_parser_eat_newlines_if_found(p);
         jik_parser_eat_token(p, TOK_RANG);
         p->container_depth--;
         return jik_node_new_vector(size_expr, elem_expr, NULL, jik_parser_current_context(p), tok);
     }
     VecJikNode *init_elems = VecJikNode_new_empty();
     VecJikNode_push(init_elems, size_expr);
+    jik_parser_eat_newlines_if_found(p);
     while (jik_parser_current_token(p)->type != TOK_RANG) {
         jik_parser_eat_token(p, TOK_COMMA);
         jik_parser_eat_newlines_if_found(p);

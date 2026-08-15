@@ -63,6 +63,21 @@ func test_vec_05(ts):
     test::suite_assert(ts, v1[1][2] == 6, site())
 end
 
+func test_vec_multiline_literals(ts):
+    points := [
+        point::Point{x = 3, y = 2}
+    ]
+    test::suite_assert(ts, len(points) == 1, site())
+    test::suite_assert(ts, points[0].x == 3, site())
+    test::suite_assert(ts, points[0].y == 2, site())
+
+    copies := [2 of point::Point{x = 5, y = 4}
+    ]
+    test::suite_assert(ts, len(copies) == 2, site())
+    test::suite_assert(ts, copies[0].x == 5, site())
+    test::suite_assert(ts, copies[1].y == 4, site())
+end
+
 func test_vec_slice(ts):
     values := [10, 20, 30, 40, 50]
     middle := values[1:4]
@@ -101,6 +116,7 @@ func run_tests(ts):
     test_vec_03(ts)
     test_vec_04(ts)
     test_vec_05(ts)
+    test_vec_multiline_literals(ts)
     test_vec_slice(ts)
     test_vec_indexed_iteration(ts)
 end
