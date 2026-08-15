@@ -54,10 +54,16 @@ extern throws func jik_impl_io_write as
 /// @param region Allocation region for file handle state and the returned string.
 /// @returns Full file contents.
 throws func read_file(foreign path: String, region: Region) -> String:
-    f := must open(path, "r", region)
-    text := must read(f, region)
-    must close(f)
-    return text
+    f := try open(path, "r", region)
+    try text := read(f, region):
+        try close(f)
+        return text
+    except:
+        msg := error_msg(region)
+        code := error_code()
+        must close(f)
+        fail(msg, code)
+    end
 end
 
 /// Write a string to a file by path, truncating existing contents.
@@ -66,9 +72,15 @@ end
 /// @param text String to write.
 /// @param region Allocation region for file handle state.
 throws func write_file(foreign path: String, foreign text: String, region: Region) -> void:
-    f := must open(path, "w", region)
-    must write(f, text)
-    must close(f)
+    f := try open(path, "w", region)
+    try write(f, text):
+        try close(f)
+    except:
+        msg := error_msg(region)
+        code := error_code()
+        must close(f)
+        fail(msg, code)
+    end
 end
 
 // -------------------------------------------------------------
