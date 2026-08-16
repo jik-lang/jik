@@ -114,6 +114,17 @@ Create an empty argument parser with a program name for generated help.
 
 ---
 
+### `set_description(parser: Parser, description: String)`
+
+Set the prose description shown before the generated usage section.
+
+**Parameters**
+
+1. `parser: Parser` - Parser to configure.
+2. `description: String` - Description shown before the usage section. Foreign parameter.
+
+---
+
 ### `throws parse(parser: Parser, args: Vec[String], r: Region) -> ParseResult`
 
 Parse command-line arguments into a result.

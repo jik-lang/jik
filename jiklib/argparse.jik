@@ -26,6 +26,7 @@ end
 /// Configured parser.
 struct Parser:
     _name: String
+    _description: String
     _positionals: Vec[_ArgSpec]
     _options: Vec[ArgumentOption]
 end
@@ -90,6 +91,14 @@ func new(foreign name: String, r: Region) -> Parser:
     parser := Parser{}[r]
     parser._name = copy(name, .parser)
     return parser
+end
+
+/// Set the prose description shown before generated help usage.
+///
+/// @param parser Parser to configure.
+/// @param description Description shown before the usage section.
+func set_description(parser: Parser, foreign description: String):
+    parser._description = copy(description, .parser)
 end
 
 /// Add a required positional argument.
@@ -303,6 +312,10 @@ end
 /// @returns Help text.
 func format_help(foreign parser: Parser, r: Region) -> String:
     sb := strbuf::new("", r)
+    if len(parser._description) > 0:
+        strbuf::append(sb, parser._description)
+        strbuf::append(sb, "\n\n")
+    end
     strbuf::append(sb, "Usage:\n  ")
     strbuf::append(sb, parser._name)
     for positional in parser._positionals:

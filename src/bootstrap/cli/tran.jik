@@ -3,6 +3,7 @@ use "jik/argparse" as ap
 
 func make_parser(r: Region) -> ap::Parser:
     parser := ap::new("jik tran", r)
+    ap::set_description(parser, "Translate a Jik source file to C.")
     ap::add_positional(parser, "input", "Input file")
     return parser
 end

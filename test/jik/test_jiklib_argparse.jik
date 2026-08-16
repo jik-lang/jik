@@ -107,6 +107,17 @@ func test_help(ts):
     test::suite_assert(ts, string::find(long_only_help, ", --verbose") == -1, site())
 end
 
+func test_help_description(ts):
+    parser := argparse::new("tool", _)
+    argparse::set_description(parser, "Convert an input file to a result.")
+
+    help := argparse::format_help(parser, _)
+    description_index := string::find(help, "Convert an input file to a result.")
+    usage_index := string::find(help, "Usage:")
+    test::suite_assert(ts, description_index == 0, site())
+    test::suite_assert(ts, usage_index > description_index, site())
+end
+
 func test_parse_errors(ts):
     unknown := argparse::new("tool", _)
     argparse::add_positional(unknown, "input", "Input file.")
@@ -141,5 +152,6 @@ func run_tests(ts):
     test_lone_dash_is_positional(ts)
     test_parse_results_are_independent(ts)
     test_help(ts)
+    test_help_description(ts)
     test_parse_errors(ts)
 end
