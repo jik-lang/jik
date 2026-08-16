@@ -1,4 +1,7 @@
 use "jik/argparse" as ap
+use "jik/fs"
+
+use "../compiler"
 
 
 func make_parser(r: Region) -> ap::Parser:
@@ -6,4 +9,12 @@ func make_parser(r: Region) -> ap::Parser:
     ap::set_description(parser, "Translate a Jik source file to C.")
     ap::add_positional(parser, "input", "Input file")
     return parser
+end
+
+
+throws func run(args: Vec[String]):
+    p := make_parser()
+    res := try ap::parse(p, args)
+    input_file := res.positionals["input"]?
+    try compiler::run(input_file)
 end

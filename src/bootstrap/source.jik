@@ -10,6 +10,24 @@ struct SourceFile:
 end
 
 
+struct SourceManager:
+    source_cnt: int
+    sources: Vec[SourceFile]
+end
+
+
+throws func add_source(sm: SourceManager, foreign path: String):
+    text := try io::read_file(path, .sm)
+    sf := SourceFile{
+        id = sm.source_cnt,
+        path = copy(path, .sm),
+        text = text
+    }[.sm]
+    sm.sources.push(sf)
+    sm.source_cnt += 1
+end
+
+
 struct Span:
     source_id: int
     start: int

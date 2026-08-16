@@ -1,0 +1,8 @@
+use "source"
+use "lexer/token"
+
+
+struct Module:
+    source: source::SourceFile
+    tokens: Vec[token::Token]
+end

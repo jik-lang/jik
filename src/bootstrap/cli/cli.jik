@@ -1,6 +1,7 @@
 use "jik/argparse" as ap
 
 use "help"
+use "tran"
 
 
 throws func run(args: Vec[String]) -> void:
@@ -9,13 +10,19 @@ throws func run(args: Vec[String]) -> void:
         return
     end
 
-    if args[1] == "help":
+    command := args[1]
+    if command == "help":
         if len(args) == 2:
             println(help::format_help())
         else:
             try help::run(args[2:])
         end
+    elif command == "tran":
+        if len(args) == 2:
+            fail("missing positionals, type `jik help tran` for help")
+        end
+        try tran::run(args[2:])
     else:
-        fail(concat("unknown command: ", args[1]))
+        fail(concat("unknown command: ", command))
     end
 end

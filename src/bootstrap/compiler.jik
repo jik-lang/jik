@@ -1,6 +1,25 @@
 use "diag"
+use "source"
+use "module"
+use "lexer/lexer"
 
 
 struct Compiler:
     diagnostics: diag::Diagnostics
+    src_mngr: source::SourceManager
+    modules: Vec[module::Module]
+end
+
+
+throws func run(input: String):
+    comp := Compiler{}
+    try comp.src_mngr.add_source(input)
+
+    modules: Vec[module::Module]
+    modules.push(module::Module{source = comp.src_mngr.sources[0]})
+    while len(modules) > 0:
+        module := modules.pop()
+        tokens := lexer::tokenize(module.source)
+    end
+
 end
