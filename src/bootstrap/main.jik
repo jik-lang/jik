@@ -2,5 +2,10 @@ use "cli/cli"
 
 
 func main(args):
-	cli::run(args)
+	try cli::run(args):
+		return 0
+	except:
+		println("jik error: ", error_msg())
+		return 1
+	end
 end

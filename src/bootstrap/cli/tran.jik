@@ -1,0 +1,8 @@
+use "jik/argparse" as ap
+
+
+func make_parser(r: Region) -> ap::Parser:
+    parser := ap::new("jik tran", r)
+    ap::add_positional(parser, "input", "Input file")
+    return parser
+end

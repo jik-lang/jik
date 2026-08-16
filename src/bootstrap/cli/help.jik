@@ -2,6 +2,7 @@ use "jik/argparse" as ap
 use "jik/strbuf"
 
 use "command"
+use "tran"
 
 
 func format_help(r: Region) -> String:
@@ -46,8 +47,15 @@ func make_parser(r: Region) -> ap::Parser:
 end
 
 
-func run(args: Vec[String]):
+throws func run(args: Vec[String]):
     p := make_parser()
-    res := must ap::parse(p, args)
-    println(res)
+    res := try ap::parse(p, args)
+    topic := res.positionals["topic"]?
+    if topic == "help":
+        println(ap::format_help(p))
+    elif topic == "tran":
+        println(ap::format_help(tran::make_parser()))
+    else:
+        fail(concat("unknown help topic: ", topic))
+    end
 end

@@ -3,7 +3,7 @@ use "jik/argparse" as ap
 use "help"
 
 
-func run(args: Vec[String]) -> void:
+throws func run(args: Vec[String]) -> void:
     if len(args) == 1:
         println(help::format_help())
         return
@@ -13,7 +13,9 @@ func run(args: Vec[String]) -> void:
         if len(args) == 2:
             println(help::format_help())
         else:
-            help::run(args[2:])
+            try help::run(args[2:])
         end
+    else:
+        fail(concat("unknown command: ", args[1]))
     end
 end
