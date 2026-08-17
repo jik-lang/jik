@@ -1,5 +1,5 @@
 use "jik/io"
-use "jik/fs"
+use "jik/path"
 
 
 struct SourceFile:
@@ -18,9 +18,10 @@ end
 
 throws func add_source(sm: SourceManager, foreign path: String):
     text := try io::read_file(path, .sm)
+    normalized := path::normalize(path, .sm)
     sf := SourceFile{
         id = sm.source_cnt,
-        path = copy(path, .sm),
+        path = normalized,
         text = text
     }[.sm]
     sm.sources.push(sf)
@@ -32,14 +33,4 @@ struct Span:
     source_id: int
     start: int
     stop: int
-end
-
-
-throws func new_from_file(id: int, foreign path: String, r: Region) -> SourceFile:
-    text := try io::read_file(path, r)
-    return SourceFile{
-        id = id,
-        path = copy(path, r),
-        text = text
-    }[r]
 end

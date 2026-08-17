@@ -1,0 +1,32 @@
+use "../surce"
+
+
+struct Node:
+    span: source::Span
+    data: NodeData
+end
+
+
+variant NodeData:
+    INTEGER
+    BINOP: NodeBinop
+end
+
+
+struct NodeBinop:
+    left: int
+    right: int
+    op: String
+end
+
+
+struct Ast:
+    nodes: Vec[Node]
+end
+
+
+func add(ast: Ast, span: source::Span, data: NodeData) -> int:
+    id := len(ast.nodes)
+    push(ast.nodes, Node{span = span, data = data})
+    return id
+end
