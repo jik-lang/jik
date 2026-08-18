@@ -37,6 +37,24 @@ func is_on(s):
 end
 ```
 
+When code needs to handle every possible enum value, use an exhaustive `match`. Every enum member
+must be handled exactly once, so adding a new member makes affected matches fail at compile time
+until they are updated.
+
+```jik
+func signal_name(s: State, r: Region) -> String:
+    match s:
+        case State.ON:
+            return "on"[r]
+        case State.OFF:
+            return "off"[r]
+    end
+end
+```
+
+Enum cases must be qualified, including for imported enums. `case State.ON:` is valid; bare
+`case ON:` is not.
+
 Use enums when the possible values are known in advance and do not need to carry additional data.
 If each case needs associated values, variants are the more general construct.
 

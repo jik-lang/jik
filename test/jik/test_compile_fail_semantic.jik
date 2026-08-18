@@ -272,6 +272,160 @@ end
         "receiver does not match the first parameter")
 end
 
+func test_compile_fail_19(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+    GREEN
+end
+
+func main():
+    color := Color.RED
+    match color:
+        case Color.RED:
+            println("red")
+    end
+end
+""",
+        "match does not exhaust enum Color; missing Color.GREEN")
+end
+
+func test_compile_fail_20(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+    GREEN
+end
+
+func main():
+    color := Color.RED
+    match color:
+        case Color.RED:
+            println("red")
+        case Color.RED:
+            println("red again")
+        case Color.GREEN:
+            println("green")
+    end
+end
+""",
+        "duplicate enum case: Color.RED")
+end
+
+func test_compile_fail_21(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+end
+
+func main():
+    color := Color.RED
+    match color:
+        case Color.BLUE:
+            println("blue")
+    end
+end
+""",
+        "unknown enum member in match for Color: BLUE")
+end
+
+func test_compile_fail_22(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+end
+
+enum Mode:
+    RED
+end
+
+func main():
+    color := Color.RED
+    match color:
+        case Mode.RED:
+            println("wrong")
+    end
+end
+""",
+        "wrong enum type in match: expected Color, got Mode")
+end
+
+func test_compile_fail_23(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+end
+
+func main():
+    color := Color.RED
+    match color:
+        case Color.RED{value}:
+            println(value)
+    end
+end
+""",
+        "enum case cannot bind a payload")
+end
+
+func test_compile_fail_24(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+end
+
+func main():
+    color := Color.RED
+    match color:
+        case RED:
+            println("red")
+    end
+end
+""",
+        "expected qualified enum or variant case")
+end
+
+func test_compile_fail_25(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    match 1:
+        case Number.ONE:
+            println("one")
+    end
+end
+""",
+        "expected enum or variant instance")
+end
+
+func test_compile_fail_26(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Choice:
+    FIRST: int
+    SECOND
+end
+
+func main():
+    choice := Choice.FIRST{1}
+    match choice:
+        case Choice.FIRST{value}:
+            println(value)
+        case Choice.FIRST{value}:
+            println(value)
+        case Choice.SECOND:
+            println("second")
+    end
+end
+""",
+        "duplicate variant case: Choice.FIRST")
+end
+
 func run_tests(ts):
     test_compile_fail_01(ts)
     test_compile_fail_02(ts)
@@ -291,4 +445,12 @@ func run_tests(ts):
     test_compile_fail_16(ts)
     test_compile_fail_17(ts)
     test_compile_fail_18(ts)
+    test_compile_fail_19(ts)
+    test_compile_fail_20(ts)
+    test_compile_fail_21(ts)
+    test_compile_fail_22(ts)
+    test_compile_fail_23(ts)
+    test_compile_fail_24(ts)
+    test_compile_fail_25(ts)
+    test_compile_fail_26(ts)
 end

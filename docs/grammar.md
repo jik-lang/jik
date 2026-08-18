@@ -352,13 +352,18 @@ match_stmt ::= "match" expr ":" newline
                "end"
 
 case_clause ::= "case" variant_pattern ":" newline block
+              | "case" enum_pattern ":" newline block
 variant_pattern ::= qualified_identifier "." identifier
                   | qualified_identifier "." identifier "{" identifier "}"
+enum_pattern ::= qualified_identifier "." identifier
 ```
 
 Current implementation note:
 
-- `case Value.TAG{x}:` binds a payload, while `case Value.TAG:` matches a payloadless tag.
+- `case Value.TAG{x}:` binds a variant payload, while `case Value.TAG:` matches a payloadless
+  variant tag or an enum member.
+- The matched value determines whether a qualified case denotes a variant tag or enum member.
+  Enum matches require every member exactly once and do not permit payload bindings.
 
 ## Expressions
 

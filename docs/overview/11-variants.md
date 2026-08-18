@@ -63,7 +63,8 @@ assert(v3 is Value.INT)
 
 ### 11.4 Pattern matching on variants
 
-Jik also supports `match` for more concise variant handling:
+Jik supports `match` for more concise handling of variants and enums. A variant match uses tag
+patterns and can bind payloads:
 
 ```jik
 func handle(val):
@@ -92,8 +93,8 @@ instead of a `variant`.
 When printed, variants show their type, active tag, and payload when present: for example,
 `<Value INT=7>` and `<Value EOF>`.
 
-It is important to note that `match` is exhaustive, which means it requires all tags to be treated
-by a respective `case`, otherwise there is a compile error.
+It is important to note that `match` is exhaustive, which means it requires every variant tag or
+enum member to be handled by a respective `case`, otherwise there is a compile error.
 
 Variants can be placed freely into vectors, dictionaries, and other structs, and behave as regular values.
 

@@ -85,6 +85,7 @@ jik_codegen_init(JikCodeGenerator *cg, JikContext *ctx)
     cg->defined_option_types         = TabBool_new();
     cg->defined_copy_types           = TabBool_new();
     cg->arg_vec = ctx->args_type ? jik_codegen_make_console_arg_vec(ctx) : NULL;
+    cg->match_temp_id = 0;
     jik_writer_init(&cg->cw);
 }
 
@@ -1224,20 +1225,29 @@ jik_codegen_emit_stmnt_continue(JikCodeGenerator *cg, JikNode *nd)
 static void
 jik_codegen_emit_stmnt_match(JikCodeGenerator *cg, JikNode *nd)
 {
-    char  *var_expr = jik_codegen_emit_expression(cg, nd->val_match.expr);
-    size_t n        = VecJikNode_size(nd->val_match.cases);
+    char  *match_expr = jik_codegen_emit_expression(cg, nd->val_match.expr);
+    char  *match_name = JIK_STRING_NCAT("jik__match_", size_t_to_string(cg->match_temp_id++));
+    char  *match_type = nd->val_match.expr->jik_type->C_name;
+    bool   is_variant = nd->val_match.expr->jik_type->name == TYPE_VARIANT;
+    size_t n          = VecJikNode_size(nd->val_match.cases);
     assert(n > 0);
+    assert(match_type);
+    jik_writer_begin_block(&cg->cw, "{");
+    jik_writer_write_line(
+        &cg->cw, JIK_STRING_NCAT(match_type, " ", match_name, " = ", match_expr, ";"));
     for (size_t i = 0; i < n; i++) {
         char    *prefix   = i == 0 ? "" : "else ";
         JikNode *case_nd  = VecJikNode_get(nd->val_match.cases, i);
         JikNode *var_node = case_nd->val_case.variant;
-        char    *enum_mangled_name =
-            var_node->val_variant_new.variant_node->val_variant.enum_nd->jik_type->mangled_name;
+        char    *enum_mangled_name = is_variant
+                                         ? var_node->val_variant_new.variant_node->val_variant.enum_nd->jik_type->mangled_name
+                                         : nd->val_match.expr->jik_type->mangled_name;
         char *tag_name = JIK_STRING_NCAT(enum_mangled_name, "_", var_node->val_variant_new.tag);
-        jik_writer_write_line(
-            &cg->cw, JIK_STRING_NCAT(prefix, "if (", var_expr, "->tag == ", tag_name, ") {"));
+        char *condition = is_variant ? JIK_STRING_NCAT(match_name, "->tag == ", tag_name)
+                                     : JIK_STRING_NCAT(match_name, " == ", tag_name);
+        jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(prefix, "if (", condition, ") {"));
         jik_writer_indent(&cg->cw);
-        if (var_node->val_variant_new.init_expr &&
+        if (is_variant && var_node->val_variant_new.init_expr &&
             var_node->val_variant_new.init_expr->type == NODE_EXPR_IDENTIFIER) {
             char    *local_name = var_node->val_variant_new.init_expr->val_id.name;
             JikNode *s = jik_scope_get_local_symbol(case_nd->val_case.body->context, local_name);
@@ -1248,7 +1258,7 @@ jik_codegen_emit_stmnt_match(JikCodeGenerator *cg, JikNode *nd)
                                                   " ",
                                                   local_name,
                                                   " = ",
-                                                  var_expr,
+                                                  match_name,
                                                   "->val.",
                                                   var_node->val_variant_new.tag,
                                                   ";"));
@@ -1257,6 +1267,7 @@ jik_codegen_emit_stmnt_match(JikCodeGenerator *cg, JikNode *nd)
         jik_writer_dedent(&cg->cw);
         jik_writer_write_line(&cg->cw, "}");
     }
+    jik_writer_end_block(&cg->cw);
 }
 
 char *

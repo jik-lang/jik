@@ -891,7 +891,9 @@ jik_parser_parse_match(JikParser *p)
                                                tag_tok);
         }
         jik_diag_fatal_error_if(
-            var_tag->type != NODE_EXPR_VARIANT_NEW, "expected variant", jik_token_to_text(curr));
+            var_tag->type != NODE_EXPR_VARIANT_NEW,
+            "expected qualified enum or variant case",
+            jik_token_to_text(curr));
         if (var_tag->val_variant_new.init_expr &&
             var_tag->val_variant_new.init_expr->type != NODE_EXPR_IDENTIFIER) {
             jik_diag_fatal_error("expected identifier",

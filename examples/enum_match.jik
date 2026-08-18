@@ -1,0 +1,23 @@
+// Exhaustive matching over an enum.
+
+enum TrafficLight:
+    RED
+    YELLOW
+    GREEN
+end
+
+func wait_seconds(light: TrafficLight) -> int:
+    match light:
+        case TrafficLight.RED:
+            return 30
+        case TrafficLight.YELLOW:
+            return 3
+        case TrafficLight.GREEN:
+            return 0
+    end
+end
+
+func main():
+    light := TrafficLight.YELLOW
+    println("wait seconds: ", wait_seconds(light))
+end

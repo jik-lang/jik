@@ -23,6 +23,11 @@ func is_green(c: Color) -> bool:
     return c == Color.GREEN
 end
 
+func logged_color(log: Vec[int]) -> Color:
+    push(log, 1)
+    return Color.BLUE
+end
+
 func test_enum_01(ts):
     c := Color.RED
     test::suite_assert(ts, c == Color.RED, site())
@@ -69,10 +74,67 @@ func test_enum_05(ts):
     test::suite_assert(ts, shades["cool"]? == Color.BLUE, site())
 end
 
+func test_enum_06(ts):
+    result := 0
+    match Color.GREEN:
+        case Color.RED:
+            result = 1
+        case Color.GREEN:
+            result = 2
+        case Color.BLUE:
+            result = 3
+    end
+    test::suite_assert(ts, result == 2, site())
+
+    calls: Vec[int]
+    match logged_color(calls):
+        case Color.RED:
+            result = 1
+        case Color.GREEN:
+            result = 2
+        case Color.BLUE:
+            result = 3
+    end
+    test::suite_assert(ts, result == 3, site())
+    test::suite_assert(ts, len(calls) == 1, site())
+end
+
+func test_enum_07(ts):
+    d := enum_support::Direction.EAST
+    result := 0
+    match d:
+        case enum_support::Direction.NORTH:
+            result = 1
+        case enum_support::Direction.SOUTH:
+            result = 2
+        case enum_support::Direction.EAST:
+            result = 3
+        case enum_support::Direction.WEST:
+            result = 4
+    end
+    test::suite_assert(ts, result == 3, site())
+
+    count := 0
+    for i = 0, 3:
+        match Color.GREEN:
+            case Color.RED:
+                count += 10
+            case Color.GREEN:
+                count += 1
+                break
+            case Color.BLUE:
+                count += 100
+        end
+    end
+    test::suite_assert(ts, count == 1, site())
+end
+
 func run_tests(ts):
     test_enum_01(ts)
     test_enum_02(ts)
     test_enum_03(ts)
     test_enum_04(ts)
     test_enum_05(ts)
+    test_enum_06(ts)
+    test_enum_07(ts)
 end

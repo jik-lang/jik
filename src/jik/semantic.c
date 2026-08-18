@@ -1489,26 +1489,38 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
             }
         }
         else if (nd->type == NODE_STMNT_MATCH && jik_node_is_type_inferred(nd->val_match.expr)) {
-            jik_diag_fatal_error_if(nd->val_match.expr->jik_type->name != TYPE_VARIANT,
-                                    "expected variant",
+            JikType *match_type = nd->val_match.expr->jik_type;
+            jik_diag_fatal_error_if(match_type->name != TYPE_VARIANT && match_type->name != TYPE_ENUM,
+                                    "expected enum or variant instance",
                                     jik_token_to_text(nd->val_match.expr->token));
-            JikType        *variant_type = nd->val_match.expr->jik_type;
+            if (match_type->name == TYPE_ENUM) {
+                VecJikNode_iter enum_case_it = VecJikNode_iter_new(nd->val_match.cases);
+                JikNode        *enum_case_nd;
+                while (VecJikNode_iter_next(&enum_case_it, &enum_case_nd)) {
+                    JikNode *pattern = enum_case_nd->val_case.variant;
+                    jik_diag_fatal_error_if(pattern->val_variant_new.has_initializer_syntax,
+                                            "enum case cannot bind a payload",
+                                            jik_token_to_text(pattern->token));
+                }
+                continue;
+            }
             VecJikNode_iter case_it      = VecJikNode_iter_new(nd->val_match.cases);
             JikNode        *case_nd;
             while (VecJikNode_iter_next(&case_it, &case_nd)) {
+                JikNode *pattern = case_nd->val_case.variant;
                 JikNode *s = jik_scope_get_symbol(
                     nd->context,
-                    case_nd->val_case.variant->val_variant_new.name->val_id.name,
-                    case_nd->val_case.variant->val_variant_new.name->val_id.module_id,
+                    pattern->val_variant_new.name->val_id.name,
+                    pattern->val_variant_new.name->val_id.module_id,
                     nd->token->module_id);
-                jik_diag_fatal_error_if(!jik_type_equal(s->jik_type, variant_type),
+                jik_diag_fatal_error_if(!s || !jik_type_equal(s->jik_type, match_type),
                                         JIK_STRING_NCAT("wrong variant type: expected ",
-                                                        jik_type_pretty_name(variant_type)),
-                                        jik_token_to_text(case_nd->val_case.variant->token));
-                assert(variant_type->val_variant.variant_types);
+                                                        jik_type_pretty_name(match_type)),
+                                        jik_token_to_text(pattern->token));
+                assert(match_type->val_variant.variant_types);
                 JikType **expr_type =
-                    TabJikType_get(variant_type->val_variant.variant_types,
-                                   case_nd->val_case.variant->val_variant_new.tag);
+                    TabJikType_get(match_type->val_variant.variant_types,
+                                   pattern->val_variant_new.tag);
                 if (!expr_type) {
                     continue;
                 }
@@ -1516,12 +1528,12 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
                 // ", jik_type_pretty_name(variant_type)),
                 // jik_token_to_text(case_nd->val_case.variant->token));
                 if (jik_type_is_inferred(*expr_type) &&
-                    case_nd->val_case.variant->val_variant_new.init_expr &&
-                    case_nd->val_case.variant->val_variant_new.init_expr->type ==
+                    pattern->val_variant_new.init_expr &&
+                    pattern->val_variant_new.init_expr->type ==
                         NODE_EXPR_IDENTIFIER) {
                     JikNode *s = jik_scope_get_local_symbol(
                         case_nd->val_case.body->context,
-                        case_nd->val_case.variant->val_variant_new.init_expr->val_id.name);
+                        pattern->val_variant_new.init_expr->val_id.name);
                     s->jik_type = *expr_type;
                 }
             }

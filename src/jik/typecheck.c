@@ -552,30 +552,84 @@ jik_check_types(VecJikNode *nodes)
             }
         }
         else if (nd->type == NODE_STMNT_MATCH) {
-            jik_diag_fatal_error_if(nd->val_match.expr->jik_type->name != TYPE_VARIANT,
-                                    "expected variant instance",
+            JikType *match_type = nd->val_match.expr->jik_type;
+            jik_diag_fatal_error_if(match_type->name != TYPE_VARIANT && match_type->name != TYPE_ENUM,
+                                    "expected enum or variant instance",
                                     jik_token_to_text(nd->val_match.expr->token));
-            JikType *variant_type = nd->val_match.expr->jik_type;
-            size_t   num_tags     = TabJikType_size(variant_type->val_variant.variant_types) +
-                                  TabBool_size(variant_type->val_variant.payloadless_tags);
             size_t   n            = VecJikNode_size(nd->val_match.cases);
             jik_diag_fatal_error_if(n == 0, "no cases provided", jik_token_to_text(nd->token));
             TabBool *seen_tags = TabBool_new();
             size_t   cnt       = 0;
+            char    *type_name = jik_type_pretty_name(match_type);
             for (size_t i = 0; i < n; i++) {
                 JikNode *case_nd = VecJikNode_get(nd->val_match.cases, i);
-                bool *res = TabBool_get(seen_tags, case_nd->val_case.variant->val_variant_new.tag);
-                if (!res) {
-                    TabBool_set(seen_tags, case_nd->val_case.variant->val_variant_new.tag, true);
-                    cnt++;
+                JikNode *pattern = case_nd->val_case.variant;
+                char    *tag     = pattern->val_variant_new.tag;
+                if (match_type->name == TYPE_ENUM) {
+                    JikNode *owner = pattern->val_variant_new.name;
+                    JikNode *enum_nd = jik_scope_get_symbol(
+                        nd->context, owner->val_id.name, owner->val_id.module_id, nd->token->module_id);
+                    jik_diag_fatal_error_if(!enum_nd || enum_nd->type != NODE_ENUM,
+                                            JIK_STRING_NCAT("expected enum case for ", type_name),
+                                            jik_token_to_text(pattern->token));
+                    jik_diag_fatal_error_if(!jik_type_equal(enum_nd->jik_type, match_type),
+                                            JIK_STRING_NCAT("wrong enum type in match: expected ",
+                                                            type_name,
+                                                            ", got ",
+                                                            jik_type_pretty_name(enum_nd->jik_type)),
+                                            jik_token_to_text(pattern->token));
+                    jik_diag_fatal_error_if(pattern->val_variant_new.has_initializer_syntax,
+                                            "enum case cannot bind a payload",
+                                            jik_token_to_text(pattern->token));
+                    jik_diag_fatal_error_if(
+                        !TabBool_get(enum_nd->val_enum.enumerators, tag),
+                        JIK_STRING_NCAT("unknown enum member in match for ", type_name, ": ", tag),
+                        jik_token_to_text(pattern->token));
                 }
+                bool *res = TabBool_get(seen_tags, tag);
+                jik_diag_fatal_error_if(res,
+                                        JIK_STRING_NCAT("duplicate ",
+                                                        match_type->name == TYPE_ENUM ? "enum" : "variant",
+                                                        " case: ",
+                                                        type_name,
+                                                        ".",
+                                                        tag),
+                                        jik_token_to_text(case_nd->val_case.variant->token));
+                TabBool_set(seen_tags, tag, true);
+                cnt++;
             }
+            if (match_type->name == TYPE_ENUM) {
+                JikNode *first_case = VecJikNode_get(nd->val_match.cases, 0);
+                JikNode *owner      = first_case->val_case.variant->val_variant_new.name;
+                JikNode *enum_nd = jik_scope_get_symbol(
+                    nd->context, owner->val_id.name, owner->val_id.module_id, nd->token->module_id);
+                assert(enum_nd && enum_nd->type == NODE_ENUM);
+                for (size_t i = 0; i < VecString_size(enum_nd->val_enum.enumerator_order); i++) {
+                    char *member = VecString_get(enum_nd->val_enum.enumerator_order, i);
+                    if (!TabBool_get(seen_tags, member)) {
+                        jik_diag_fatal_error(
+                            JIK_STRING_NCAT("match does not exhaust enum ",
+                                            type_name,
+                                            "; missing ",
+                                            type_name,
+                                            ".",
+                                            member),
+                            jik_token_to_text(nd->token));
+                    }
+                }
+                continue;
+            }
+            JikType *variant_type = match_type;
+            size_t   num_tags     = TabJikType_size(variant_type->val_variant.variant_types) +
+                                  TabBool_size(variant_type->val_variant.payloadless_tags);
             jik_diag_fatal_error_if(cnt != num_tags,
                                     "match doesn't exhaust all variant tags",
                                     jik_token_to_text(nd->token));
         }
         else if (nd->type == NODE_CASE) {
-            jik_ensure_valid_variant_tag(nd->val_case.variant);
+            if (nd->val_case.match->val_match.expr->jik_type->name == TYPE_VARIANT) {
+                jik_ensure_valid_variant_tag(nd->val_case.variant);
+            }
         }
         else if (nd->type == NODE_EXPR_VARIANT_TAG_CHECK) {
             JikNode *s = jik_scope_get_symbol(nd->context,

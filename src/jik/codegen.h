@@ -26,6 +26,7 @@ typedef struct JikCodeGenerator {
     TabBool    *defined_option_types;
     TabBool    *defined_copy_types;
     JikNode    *arg_vec;
+    size_t      match_temp_id;
 } JikCodeGenerator;
 
 void
