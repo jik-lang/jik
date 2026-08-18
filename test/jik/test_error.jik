@@ -8,6 +8,10 @@ struct RecDictNode:
     nexts: Dict[Option[RecDictNode]]
 end
 
+struct IntBox:
+    value: int
+end
+
 
 throws func div_safe(x, y):
     if y == 0:
@@ -36,6 +40,10 @@ end
 
 throws func propagated_call(should_fail):
     try fail_if_true(should_fail)
+end
+
+throws func set_box_value(box, numerator, denominator):
+    box.value = try div_safe(numerator, denominator)
 end
 
 
@@ -87,6 +95,15 @@ func test_error(ts):
     except:
         test::suite_assert(ts, error_msg(_) == "expected failure", site())
     end
+
+    box := IntBox{value = 7}
+    try set_box_value(box, 6, 0):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, box.value == 7, site())
+    end
+    must set_box_value(box, 6, 2)
+    test::suite_assert(ts, box.value == 3, site())
 
 end
 

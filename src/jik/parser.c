@@ -662,7 +662,18 @@ jik_parser_get_assigned_expr(JikParser *p, JikNode *lhs)
 {
     if (jik_parser_current_token(p)->type == TOK_ASSIGN) {
         jik_parser_eat_token(p, TOK_ASSIGN);
+        bool propagate = false;
+        if (jik_parser_current_token(p)->type == TOK_KWD_TRY) {
+            jik_parser_eat_token(p, TOK_KWD_TRY);
+            propagate = true;
+        }
         JikNode *rhs = jik_parser_parse_expr(p);
+        jik_diag_fatal_error_if(propagate && rhs->type != NODE_EXPR_CALL,
+                                "expected function call after \"try\"",
+                                jik_token_to_text(rhs->token));
+        if (propagate) {
+            rhs->val_call.propagate = true;
+        }
         return rhs;
     }
     if (jik_parser_current_token(p)->type == TOK_OP_PLUS_EQ) {

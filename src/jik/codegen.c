@@ -28,6 +28,9 @@
 // -----------------------------------------------------------------------------
 
 static char *
+jik_codegen_emit_assignment_expr(JikCodeGenerator *cg, JikNode *expr);
+
+static char *
 get_alloc_dest(JikAllocSpec spec)
 {
     if (spec.kind == JIK_ALLOC_LOCAL) {
@@ -86,6 +89,7 @@ jik_codegen_init(JikCodeGenerator *cg, JikContext *ctx)
     cg->defined_copy_types           = TabBool_new();
     cg->arg_vec = ctx->args_type ? jik_codegen_make_console_arg_vec(ctx) : NULL;
     cg->match_temp_id = 0;
+    cg->try_temp_counter = 0;
     jik_writer_init(&cg->cw);
 }
 
@@ -1006,11 +1010,11 @@ jik_codegen_emit_expr_slice(JikCodeGenerator *cg, JikNode *nd)
 static void
 jik_codegen_emit_stmnt_subscript_set(JikCodeGenerator *cg, JikNode *nd)
 {
+    char *expr = jik_codegen_emit_assignment_expr(cg, nd->val_subscript_set.expr);
     char *node = jik_codegen_emit_expression(cg, nd->val_subscript_set.node);
     char *sub  = nd->val_subscript_set.sub_expr->type == NODE_VARIANT_TAG
                      ? NULL
                      : jik_codegen_emit_expression(cg, nd->val_subscript_set.sub_expr);
-    char *expr = jik_codegen_emit_expression(cg, nd->val_subscript_set.expr);
     if (nd->val_subscript_set.node->jik_type->name == TYPE_VECTOR) {
         if (!nd->val_subscript_set.node->jik_type->mangled_name) {
             nd->val_subscript_set.node->jik_type->mangled_name =
@@ -1609,12 +1613,34 @@ jik_codegen_emit_expression(JikCodeGenerator *cg, JikNode *nd)
 // Statement emission
 // -----------------------------------------------------------------------------
 
+static char *
+jik_codegen_emit_assignment_expr(JikCodeGenerator *cg, JikNode *expr)
+{
+    if (expr->type != NODE_EXPR_CALL || !expr->val_call.propagate) {
+        return jik_codegen_emit_expression(cg, expr);
+    }
+
+    char *temp_name = JIK_STRING_NCAT("__jik_try_value_", size_t_to_string(cg->try_temp_counter++));
+    char *call_text = get_function_call_with_error_target(cg, expr, "jik_err_arg");
+    jik_writer_write_line(&cg->cw,
+                          JIK_STRING_NCAT(expr->jik_type->C_name,
+                                          " ",
+                                          temp_name,
+                                          " = ",
+                                          call_text,
+                                          ";"));
+    jik_writer_begin_block(&cg->cw, "if (jik_error_failed(jik_err_arg)) {");
+    jik_writer_write_line(&cg->cw, "goto __jik_cleanup;");
+    jik_writer_end_block(&cg->cw);
+    return temp_name;
+}
+
 static void
 jik_codegen_emit_stmnt_member_set(JikCodeGenerator *cg, JikNode *nd)
 {
     char *field_accessor = nd->val_member_set.member_name;
+    char *expr           = jik_codegen_emit_assignment_expr(cg, nd->val_member_set.expr);
     char *sobj           = jik_codegen_emit_expression(cg, nd->val_member_set.node);
-    char *expr           = jik_codegen_emit_expression(cg, nd->val_member_set.expr);
 
     jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(sobj, "->", field_accessor, " = ", expr, ";"));
 }
@@ -1664,7 +1690,7 @@ jik_codegen_emit_cleanup(JikCodeGenerator *cg, JikNode *nd)
 static void
 jik_codegen_emit_stmnt_assign(JikCodeGenerator *cg, JikNode *nd)
 {
-    char *te      = jik_codegen_emit_expression(cg, nd->val_assign.expr);
+    char *te      = jik_codegen_emit_assignment_expr(cg, nd->val_assign.expr);
     char *id_name = nd->val_assign.id->val_id.module_id
                         ? jik_codegen_mangle_name(nd->val_assign.id->val_id.module_id,
                                                   nd->val_assign.id->val_id.name)
