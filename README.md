@@ -25,7 +25,7 @@ _Open a ready-to-use Jik development environment._
 
 Jik is a statically typed programming language with a straightforward source-to-C compilation model. It avoids both garbage collection and manual heap allocation.
 
-It provides type inference, optional type annotations, vectors, dictionaries, options, variants, error handling, a standard library, and a growing package ecosystem. The result is concise source code and predictable generated C.
+It provides type inference, optional type annotations, vectors, dictionaries, options, variants, exhaustive enum/variant tables, error handling, a standard library, and a growing package ecosystem. The result is concise source code and predictable generated C.
 
 Jik's defining idea is its memory model: composite values are allocated into regions that determine their lifetime, while compiler checks prevent references across regions with incompatible lifetimes.
 
@@ -111,7 +111,7 @@ end
 
 ## Explore more
 
-See the [examples](examples/) directory for [variants](examples/variants.jik), more [error handling](examples/error_handling.jik), [word count](examples/word_count.jik), [Dijkstra](examples/dijkstra.jik), [Newton's method](examples/newton.jik), [Game of Life](examples/game_of_life.jik), [Forth](examples/forth.jik), and [C interop](examples/ffi_demo.jik).
+See the [examples](examples/) directory for [variants](examples/variants.jik), [table-driven policies](examples/tables.jik), more [error handling](examples/error_handling.jik), [word count](examples/word_count.jik), [Dijkstra](examples/dijkstra.jik), [Newton's method](examples/newton.jik), [Game of Life](examples/game_of_life.jik), [Forth](examples/forth.jik), and [C interop](examples/ffi_demo.jik).
 
 ## Packages
 
@@ -163,7 +163,7 @@ Note that MSVC was not tested and is not the default build path in this reposito
 - [Language overview](docs/overview.md)
 - [Region-based memory management](docs/overview/08-memory-management.md)
 - [CLI reference](docs/cli.md)
-- [Standard library documentation](docs/overview/18-standard-library.md)
+- [Standard library documentation](docs/overview/19-standard-library.md)
 - [Development notes and roadmap](docs/development.md)
 - [Official Jik website](https://jik-lang.org/)
 - [Join the Jik Discord community](https://discord.gg/cnA8X5yKeA)

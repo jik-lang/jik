@@ -1,0 +1,293 @@
+use "jik/testing" as test
+use "utils"
+
+
+func test_table_compile_fail_missing(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+    B
+end
+
+table Values[Key] -> int:
+    A: 1
+end
+
+func main():
+end
+""",
+        "table Values is missing an entry for Key.B")
+end
+
+func test_table_compile_fail_duplicate(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+end
+
+table Values[Key] -> int:
+    A: 1
+    A: 2
+end
+
+func main():
+end
+""",
+        "duplicate table entry: A")
+end
+
+func test_table_compile_fail_unknown(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+end
+
+table Values[Key] -> int:
+    A: 1
+    B: 2
+end
+
+func main():
+end
+""",
+        "unknown enum member in table Values: B")
+end
+
+func test_table_compile_fail_key_type(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+table Values[int] -> int:
+end
+
+func main():
+end
+""",
+        "table key type must be an enum or variant")
+end
+
+func test_table_compile_fail_value_type(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+end
+
+table Values[Key] -> int:
+    A: "wrong"
+end
+
+func main():
+end
+""",
+        "table entry type mismatch for A in table Values")
+end
+
+func test_table_compile_fail_function_value(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+end
+
+func value() -> int:
+    return 1
+end
+
+table Values[Key] -> int:
+    A: value()
+end
+
+func main():
+end
+""",
+        "table entries cannot call functions")
+end
+
+func test_table_compile_fail_builtin_value(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+end
+
+table Values[Key] -> int:
+    A: len("value")
+end
+
+func main():
+end
+""",
+        "table entries cannot call functions")
+end
+
+func test_table_compile_fail_lookup_key(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+end
+
+enum Other:
+    A
+end
+
+table Values[Key] -> int:
+    A: 1
+end
+
+func main():
+    value := Values[Other.A]
+end
+""",
+        "table lookup key type mismatch")
+end
+
+func test_table_compile_fail_bare_use(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+end
+
+table Values[Key] -> int:
+    A: 1
+end
+
+func main():
+    value := Values
+end
+""",
+        "table Values must be indexed")
+end
+
+func test_table_compile_fail_mutation(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+end
+
+table Values[Key] -> int:
+    A: 1
+end
+
+func main():
+    Values[Key.A] = 2
+end
+""",
+        "table entries are immutable")
+end
+
+func test_table_compile_fail_type_position(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+end
+
+table Values[Key] -> int:
+    A: 1
+end
+
+func main():
+    value: Values
+end
+""",
+        "could not resolve type \"Values\"")
+end
+
+func test_table_compile_fail_global_value(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+end
+
+value := 1
+
+table Values[Key] -> int:
+    A: value
+end
+
+func main():
+end
+""",
+        "table entries cannot read global variables")
+end
+
+func test_table_compile_fail_self_initialization(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+end
+
+table Values[Key] -> int:
+    A: Values[Key.A]
+end
+
+func main():
+end
+""",
+        "table Values initializer reads table Values before it is initialized")
+end
+
+func test_table_compile_fail_later_table_initialization(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Key:
+    A
+end
+
+table First[Key] -> int:
+    A: Later[Key.A]
+end
+
+table Later[Key] -> int:
+    A: 1
+end
+
+func main():
+end
+""",
+        "table First initializer reads table Later before it is initialized")
+end
+
+func test_table_compile_fail_variant_missing(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Key:
+    A
+    B
+end
+
+table Values[Key] -> int:
+    A: 1
+end
+
+func main():
+end
+""",
+        "table Values is missing an entry for Key.B")
+end
+
+func run_tests(ts):
+    test_table_compile_fail_missing(ts)
+    test_table_compile_fail_duplicate(ts)
+    test_table_compile_fail_unknown(ts)
+    test_table_compile_fail_key_type(ts)
+    test_table_compile_fail_value_type(ts)
+    test_table_compile_fail_function_value(ts)
+    test_table_compile_fail_builtin_value(ts)
+    test_table_compile_fail_lookup_key(ts)
+    test_table_compile_fail_bare_use(ts)
+    test_table_compile_fail_mutation(ts)
+    test_table_compile_fail_type_position(ts)
+    test_table_compile_fail_global_value(ts)
+    test_table_compile_fail_self_initialization(ts)
+    test_table_compile_fail_later_table_initialization(ts)
+    test_table_compile_fail_variant_missing(ts)
+end

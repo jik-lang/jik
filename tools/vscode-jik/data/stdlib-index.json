@@ -1,4 +1,83 @@
 {
+  "argparse": {
+    "module": "argparse",
+    "doc": "Command-line argument parser.",
+    "symbols": [
+      {
+        "name": "_ArgSpec",
+        "kind": "struct",
+        "signature": "_ArgSpec",
+        "doc": "A positional value accepted by the parser or an option."
+      },
+      {
+        "name": "ArgumentOption",
+        "kind": "struct",
+        "signature": "ArgumentOption",
+        "doc": "Configured option handle."
+      },
+      {
+        "name": "Parser",
+        "kind": "struct",
+        "signature": "Parser",
+        "doc": "Configured parser."
+      },
+      {
+        "name": "ParseResult",
+        "kind": "struct",
+        "signature": "ParseResult",
+        "doc": "Values returned by `parse`."
+      },
+      {
+        "name": "new",
+        "kind": "function",
+        "signature": "new(name: String, r: Region) -> Parser",
+        "doc": "Create an empty argument parser with a program name for generated help.",
+        "throws": false
+      },
+      {
+        "name": "set_description",
+        "kind": "function",
+        "signature": "set_description(parser: Parser, description: String)",
+        "doc": "Set the prose description shown before generated help usage.",
+        "throws": false
+      },
+      {
+        "name": "add_positional",
+        "kind": "function",
+        "signature": "add_positional(parser: Parser, name: String, help: String)",
+        "doc": "Add a required positional argument.",
+        "throws": false
+      },
+      {
+        "name": "add_option",
+        "kind": "function",
+        "signature": "add_option(parser: Parser, name: String, short_name: String, help: String) -> ArgumentOption",
+        "doc": "Add an option and return it.\n\nAn option with no declared values acts as a flag.\nLong names must begin with `--`. Short names are optional; when provided,\nthey must be `-` followed by one character. Duplicate option names\nterminate through `std::panic`.",
+        "throws": false
+      },
+      {
+        "name": "add_option_positional",
+        "kind": "function",
+        "signature": "add_option_positional(option: ArgumentOption, name: String, help: String)",
+        "doc": "Add a positional value consumed by an option.\n\nValue names must be unique within an option because they become keys in the parse result.",
+        "throws": false
+      },
+      {
+        "name": "parse",
+        "kind": "function",
+        "signature": "parse(parser: Parser, args: Vec[String], r: Region) -> ParseResult",
+        "doc": "Parse command-line arguments into a result.\n\n`args` must not include the executable name. The parsed dictionaries are allocated in `r`. Options may be written with their long or short names.\n`--` ends option parsing. Repeating an option is a parse error.\nSupported forms are `--long` and `-s`; grouped short options and inline values such as `--output=file` are not supported.\nOption values are retrieved by name, such as `result.options[\"--output\"]?[\"file\"]?`.\nUnknown or repeated options, missing option values, and missing or extra positional arguments return an `argparse:` error.",
+        "throws": true
+      },
+      {
+        "name": "format_help",
+        "kind": "function",
+        "signature": "format_help(parser: Parser, r: Region) -> String",
+        "doc": "Format generated parser help text.",
+        "throws": false
+      }
+    ]
+  },
   "bytes": {
     "module": "bytes",
     "doc": "Binary-safe byte sequences and growable byte buffers.\n\n`Bytes` stores immutable raw byte data. `ByteBuf` is a mutable growable byte\nbuffer for constructing binary data. Neither type is NUL-terminated by\ncontract, and both can contain byte value `0`.\n\nNotes:\n- `String` is text. Use `from_string` or `buf_append_string` to copy text\nbytes into binary storage.\n- Use `to_hex` for binary display.\n- Use `to_string_ascii` only when the bytes are known ASCII text.\n- All allocations are performed in the provided `Region`.\n- `Bytes` and `ByteBuf` have default initializers. `Bytes{}`, `ByteBuf{}`,\nand typed declarations such as `b: Bytes` create empty values in the\ncurrent region.",
@@ -525,6 +604,13 @@
         "throws": false
       },
       {
+        "name": "normalize",
+        "kind": "function",
+        "signature": "normalize(path: String, r: Region) -> String",
+        "doc": "Normalize a path lexically.\n\nRepeated separators and `.` components are removed. `..` components remove\nthe preceding normal component when possible. Unresolved `..` components are\npreserved in relative paths and discarded at an absolute root.\n\nThis function does not access the filesystem. It does not resolve symlinks,\nexpand home or environment references, or support Windows UNC and device\npaths specially.",
+        "throws": false
+      },
+      {
         "name": "basename",
         "kind": "function",
         "signature": "basename(path: String, r: Region) -> String",
@@ -760,6 +846,34 @@
     "doc": "String utilities.\n\n`String` stores UTF-8 bytes, but the operations in this module are byte-based.\nLengths, indices, and slices refer to byte offsets, not Unicode characters.",
     "symbols": [
       {
+        "name": "from_int",
+        "kind": "function",
+        "signature": "from_int(value: int, region: Region) -> String",
+        "doc": "Convert an integer to a string.",
+        "throws": false
+      },
+      {
+        "name": "from_double",
+        "kind": "function",
+        "signature": "from_double(value: double, region: Region) -> String",
+        "doc": "Convert a double to a string.",
+        "throws": false
+      },
+      {
+        "name": "from_bool",
+        "kind": "function",
+        "signature": "from_bool(value: bool, region: Region) -> String",
+        "doc": "Convert a boolean to a string.",
+        "throws": false
+      },
+      {
+        "name": "from_char",
+        "kind": "function",
+        "signature": "from_char(value: char, region: Region) -> String",
+        "doc": "Convert a character to a string.",
+        "throws": false
+      },
+      {
         "name": "slice",
         "kind": "function",
         "signature": "slice(s: String, from: int, to: int, region: Region) -> String",
@@ -785,6 +899,13 @@
         "kind": "function",
         "signature": "concat(left: String, right: String, region: Region) -> String",
         "doc": "Concatenate two strings.",
+        "throws": false
+      },
+      {
+        "name": "compare",
+        "kind": "function",
+        "signature": "compare(left: String, right: String) -> int",
+        "doc": "Compare two strings lexicographically by byte value.\n\nequal, or a value greater than zero if `left` follows `right`.",
         "throws": false
       },
       {
@@ -885,6 +1006,13 @@
         "throws": false
       },
       {
+        "name": "executable_path",
+        "kind": "function",
+        "signature": "executable_path(region: Region) -> String",
+        "doc": "Return the absolute path of the running executable.",
+        "throws": true
+      },
+      {
         "name": "cwd",
         "kind": "function",
         "signature": "cwd(region: Region) -> String",
@@ -918,10 +1046,10 @@
         "doc": "Test suite state."
       },
       {
-        "name": "suite_assert",
+        "name": "suite_new",
         "kind": "function",
-        "signature": "suite_assert(suite: TestSuite, cond: bool, s: Site) -> void",
-        "doc": "Test suite assertion function.",
+        "signature": "suite_new(r: Region) -> TestSuite",
+        "doc": "Create a new test suite.",
         "throws": false
       },
       {
@@ -929,6 +1057,13 @@
         "kind": "function",
         "signature": "suite_finish(suite: TestSuite) -> void",
         "doc": "Print suite summary and exit non-zero if any test failed.",
+        "throws": false
+      },
+      {
+        "name": "suite_assert",
+        "kind": "function",
+        "signature": "suite_assert(suite: TestSuite, cond: bool, s: Site) -> void",
+        "doc": "Test suite assertion function.",
         "throws": false
       }
     ]

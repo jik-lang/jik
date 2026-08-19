@@ -57,6 +57,7 @@ jik_node_new_program(void)
     nd->val_program.embedded_C        = VecJikNode_new_empty();
     nd->val_program.hints             = VecJikNode_new_empty();
     nd->val_program.enums             = VecJikNode_new_empty();
+    nd->val_program.tables            = VecJikNode_new_empty();
     nd->val_program.variants          = VecJikNode_new_empty();
     nd->val_program.needs_global_region   = false;
     nd->context                       = NULL;
@@ -595,6 +596,45 @@ jik_node_new_enum_new(char *enumerator, JikScope *ctx, JikToken *tok)
 }
 
 JikNode *
+jik_node_new_table(char       *name,
+                   JikNode    *key_type_desc,
+                   JikNode    *value_type_desc,
+                   TabJikNode *entries,
+                   VecString  *entry_order,
+                   JikScope   *ctx,
+                   JikToken   *tok)
+{
+    JikNode *nd                    = (JikNode *)jik_alloc(sizeof(JikNode));
+    nd->jik_type                   = jik_type_new(TYPE_NOTYPE);
+    nd->type                       = NODE_TABLE;
+    nd->val_table.name             = name;
+    nd->val_table.key_type_desc    = key_type_desc;
+    nd->val_table.value_type_desc  = value_type_desc;
+    nd->val_table.entries          = entries;
+    nd->val_table.entry_order      = entry_order;
+    nd->val_table.normalized_entries = VecJikNode_new_empty();
+    nd->val_table.key_decl         = NULL;
+    nd->val_table.value_type       = NULL;
+    nd->val_table.mangled_name     = NULL;
+    nd->context                    = ctx;
+    nd->token                      = tok;
+    return nd;
+}
+
+JikNode *
+jik_node_new_table_lookup(JikNode *table, JikNode *key, JikScope *ctx, JikToken *tok)
+{
+    JikNode *nd               = (JikNode *)jik_alloc(sizeof(JikNode));
+    nd->jik_type              = jik_type_new(TYPE_UNKNOWN);
+    nd->type                  = NODE_EXPR_TABLE_LOOKUP;
+    nd->val_table_lookup.table = table;
+    nd->val_table_lookup.key   = key;
+    nd->context               = ctx;
+    nd->token                 = tok;
+    return nd;
+}
+
+JikNode *
 jik_node_new_struct(char       *name,
                     TabJikNode *type_descs,
                     bool        is_extern,
@@ -947,6 +987,9 @@ jik_node_print(JikNode *nd, size_t level)
         for (size_t i = 0; i < VecJikNode_size(nd->val_program.enums); i++) {
             jik_node_print(VecJikNode_get(nd->val_program.enums, i), level + 1);
         }
+        for (size_t i = 0; i < VecJikNode_size(nd->val_program.tables); i++) {
+            jik_node_print(VecJikNode_get(nd->val_program.tables, i), level + 1);
+        }
         for (size_t i = 0; i < VecJikNode_size(nd->val_program.variants); i++) {
             jik_node_print(VecJikNode_get(nd->val_program.variants, i), level + 1);
         }
@@ -1009,6 +1052,12 @@ jik_node_print(JikNode *nd, size_t level)
             jik_node_print(item.value, 0);
         }
         printf(">\n");
+    }
+    else if (nd->type == NODE_TABLE) {
+        printf("<%s, \"%s\">\n", NODE_STRINGS[nd->type], nd->val_table.name);
+        for (size_t i = 0; i < VecJikNode_size(nd->val_table.normalized_entries); i++) {
+            jik_node_print(VecJikNode_get(nd->val_table.normalized_entries, i), level + 1);
+        }
     }
     else if (nd->type == NODE_EXPR_STRUCT_NEW) {
         printf("<%s, type=", NODE_STRINGS[nd->type]);
@@ -1073,6 +1122,12 @@ jik_node_print(JikNode *nd, size_t level)
         jik_node_print(nd->val_subscript_get.node, level + 1);
         jik_node_print(nd->val_subscript_get.expr, level + 1);
         printf(">\n");
+    }
+    else if (nd->type == NODE_EXPR_TABLE_LOOKUP) {
+        printf("<%s, \"%s\">\n",
+               NODE_STRINGS[nd->type],
+               nd->val_table_lookup.table->val_table.name);
+        jik_node_print(nd->val_table_lookup.key, level + 1);
     }
     else if (nd->type == NODE_EXPR_SLICE) {
         printf("<%s", NODE_STRINGS[nd->type]);
@@ -1352,6 +1407,9 @@ jik_collect_nodes(JikNode *nd, VecJikNode *nodes)
         for (size_t i = 0; i < VecJikNode_size(nd->val_program.variants); i++) {
             jik_collect_nodes(VecJikNode_get(nd->val_program.variants, i), nodes);
         }
+        for (size_t i = 0; i < VecJikNode_size(nd->val_program.tables); i++) {
+            jik_collect_nodes(VecJikNode_get(nd->val_program.tables, i), nodes);
+        }
         for (size_t i = 0; i < VecJikNode_size(nd->val_program.extern_structs); i++) {
             jik_collect_nodes(VecJikNode_get(nd->val_program.extern_structs, i), nodes);
         }
@@ -1389,6 +1447,21 @@ jik_collect_nodes(JikNode *nd, VecJikNode *nodes)
         TabJikNode_item item;
         while (TabJikNode_iter_next(&it, &item)) {
             jik_collect_nodes(item.value, nodes);
+        }
+    }
+    else if (nd->type == NODE_TABLE) {
+        if (VecJikNode_size(nd->val_table.normalized_entries) > 0) {
+            for (size_t i = 0; i < VecJikNode_size(nd->val_table.normalized_entries); i++) {
+                jik_collect_nodes(VecJikNode_get(nd->val_table.normalized_entries, i), nodes);
+            }
+        }
+        else {
+            for (size_t i = 0; i < VecString_size(nd->val_table.entry_order); i++) {
+                JikNode **entry =
+                    TabJikNode_get(nd->val_table.entries, VecString_get(nd->val_table.entry_order, i));
+                assert(entry);
+                jik_collect_nodes(*entry, nodes);
+            }
         }
     }
     else if (nd->type == NODE_BLOCK) {
@@ -1431,6 +1504,9 @@ jik_collect_nodes(JikNode *nd, VecJikNode *nodes)
     else if (nd->type == NODE_EXPR_SUBSCRIPT_GET) {
         jik_collect_nodes(nd->val_subscript_get.node, nodes);
         jik_collect_nodes(nd->val_subscript_get.expr, nodes);
+    }
+    else if (nd->type == NODE_EXPR_TABLE_LOOKUP) {
+        jik_collect_nodes(nd->val_table_lookup.key, nodes);
     }
     else if (nd->type == NODE_EXPR_SLICE) {
         jik_collect_nodes(nd->val_slice.node, nodes);

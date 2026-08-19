@@ -1363,6 +1363,43 @@ jik_parser_parse_enum(JikParser *p)
 }
 
 static JikNode *
+jik_parser_parse_table(JikParser *p)
+{
+    jik_parser_eat_token(p, TOK_KWD_TABLE);
+    JikToken *name_tok = jik_parser_eat_token(p, TOK_ID);
+    jik_parser_eat_token(p, TOK_LANG);
+    JikNode *key_type_desc = jik_parser_parse_type_desc(p);
+    jik_parser_eat_token(p, TOK_RANG);
+    jik_parser_eat_token(p, TOK_ARROW);
+    JikNode *value_type_desc = jik_parser_parse_type_desc(p);
+    jik_parser_eat_token(p, TOK_COLON);
+    jik_parser_eat_newlines(p);
+
+    TabJikNode *entries     = TabJikNode_new();
+    VecString  *entry_order = VecString_new_empty();
+    JikToken   *tok;
+    while ((tok = jik_parser_current_token(p)) != NULL && tok->type != TOK_KWD_END) {
+        JikToken *key_tok = jik_parser_eat_token(p, TOK_ID);
+        jik_diag_fatal_error_if(TabJikNode_get(entries, key_tok->lexeme) != NULL,
+                                JIK_STRING_NCAT("duplicate table entry: ", key_tok->lexeme),
+                                jik_token_to_text(key_tok));
+        jik_parser_eat_token(p, TOK_COLON);
+        JikNode *value = jik_parser_parse_expr(p);
+        TabJikNode_set(entries, key_tok->lexeme, value);
+        VecString_push(entry_order, key_tok->lexeme);
+        jik_parser_eat_newlines(p);
+    }
+    jik_parser_eat_token(p, TOK_KWD_END);
+    return jik_node_new_table(name_tok->lexeme,
+                              key_type_desc,
+                              value_type_desc,
+                              entries,
+                              entry_order,
+                              jik_parser_current_context(p),
+                              name_tok);
+}
+
+static JikNode *
 jik_parser_parse_struct_new(JikParser *p, JikToken *struct_name_tok, char *module_id)
 {
     p->container_depth++;
@@ -1678,6 +1715,10 @@ jik_parser_parse(JikParser *p)
         else if (tok->type == TOK_KWD_ENUM) {
             nd = jik_parser_parse_enum(p);
             VecJikNode_push(p->ast->val_program.enums, nd);
+        }
+        else if (tok->type == TOK_KWD_TABLE) {
+            nd = jik_parser_parse_table(p);
+            VecJikNode_push(p->ast->val_program.tables, nd);
         }
         else if (tok->type == TOK_KWD_USE) {
             jik_parser_skip_usage(p);

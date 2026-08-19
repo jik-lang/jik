@@ -161,7 +161,7 @@ a name before subscripting, member access, mutation, or iteration.
 
 ```ebnf
 program ::= { newline | use_decl | global_decl | top_decl | variant_decl
-            | enum_decl | embed_block | build_directive }
+            | enum_decl | table_decl | embed_block | build_directive }
 ```
 
 ### Imports
@@ -251,6 +251,20 @@ enum_decl ::= "enum" identifier ":" newline
               { identifier newline }
               "end"
 ```
+
+### Tables
+
+```ebnf
+table_decl ::= "table" identifier "[" type_desc "]"
+               "->" type_desc ":" newline
+               { table_entry }
+               "end"
+table_entry ::= identifier ":" expr newline
+```
+
+The key type must resolve to an enum or variant. Every enum member or variant tag must occur
+exactly once. A table lookup uses ordinary subscript syntax, such as `Names[key]`. Table entries
+cannot be assigned through, contain function calls (including built-ins), or read global variables.
 
 ## Blocks and Statements
 

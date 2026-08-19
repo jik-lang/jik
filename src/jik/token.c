@@ -94,6 +94,8 @@ jik_token_type_pretty_name(JikTokenType type)
         return "struct";
     case TOK_KWD_ENUM:
         return "enum";
+    case TOK_KWD_TABLE:
+        return "table";
     case TOK_KWD_VARIANT:
         return "variant";
     case TOK_KWD_IF:

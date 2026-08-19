@@ -11,6 +11,7 @@ use "test_globals"
 use "test_sieve"
 use "test_cond"
 use "test_enum"
+use "test_table"
 use "test_dict"
 use "test_variant"
 use "test_jiklib_io"
@@ -37,6 +38,7 @@ use "test_type_constructors"
 use "test_copy"
 use "test_examples"
 use "test_compile_fail_semantic"
+use "test_compile_fail_tables"
 use "test_compile_fail_operators"
 use "test_compile_fail_regions"
 use "test_region_safe_functions"
@@ -57,6 +59,7 @@ func main():
     test_sieve::run_tests(ts)
     test_cond::run_tests(ts)
     test_enum::run_tests(ts)
+    test_table::run_tests(ts)
     test_dict::run_tests(ts)
     test_variant::run_tests(ts)
     test_jiklib_io::run_tests(ts)
@@ -83,6 +86,7 @@ func main():
     test_copy::run_tests(ts)
     test_examples::run_tests(ts)
     test_compile_fail_semantic::run_tests(ts)
+    test_compile_fail_tables::run_tests(ts)
     test_compile_fail_operators::run_tests(ts)
     test_compile_fail_regions::run_tests(ts)
     test_region_safe_functions::run_tests(ts)

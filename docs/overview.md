@@ -20,11 +20,12 @@ This document applies to Jik version `0.1.0-alpha.21` and may change for future 
 11. [Variants](overview/11-variants.md)
 12. [Vectors](overview/12-vectors.md)
 13. [Dictionaries](overview/13-dictionaries.md)
-14. [Control Flow](overview/14-control-flow.md)
-15. [Error Handling](overview/15-error-handling.md)
-16. [Foreign Function Interface (C interop)](overview/16-ffi-c-interop.md)
-17. [Builtins](overview/17-builtins.md)
-18. [Standard Library](overview/18-standard-library.md)
+14. [Tables](overview/14-tables.md)
+15. [Control Flow](overview/15-control-flow.md)
+16. [Error Handling](overview/16-error-handling.md)
+17. [Foreign Function Interface (C interop)](overview/17-ffi-c-interop.md)
+18. [Builtins](overview/18-builtins.md)
+19. [Standard Library](overview/19-standard-library.md)
 
 ---
 

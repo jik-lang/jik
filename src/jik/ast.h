@@ -27,6 +27,7 @@ typedef struct TabVarInfo TabVarInfo;
     X(NODE_STMNT_MEMBER_SET)                                                                       \
     X(NODE_CATCH)                                                                                  \
     X(NODE_EXPR_SUBSCRIPT_GET)                                                                     \
+    X(NODE_EXPR_TABLE_LOOKUP)                                                                      \
     X(NODE_EXPR_SLICE)                                                                             \
     X(NODE_STMNT_SUBSCRIPT_SET)                                                                    \
     X(NODE_COND_IF)                                                                                \
@@ -59,6 +60,7 @@ typedef struct TabVarInfo TabVarInfo;
     X(NODE_EXPR_OPTION_IS)                                                                         \
     X(NODE_STRUCT)                                                                                 \
     X(NODE_ENUM)                                                                                   \
+    X(NODE_TABLE)                                                                                  \
     X(NODE_EXPR_ENUM_NEW)                                                                          \
     X(NODE_EXPR_STRUCT_NEW)                                                                        \
     X(NODE_EXPR_VARIANT_NEW)                                                                       \
@@ -227,6 +229,23 @@ typedef struct JikNode {
             VecString *enumerator_order;
             char      *first_enumerator;
         } val_enum;
+
+        struct {
+            char           *name;
+            struct JikNode *key_type_desc;
+            struct JikNode *value_type_desc;
+            TabJikNode     *entries;
+            VecString      *entry_order;
+            VecJikNode     *normalized_entries;
+            struct JikNode *key_decl;
+            JikType        *value_type;
+            char           *mangled_name;
+        } val_table;
+
+        struct {
+            struct JikNode *table;
+            struct JikNode *key;
+        } val_table_lookup;
 
         struct {
             char *enumerator;
@@ -447,6 +466,7 @@ typedef struct JikNode {
             VecJikNode *structs;
             VecJikNode *extern_structs;
             VecJikNode *enums;
+            VecJikNode *tables;
             VecJikNode *variants;
             VecJikNode *hints;
             bool        needs_global_region;
@@ -582,6 +602,16 @@ jik_node_new_enum(char     *name,
                   JikToken *tok);
 JikNode *
 jik_node_new_enum_new(char *enumerator, JikScope *ctx, JikToken *tok);
+JikNode *
+jik_node_new_table(char       *name,
+                   JikNode    *key_type_desc,
+                   JikNode    *value_type_desc,
+                   TabJikNode *entries,
+                   VecString  *entry_order,
+                   JikScope   *ctx,
+                   JikToken   *tok);
+JikNode *
+jik_node_new_table_lookup(JikNode *table, JikNode *key, JikScope *ctx, JikToken *tok);
 JikNode *
 jik_node_new_struct(char       *name,
                     TabJikNode *type_descs,

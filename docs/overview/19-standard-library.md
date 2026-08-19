@@ -1,6 +1,6 @@
 [Back to overview](../overview.md)
 
-# 18. Standard library
+# 19. Standard library
 
 Jik provides a small but useful standard library. The modules below cover common tasks such as
 strings, input/output, math, randomness, and testing.

@@ -1,10 +1,10 @@
 [Back to overview](../overview.md)
 
-# 14. Control Flow
+# 15. Control Flow
 
 Jik's control flow is straightforward.
 
-### 14.1 `if / elif / else`
+### 15.1 `if / elif / else`
 
 ```jik
 func is_less_than_zero(x):
@@ -29,7 +29,7 @@ name := "yes"[r] if flag else "no"[r]
 
 Both branches must produce compatible value types, and the middle condition must be `bool`.
 
-### 14.2 `while` loops
+### 15.2 `while` loops
 
 ```jik
 func sum_to(n):
@@ -46,7 +46,7 @@ end
 The loop condition is re-evaluated on each iteration; `break` and `continue` keywords are also supported,
 as in other iteration constructs.
 
-### 14.3 `for` loops
+### 15.3 `for` loops
 
 Jik has two `for` patterns: numeric ranges and vector / dictionary iteration.
 

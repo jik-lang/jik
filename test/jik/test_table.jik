@@ -1,0 +1,136 @@
+use "jik/testing" as test
+use "support/table_support"
+
+
+enum Opcode:
+    PUSH
+    POP
+    PRINT
+end
+
+enum Category:
+    STACK
+    OUTPUT
+end
+
+struct Info:
+    count: int
+end
+
+variant Token:
+    IDENT: String
+    NUMBER: int
+    END
+end
+
+table StackDelta[Opcode] -> int:
+    PRINT: 0
+    PUSH: 1
+    POP: -1
+end
+
+table Enabled[Opcode] -> bool:
+    PUSH: true
+    POP: true
+    PRINT: false
+end
+
+table DoubledDelta[Opcode] -> int:
+    PUSH: StackDelta[Opcode.PUSH] * 2
+    POP: StackDelta[Opcode.POP] * 2
+    PRINT: StackDelta[Opcode.PRINT] * 2
+end
+
+table OpcodeNames[Opcode] -> String:
+    PUSH: "push"
+    POP: "pop"
+    PRINT: "print"
+end
+
+table Categories[Opcode] -> Category:
+    PUSH: Category.STACK
+    POP: Category.STACK
+    PRINT: Category.OUTPUT
+end
+
+table Infos[Opcode] -> Info:
+    PUSH: Info{count=10}
+    POP: Info{count=20}
+    PRINT: Info{count=30}
+end
+
+table Limits[Opcode] -> Option[int]:
+    PUSH: Some{10}
+    POP: None
+    PRINT: Some{30}
+end
+
+table TokenNames[Token] -> String:
+    END: "end"
+    NUMBER: "number"
+    IDENT: "identifier"
+end
+
+table ImportedModeNames[table_support::Mode] -> String:
+    FAST: "local-fast"
+    SAFE: "local-safe"
+end
+
+DefaultDelta := StackDelta[Opcode.PUSH]
+
+func test_table_enum_values(ts):
+    op := Opcode.POP
+    test::suite_assert(ts, StackDelta[Opcode.PUSH] == 1, site())
+    test::suite_assert(ts, StackDelta[op] == -1, site())
+    test::suite_assert(ts, StackDelta[Opcode.PRINT] == 0, site())
+    test::suite_assert(ts, DefaultDelta == 1, site())
+    test::suite_assert(ts, DoubledDelta[Opcode.PUSH] == 2, site())
+    test::suite_assert(ts, DoubledDelta[Opcode.POP] == -2, site())
+    test::suite_assert(ts, Enabled[Opcode.PUSH], site())
+    test::suite_assert(ts, not Enabled[Opcode.PRINT], site())
+    test::suite_assert(ts, OpcodeNames[Opcode.POP] == "pop", site())
+    test::suite_assert(ts, Categories[Opcode.PUSH] == Category.STACK, site())
+    test::suite_assert(ts, Categories[Opcode.POP] == Category.STACK, site())
+    test::suite_assert(ts, Categories[Opcode.PRINT] == Category.OUTPUT, site())
+end
+
+func test_table_composite_values(ts):
+    first := Infos[Opcode.PUSH]
+    second := Infos[Opcode.PUSH]
+    first.count = 11
+    test::suite_assert(ts, second.count == 11, site())
+
+    independent := copy(Infos[Opcode.PUSH], _)
+    independent.count = 99
+    test::suite_assert(ts, independent.count == 99, site())
+    test::suite_assert(ts, Infos[Opcode.PUSH].count == 11, site())
+
+    test::suite_assert(ts, Limits[Opcode.POP] is None, site())
+    test::suite_assert(ts, Limits[Opcode.PUSH] is Some, site())
+    test::suite_assert(ts, Limits[Opcode.PUSH]? == 10, site())
+end
+
+func test_table_variant_tags(ts):
+    first := Token.IDENT{"first"}
+    second := Token.IDENT{"second"}
+    number := Token.NUMBER{42}
+    end_token := Token.END
+
+    test::suite_assert(ts, TokenNames[first] == "identifier", site())
+    test::suite_assert(ts, TokenNames[second] == "identifier", site())
+    test::suite_assert(ts, TokenNames[number] == "number", site())
+    test::suite_assert(ts, TokenNames[end_token] == "end", site())
+end
+
+func test_table_imports(ts):
+    mode := table_support::Mode.SAFE
+    test::suite_assert(ts, table_support::ModeNames[mode] == "safe", site())
+    test::suite_assert(ts, ImportedModeNames[table_support::Mode.FAST] == "local-fast", site())
+end
+
+func run_tests(ts):
+    test_table_enum_values(ts)
+    test_table_composite_values(ts)
+    test_table_variant_tags(ts)
+    test_table_imports(ts)
+end

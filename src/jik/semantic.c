@@ -19,6 +19,16 @@ jik_make_init_call_for_extern_struct(JikType  *t,
                                      JikScope *context,
                                      JikToken *token,
                                      bool      use_auto_region);
+static void
+jik_recollect_nodes(JikSemanticAnalyzer *sa);
+static void
+jik_semantic_set_named_types(JikSemanticAnalyzer *sa);
+static void
+jik_semantic_resolve_tables(JikSemanticAnalyzer *sa);
+static void
+jik_semantic_validate_table_entries(JikSemanticAnalyzer *sa);
+static void
+jik_semantic_resolve_table_lookups(JikSemanticAnalyzer *sa);
 
 static bool
 jik_type_is_extern_struct(JikType *t)
@@ -168,6 +178,10 @@ jik_semantic_reject_invalid_value_expr(JikNode *nd)
                                                  "{}"),
                                  jik_token_to_text(nd->token));
         }
+        if (sym->type == NODE_TABLE) {
+            jik_diag_fatal_error(JIK_STRING_NCAT("table ", sym->val_table.name, " must be indexed"),
+                                 jik_token_to_text(nd->token));
+        }
     }
     if (nd->type == NODE_VARIANT_TAG) {
         jik_diag_fatal_error(JIK_STRING_NCAT("variant tag cannot be used as a value; use ",
@@ -250,6 +264,9 @@ jik_semantic_reject_invalid_value_exprs_in_expr(JikNode *nd)
             jik_semantic_reject_invalid_value_expr(item.value);
         }
     }
+    else if (nd->type == NODE_EXPR_TABLE_LOOKUP) {
+        jik_semantic_reject_invalid_value_exprs_in_expr(nd->val_table_lookup.key);
+    }
 }
 
 static void
@@ -279,6 +296,12 @@ jik_semantic_check_invalid_value_exprs(JikSemanticAnalyzer *sa)
         else if (nd->type == NODE_EXPR_STRUCT_NEW) {
             jik_semantic_reject_invalid_value_exprs_in_expr(nd);
         }
+        else if (nd->type == NODE_TABLE) {
+            for (size_t i = 0; i < VecJikNode_size(nd->val_table.normalized_entries); i++) {
+                jik_semantic_reject_invalid_value_exprs_in_expr(
+                    VecJikNode_get(nd->val_table.normalized_entries, i));
+            }
+        }
     }
 }
 
@@ -292,7 +315,8 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
         // TODO: this is badly written, and may not be needed at all
         if (nd->type != NODE_PROGRAM && nd->type != NODE_FUNCTION && nd->type != NODE_STRUCT &&
             nd->type != NODE_ENUM && nd->type != NODE_BUILTIN_FUNCTION &&
-            nd->type != NODE_EXTERN_FUNCTION && nd->type != NODE_VARIANT) {
+            nd->type != NODE_EXTERN_FUNCTION && nd->type != NODE_VARIANT &&
+            nd->type != NODE_TABLE) {
             assert(nd->context != NULL);
         }
         if (nd->type == NODE_ENUM) {
@@ -346,6 +370,19 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             jik_diag_fatal_error_if(!res,
                                     JIK_STRING_NCAT("symbol \"",
                                                     nd->val_variant.name,
+                                                    "\" already defined in module \"",
+                                                    nd->token->module_id,
+                                                    "\""),
+                                    "");
+        }
+        else if (nd->type == NODE_TABLE) {
+            assert(nd->context->parent == NULL);
+            jik_semantic_reject_reserved_prefix(nd->val_table.name, nd->token);
+            jik_semantic_reject_builtin_name_collision(sa, nd->val_table.name, nd->token);
+            bool res = jik_scope_add_global_symbol(nd->val_table.name, nd->token->module_id, nd);
+            jik_diag_fatal_error_if(!res,
+                                    JIK_STRING_NCAT("symbol \"",
+                                                    nd->val_table.name,
                                                     "\" already defined in module \"",
                                                     nd->token->module_id,
                                                     "\""),
@@ -571,6 +608,12 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                 if (s->type == NODE_EXTERN_FUNCTION) {
                     nd->val_call.extern_name = s->val_extern_function.C_func_name;
                 }
+                if (s->type == NODE_TABLE) {
+                    jik_diag_fatal_error(JIK_STRING_NCAT("table ",
+                                                         s->val_table.name,
+                                                         " must be indexed"),
+                                         jik_token_to_text(nd->token));
+                }
             }
         }
         else if (nd->type == NODE_EXPR_STRUCT_NEW) {
@@ -720,6 +763,12 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                                     jik_token_to_text(nd->token));
         }
     }
+
+    jik_semantic_set_named_types(sa);
+    jik_semantic_resolve_tables(sa);
+    jik_semantic_validate_table_entries(sa);
+    jik_semantic_resolve_table_lookups(sa);
+    jik_recollect_nodes(sa);
 }
 
 static TabJikType *
@@ -1195,6 +1244,10 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
         JikNode *n = jik_scope_get_symbol(
             nd->context, nd->val_id.name, nd->val_id.module_id, nd->token->module_id);
         assert(n);
+        if (n->type == NODE_TABLE) {
+            jik_diag_fatal_error(JIK_STRING_NCAT("table ", n->val_table.name, " must be indexed"),
+                                 jik_token_to_text(nd->token));
+        }
         if (jik_node_is_type_inferred(n)) {
             nd->jik_type = n->jik_type;
         }
@@ -1407,6 +1460,12 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
             else {
                 jik_diag_fatal_error("internal error: unhandled subscriptable type", "");
             }
+        }
+    }
+    else if (nd->type == NODE_EXPR_TABLE_LOOKUP) {
+        jik_semantic_infer_type(sa, nd->val_table_lookup.key);
+        if (jik_node_is_type_inferred(nd->val_table_lookup.key)) {
+            nd->jik_type = nd->val_table_lookup.table->val_table.value_type;
         }
     }
     else if (nd->type == NODE_EXPR_SLICE) {
@@ -1870,6 +1929,9 @@ jik_semantic_resolve_type(JikNode *nd)
             JikNode *s = jik_scope_get_symbol(
                 nd->context, type_id->val_id.name, type_id->val_id.module_id, nd->token->module_id);
             if (s) {
+                if (s->type == NODE_TABLE) {
+                    return NULL;
+                }
                 return s->jik_type;
             }
             return NULL;
@@ -2243,6 +2305,174 @@ jik_semantic_set_named_types(JikSemanticAnalyzer *sa)
 }
 
 static void
+jik_semantic_resolve_tables(JikSemanticAnalyzer *sa)
+{
+    for (size_t i = 0; i < VecJikNode_size(sa->ctx->ast->val_program.tables); i++) {
+        JikNode *table  = VecJikNode_get(sa->ctx->ast->val_program.tables, i);
+        JikNode *key_td = table->val_table.key_type_desc;
+        JikNode *key_id = key_td->val_type_desc.name;
+        JikNode *key_decl = key_id
+                                ? jik_scope_get_symbol(table->context,
+                                                       key_id->val_id.name,
+                                                       key_id->val_id.module_id,
+                                                       table->token->module_id)
+                                : NULL;
+        jik_diag_fatal_error_if(!key_decl ||
+                                    (key_decl->type != NODE_ENUM && key_decl->type != NODE_VARIANT),
+                                "table key type must be an enum or variant",
+                                jik_token_to_text(key_td->token));
+
+        JikType *value_type = jik_semantic_resolve_type_or_error(table->val_table.value_type_desc);
+        jik_diag_fatal_error_if(jik_type_is_one_of(
+                                    value_type,
+                                    (JikTypeName[]){TYPE_VOID,
+                                                    TYPE_REGION,
+                                                    TYPE_SITE,
+                                                    TYPE_FUNCTION,
+                                                    TYPE_NOTYPE}),
+                                "table value type must be an ordinary value type",
+                                jik_token_to_text(table->val_table.value_type_desc->token));
+
+        table->val_table.key_decl   = key_decl;
+        table->val_table.value_type = value_type;
+        VecString *keys = key_decl->type == NODE_ENUM ? key_decl->val_enum.enumerator_order
+                                                       : key_decl->val_variant.member_order;
+
+        for (size_t j = 0; j < VecString_size(table->val_table.entry_order); j++) {
+            char *entry_name = VecString_get(table->val_table.entry_order, j);
+            bool known = key_decl->type == NODE_ENUM
+                             ? TabBool_get(key_decl->val_enum.enumerators, entry_name) != NULL
+                             : TabJikNode_get(key_decl->val_variant.type_descs, entry_name) != NULL ||
+                                   TabBool_get(key_decl->val_variant.payloadless_tags, entry_name) !=
+                                       NULL;
+            jik_diag_fatal_error_if(!known,
+                                    JIK_STRING_NCAT("unknown ",
+                                                    key_decl->type == NODE_ENUM ? "enum member" :
+                                                                                 "variant tag",
+                                                    " in table ",
+                                                    table->val_table.name,
+                                                    ": ",
+                                                    entry_name),
+                                    jik_token_to_text(table->token));
+        }
+
+        for (size_t j = 0; j < VecString_size(keys); j++) {
+            char     *key   = VecString_get(keys, j);
+            JikNode **entry = TabJikNode_get(table->val_table.entries, key);
+            jik_diag_fatal_error_if(!entry,
+                                    JIK_STRING_NCAT("table ",
+                                                    table->val_table.name,
+                                                    " is missing an entry for ",
+                                                    key_decl->type == NODE_ENUM
+                                                        ? key_decl->val_enum.name
+                                                        : key_decl->val_variant.name,
+                                                    ".",
+                                                    key),
+                                    jik_token_to_text(table->token));
+            jik_semantic_apply_option_context(*entry, value_type);
+            VecJikNode_push(table->val_table.normalized_entries, *entry);
+        }
+    }
+}
+
+static void
+jik_semantic_validate_table_entries(JikSemanticAnalyzer *sa)
+{
+    for (size_t i = 0; i < VecJikNode_size(sa->ctx->ast->val_program.tables); i++) {
+        JikNode *table = VecJikNode_get(sa->ctx->ast->val_program.tables, i);
+        for (size_t j = 0; j < VecJikNode_size(table->val_table.normalized_entries); j++) {
+            VecJikNode *nodes = VecJikNode_new_empty();
+            jik_collect_nodes(VecJikNode_get(table->val_table.normalized_entries, j), nodes);
+            JikNode        *nd;
+            VecJikNode_iter it = VecJikNode_iter_new(nodes);
+            while (VecJikNode_iter_next(&it, &nd)) {
+                jik_diag_fatal_error_if(nd->type == NODE_EXPR_CALL,
+                                        "table entries cannot call functions",
+                                        jik_token_to_text(nd->token));
+                if (nd->type != NODE_EXPR_IDENTIFIER) {
+                    continue;
+                }
+                JikNode *symbol = jik_scope_get_symbol(nd->context,
+                                                        nd->val_id.name,
+                                                        nd->val_id.module_id,
+                                                        nd->token->module_id);
+                for (size_t k = 0; k < VecJikNode_size(sa->ctx->ast->val_program.globals); k++) {
+                    JikNode *global = VecJikNode_get(sa->ctx->ast->val_program.globals, k);
+                    jik_diag_fatal_error_if(symbol == global->val_declare.expr,
+                                            "table entries cannot read global variables",
+                                            jik_token_to_text(nd->token));
+                }
+            }
+        }
+    }
+}
+
+static void
+jik_semantic_resolve_table_lookups(JikSemanticAnalyzer *sa)
+{
+    VecJikNode_iter it = VecJikNode_iter_new(sa->nodes);
+    JikNode        *nd;
+    while (VecJikNode_iter_next(&it, &nd)) {
+        if (nd->type == NODE_EXPR_SUBSCRIPT_GET &&
+            nd->val_subscript_get.node->type == NODE_EXPR_IDENTIFIER) {
+            JikNode *base  = nd->val_subscript_get.node;
+            JikNode *table = jik_scope_get_symbol(
+                nd->context, base->val_id.name, base->val_id.module_id, nd->token->module_id);
+            if (table && table->type == NODE_TABLE) {
+                JikNode *lookup = jik_node_new_table_lookup(
+                    table, nd->val_subscript_get.expr, nd->context, nd->token);
+                *nd = *lookup;
+            }
+        }
+        else if (nd->type == NODE_STMNT_SUBSCRIPT_SET &&
+                 nd->val_subscript_set.node->type == NODE_EXPR_IDENTIFIER) {
+            JikNode *base  = nd->val_subscript_set.node;
+            JikNode *table = jik_scope_get_symbol(
+                nd->context, base->val_id.name, base->val_id.module_id, nd->token->module_id);
+            jik_diag_fatal_error_if(table && table->type == NODE_TABLE,
+                                    "table entries are immutable",
+                                    jik_token_to_text(nd->token));
+        }
+    }
+}
+
+static void
+jik_semantic_check_table_initialization_order(JikSemanticAnalyzer *sa)
+{
+    VecJikNode *tables = sa->ctx->ast->val_program.tables;
+    for (size_t i = 0; i < VecJikNode_size(tables); i++) {
+        JikNode *table = VecJikNode_get(tables, i);
+        for (size_t j = 0; j < VecJikNode_size(table->val_table.normalized_entries); j++) {
+            VecJikNode *nodes = VecJikNode_new_empty();
+            jik_collect_nodes(VecJikNode_get(table->val_table.normalized_entries, j), nodes);
+            JikNode        *expr_nd;
+            VecJikNode_iter it = VecJikNode_iter_new(nodes);
+            while (VecJikNode_iter_next(&it, &expr_nd)) {
+                if (expr_nd->type != NODE_EXPR_TABLE_LOOKUP) {
+                    continue;
+                }
+                JikNode *referenced = expr_nd->val_table_lookup.table;
+                bool initialized = false;
+                for (size_t k = 0; k < i; k++) {
+                    if (VecJikNode_get(tables, k) == referenced) {
+                        initialized = true;
+                        break;
+                    }
+                }
+                jik_diag_fatal_error_if(
+                    !initialized,
+                    JIK_STRING_NCAT("table ",
+                                    table->val_table.name,
+                                    " initializer reads table ",
+                                    referenced->val_table.name,
+                                    " before it is initialized"),
+                    jik_token_to_text(table->token));
+            }
+        }
+    }
+}
+
+static void
 jik_semantic_infer_types(JikSemanticAnalyzer *sa)
 {
     jik_semantic_set_main_function_type(sa);
@@ -2395,11 +2625,12 @@ jik_semantic_run(JikSemanticAnalyzer *sa)
 {
     jik_init_namespaces();
     jik_semantic_resolve_symbols(sa);
-    jik_semantic_check_invalid_value_exprs(sa);
     jik_diag_fatal_error_if(!sa->main_defined, "main function not defined", "");
-    jik_semantic_set_named_types(sa);
+    jik_semantic_check_table_initialization_order(sa);
+    jik_semantic_check_invalid_value_exprs(sa);
     jik_semantic_check_recursive_composites(sa);
     jik_semantic_infer_types(sa);
+    jik_semantic_validate_table_entries(sa);
     jik_semantic_post_infer_actions(sa);
     jik_check_types(sa->nodes);
     jik_check_error_handling(sa->nodes);

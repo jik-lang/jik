@@ -1,0 +1,34 @@
+// Example: exhaustive, immutable lookup tables
+
+enum Signal:
+    RED
+    GREEN
+    YELLOW
+end
+
+table SignalNames[Signal] -> String:
+    RED: "red"
+    GREEN: "green"
+    YELLOW: "yellow"
+end
+
+table Durations[Signal] -> int:
+    RED: 30
+    GREEN: 25
+    YELLOW: 5
+end
+
+table NextSignal[Signal] -> Signal:
+    RED: Signal.GREEN
+    GREEN: Signal.YELLOW
+    YELLOW: Signal.RED
+end
+
+func main():
+    signal := Signal.RED
+
+    for cycle = 0, 6:
+        println(SignalNames[signal], " for ", Durations[signal], " seconds")
+        signal = NextSignal[signal]
+    end
+end

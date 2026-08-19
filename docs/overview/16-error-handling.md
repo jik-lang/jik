@@ -1,6 +1,6 @@
 [Back to overview](../overview.md)
 
-# 15. Error handling
+# 16. Error handling
 
 Jik uses **throwing functions** and structured handling at the call site.
 The current model is centered around four language constructs:
@@ -12,7 +12,7 @@ The current model is centered around four language constructs:
 
 Errors are therefore handled as **control flow**.
 
-### 15.1 Declaring a throwing function
+### 16.1 Declaring a throwing function
 
 A function which may fail must be declared with `throws func`:
 
@@ -30,7 +30,7 @@ error code `1`, while `fail(msg, code)` lets you set an explicit integer error c
 `fail(...)` also terminates the current control-flow path. Any statement that follows `fail(...)`
 in the same block is unreachable and is a compile error.
 
-### 15.2 Handling failures with `try / except`
+### 16.2 Handling failures with `try / except`
 
 A throwing call can be wrapped in a `try` block:
 
@@ -58,7 +58,7 @@ except:
 end
 ```
 
-### 15.3 Propagating failures
+### 16.3 Propagating failures
 
 Within a `throws func`, `try` can pass a failure to the caller instead of
 handling it locally. It can be used with either a declaration or a call that
@@ -82,7 +82,7 @@ if the call fails, the function returns through its error path before any
 following statement runs. The propagation form has no trailing colon; a colon
 starts a local `try ... except ... end` handler.
 
-### 15.4 Requiring success with `must`
+### 16.4 Requiring success with `must`
 
 When a failure does not need to be handled separately, use `must`:
 
@@ -103,7 +103,7 @@ print(div_safe(10, 2)! == 5)
 `!` applies only to function calls. Use `try ... except ... end` when failure
 needs local recovery.
 
-### 15.5 Inspecting the current error
+### 16.5 Inspecting the current error
 
 Inside an `except` block, the current error can be inspected with:
 
@@ -123,7 +123,7 @@ except:
 end
 ```
 
-### 15.6 Example
+### 16.6 Example
 
 ```jik
 throws func div_safe(x, y):

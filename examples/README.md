@@ -14,12 +14,13 @@ standard library.
 7. `modules/main.jik` - multi-file programs, modules, and imports
 8. `enum_match.jik` - exhaustive matching over enum values
 9. `variants.jik` - enums, payload-less variants, `match`, and UFCS
-10. `error_handling.jik` - `throws`, recovery, propagation, `must`, and postfix `!`
-11. `ffi_demo.jik` - calling C functions and opaque C structs through Jik's FFI
-12. `testing_demo.jik` - basic use of `jik/testing`
-13. `cl_args.jik` - raw command-line argument handling
-14. `argparse_demo.jik` - parsed arguments, generated help, and path normalization
-15. `process_capture.jik` - capture a process and inspect stdout/stderr
+10. `tables.jik` - exhaustive enum lookup tables and table-driven transitions
+11. `error_handling.jik` - `throws`, recovery, propagation, `must`, and postfix `!`
+12. `ffi_demo.jik` - calling C functions and opaque C structs through Jik's FFI
+13. `testing_demo.jik` - basic use of `jik/testing`
+14. `cl_args.jik` - raw command-line argument handling
+15. `argparse_demo.jik` - parsed arguments, generated help, and path normalization
+16. `process_capture.jik` - capture a process and inspect stdout/stderr
 
 The remaining examples are larger demonstrations:
 

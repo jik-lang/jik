@@ -507,6 +507,8 @@ match_keyword_or_id(const char *kwd)
         return TOK_KWD_STRUCT;
     if (strcmp(kwd, "enum") == 0)
         return TOK_KWD_ENUM;
+    if (strcmp(kwd, "table") == 0)
+        return TOK_KWD_TABLE;
     if (strcmp(kwd, "variant") == 0)
         return TOK_KWD_VARIANT;
     if (strcmp(kwd, "if") == 0)

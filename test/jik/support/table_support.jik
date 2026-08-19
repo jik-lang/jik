@@ -1,0 +1,9 @@
+enum Mode:
+    FAST
+    SAFE
+end
+
+table ModeNames[Mode] -> String:
+    SAFE: "safe"
+    FAST: "fast"
+end

@@ -1,13 +1,13 @@
 [Back to overview](../overview.md)
 
-# 16. Foreign Function Interface (C interop)
+# 17. Foreign Function Interface (C interop)
 
 Within Jik, one can embed C code and expose it through a foreign function
 interface, using the `extern` keyword. One can expose functions and structs.
 Extern structs are opaque handle types. Their fields are not visible to Jik,
 so construction and access must go through extern functions.
 
-### 16.1 Extern functions
+### 17.1 Extern functions
 
 Extern functions are declared like so:
 
@@ -40,7 +40,7 @@ One can then use it like any other function:
 assert(adder(3, 2) == 5)
 ```
 
-### 16.2 Extern structs
+### 17.2 Extern structs
 
 Regarding structs, here is an example:
 
@@ -82,7 +82,7 @@ Extern structs cannot be read or modified the same way as non-extern structs,
 since they are opaque. Field access and mutation must be exposed through a
 specifically constructed API, as demonstrated above.
 
-### 16.3 Default initialization for extern structs
+### 17.3 Default initialization for extern structs
 
 Some extern structs have a meaningful empty value. These can declare one
 extern function as the type's default initializer:
@@ -127,7 +127,7 @@ Extern structs without an init function cannot be default-constructed:
 f: io::File // error because io::File has no extern init function
 ```
 
-### 16.4 Generated C names and identifier restrictions
+### 17.4 Generated C names and identifier restrictions
 
 Jik reserves identifiers beginning with `jik_`, `Jik`, and `JIK`. Do not use
 these prefixes for functions, types, globals, locals, fields, module aliases,
@@ -155,7 +155,7 @@ Embedded C is passed through unchanged and may introduce its own names or C
 macros. It must therefore avoid collisions with Jik-generated names and
 follow the normal C rules itself.
 
-### 16.5 Native build requirements
+### 17.5 Native build requirements
 
 An FFI module can declare the include paths, library paths, libraries, and runtime files needed to
 build programs that import it:

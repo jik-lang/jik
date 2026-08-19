@@ -174,13 +174,13 @@ jik_prepare_functions(JikNode *ast)
 }
 
 static void
-jik_mark_global_initializer_allocs(JikNode *ast, JikNode *global_nd)
+jik_mark_global_expression_allocs(JikNode *ast, JikNode *expr)
 {
     VecJikNode  *nodes       = VecJikNode_new_empty();
     JikAllocSpec global_spec = {.kind = JIK_ALLOC_GLOBAL, .src = JIK_ALLOC_SRC_FOREIGN};
     JikNode     *nd;
 
-    jik_collect_nodes(global_nd->val_declare.expr, nodes);
+    jik_collect_nodes(expr, nodes);
     VecJikNode_iter it = VecJikNode_iter_new(nodes);
     while (VecJikNode_iter_next(&it, &nd)) {
         if (jik_node_is_allocated_literal(nd)) {
@@ -201,7 +201,15 @@ jik_mark_global_allocs(JikNode *ast)
     ast->val_program.needs_global_region = false;
     for (size_t i = 0; i < VecJikNode_size(ast->val_program.globals); i++) {
         nd = VecJikNode_get(ast->val_program.globals, i);
-        jik_mark_global_initializer_allocs(ast, nd);
+        jik_mark_global_expression_allocs(ast, nd->val_declare.expr);
+    }
+    for (size_t i = 0; i < VecJikNode_size(ast->val_program.tables); i++) {
+        nd = VecJikNode_get(ast->val_program.tables, i);
+        for (size_t j = 0; j < VecJikNode_size(nd->val_table.normalized_entries); j++) {
+            jik_mark_global_expression_allocs(
+                ast,
+                VecJikNode_get(nd->val_table.normalized_entries, j));
+        }
     }
 }
 
@@ -547,6 +555,9 @@ get_expression_alloc_spec(JikNode *nd, TabJikAllocSpec *tvs)
     }
     else if (nd->type == NODE_EXPR_SUBSCRIPT_GET) {
         return get_expression_alloc_spec(nd->val_subscript_get.node, tvs);
+    }
+    else if (nd->type == NODE_EXPR_TABLE_LOOKUP) {
+        return (JikAllocSpec){.kind = JIK_ALLOC_GLOBAL, .src = JIK_ALLOC_SRC_FOREIGN};
     }
     else if (nd->type == NODE_EXPR_SLICE) {
         return get_expression_alloc_spec(nd->val_slice.node, tvs);

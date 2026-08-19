@@ -119,4 +119,7 @@ assert(v.is_text()) // shorthand for is_text(v)
 For an imported variant, the function is resolved in the module that defines
 the variant, just as it is for an imported struct.
 
+A [table](14-tables.md) can associate one stored value with every variant tag. Such a lookup
+considers only the active tag and does not inspect its payload.
+
 ---

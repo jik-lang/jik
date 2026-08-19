@@ -6,6 +6,7 @@
     { "include": "#annotations" },
     { "include": "#strings" },
     { "include": "#numbers" },
+    { "include": "#table-defs" },
     { "include": "#keywords" },
     { "include": "#builtin-types" },
     { "include": "#builtin-functions" },
@@ -76,8 +77,19 @@
     "keywords": {
       "patterns": [
         {
-          "match": "\\b(func|struct|enum|variant|if|elif|else|while|for|end|return|of|this|break|continue|use|as|true|false|and|or|not|extern|init|hints|must|try|except|throws|foreign|is)\\b",
+          "match": "\\b(func|struct|enum|variant|table|if|elif|else|while|for|end|return|of|this|break|continue|use|as|true|false|and|or|not|extern|init|hints|must|try|except|throws|foreign|is)\\b",
           "name": "keyword.control.jik"
+        }
+      ]
+    },
+    "table-defs": {
+      "patterns": [
+        {
+          "match": "\\b(table)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.control.jik" },
+            "2": { "name": "entity.name.constant.jik" }
+          }
         }
       ]
     },

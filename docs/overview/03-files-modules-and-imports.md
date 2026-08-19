@@ -49,7 +49,7 @@ use "jik/io"
 use "jik/testing" as test
 ```
 
-These modules are documented in the [standard library chapter](18-standard-library.md).
+These modules are documented in the [standard library chapter](19-standard-library.md).
 
 #### 3.1.3 Package imports
 

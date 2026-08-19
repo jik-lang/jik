@@ -461,6 +461,38 @@ jik_check_types(VecJikNode *nodes)
                     jik_token_to_text(nd->val_subscript_get.expr->token));
             }
         }
+        else if (nd->type == NODE_EXPR_TABLE_LOOKUP) {
+            JikNode *table = nd->val_table_lookup.table;
+            JikType *required = table->val_table.key_decl->jik_type;
+            JikType *actual   = nd->val_table_lookup.key->jik_type;
+            jik_diag_fatal_error_if(!jik_type_equal(required, actual),
+                                    JIK_STRING_NCAT("table lookup key type mismatch: table ",
+                                                    table->val_table.name,
+                                                    " requires ",
+                                                    jik_type_pretty_name(required),
+                                                    ", got ",
+                                                    jik_type_pretty_name(actual)),
+                                    jik_token_to_text(nd->val_table_lookup.key->token));
+        }
+        else if (nd->type == NODE_TABLE) {
+            VecString *keys = nd->val_table.key_decl->type == NODE_ENUM
+                                  ? nd->val_table.key_decl->val_enum.enumerator_order
+                                  : nd->val_table.key_decl->val_variant.member_order;
+            for (size_t i = 0; i < VecJikNode_size(nd->val_table.normalized_entries); i++) {
+                JikNode *entry = VecJikNode_get(nd->val_table.normalized_entries, i);
+                jik_diag_fatal_error_if(
+                    !jik_type_equal(nd->val_table.value_type, entry->jik_type),
+                    JIK_STRING_NCAT("table entry type mismatch for ",
+                                    VecString_get(keys, i),
+                                    " in table ",
+                                    nd->val_table.name,
+                                    ": expected ",
+                                    jik_type_pretty_name(nd->val_table.value_type),
+                                    ", got ",
+                                    jik_type_pretty_name(entry->jik_type)),
+                    jik_token_to_text(entry->token));
+            }
+        }
         else if (nd->type == NODE_EXPR_SLICE) {
             JikNode *source = nd->val_slice.node;
             jik_diag_fatal_error_if(!jik_type_is_one_of(source->jik_type,

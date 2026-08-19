@@ -187,6 +187,13 @@ jik_codegen_type_name(char *module_id, char *name)
 }
 
 static char *
+jik_codegen_table_name(char *module_id, char *name)
+{
+    assert(module_id && name);
+    return JIK_STRING_NCAT(MANGLE_PREFIX, module_id, "_table_", name);
+}
+
+static char *
 jik_codegen_function_helper_name(char *function_name, char *operation)
 {
     return JIK_STRING_NCAT(function_name, "_op_", operation);
@@ -275,6 +282,20 @@ jik_codegen_emit_main_function(JikCodeGenerator *cg)
 
     jik_writer_blank_line(&cg->cw);
     JikNode *nd;
+    for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.tables); i++) {
+        nd = VecJikNode_get(cg->ast->val_program.tables, i);
+        for (size_t j = 0; j < VecJikNode_size(nd->val_table.normalized_entries); j++) {
+            jik_writer_write_line(
+                &cg->cw,
+                JIK_STRING_NCAT(nd->val_table.mangled_name,
+                                "[",
+                                size_t_to_string(j),
+                                "] = ",
+                                jik_codegen_emit_expression(
+                                    cg, VecJikNode_get(nd->val_table.normalized_entries, j)),
+                                ";"));
+        }
+    }
     for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.globals); i++) {
         nd = VecJikNode_get(cg->ast->val_program.globals, i);
         jik_writer_write_line(&cg->cw,
@@ -1600,6 +1621,16 @@ jik_codegen_emit_expression(JikCodeGenerator *cg, JikNode *nd)
     else if (nd->type == NODE_EXPR_SUBSCRIPT_GET) {
         return jik_codegen_emit_expr_subscript_get(cg, nd);
     }
+    else if (nd->type == NODE_EXPR_TABLE_LOOKUP) {
+        char *key = jik_codegen_emit_expression(cg, nd->val_table_lookup.key);
+        if (nd->val_table_lookup.table->val_table.key_decl->type == NODE_VARIANT) {
+            key = JIK_STRING_NCAT("(", key, ")->tag");
+        }
+        return JIK_STRING_NCAT(nd->val_table_lookup.table->val_table.mangled_name,
+                               "[",
+                               key,
+                               "]");
+    }
     else if (nd->type == NODE_EXPR_SLICE) {
         return jik_codegen_emit_expr_slice(cg, nd);
     }
@@ -2708,6 +2739,21 @@ jik_codegen_emit_global_declarations(JikCodeGenerator *cg)
                                               nd->val_assign.id->val_id.mangled_name,
                                               ";"));
     }
+    for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.tables); i++) {
+        nd = VecJikNode_get(cg->ast->val_program.tables, i);
+        nd->val_table.mangled_name =
+            jik_codegen_table_name(nd->token->module_id, nd->val_table.name);
+        size_t count = VecJikNode_size(nd->val_table.normalized_entries);
+        jik_codegen_emit_source_location(cg, nd);
+        jik_writer_write_line(&cg->cw,
+                              JIK_STRING_NCAT("static ",
+                                              nd->val_table.value_type->C_name,
+                                              " ",
+                                              nd->val_table.mangled_name,
+                                              "[",
+                                              size_t_to_string(count > 0 ? count : 1),
+                                              "];"));
+    }
     // Structs
     for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.structs); i++) {
         nd       = VecJikNode_get(cg->ast->val_program.structs, i);
@@ -3235,6 +3281,10 @@ jik_codegen_prepare_C_names(JikCodeGenerator *cg)
     it = VecJikNode_iter_new(cg->nodes);
     while (VecJikNode_iter_next(&it, &nd)) {
         jik_codegen_prepare_type_name(nd->jik_type);
+    }
+    for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.tables); i++) {
+        nd = VecJikNode_get(cg->ast->val_program.tables, i);
+        jik_codegen_prepare_type_name(nd->val_table.value_type);
     }
     if (cg->arg_vec) {
         jik_codegen_prepare_type_name(cg->arg_vec->jik_type);

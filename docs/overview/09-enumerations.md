@@ -58,4 +58,6 @@ Enum cases must be qualified, including for imported enums. `case State.ON:` is 
 Use enums when the possible values are known in advance and do not need to carry additional data.
 If each case needs associated values, variants are the more general construct.
 
+A [table](14-tables.md) can associate one stored value with every member of an enum.
+
 ---

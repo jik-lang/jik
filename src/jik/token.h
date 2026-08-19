@@ -31,6 +31,7 @@ typedef struct JikToken JikToken;
     X(TOK_KWD_END)                                                                                 \
     X(TOK_KWD_STRUCT)                                                                              \
     X(TOK_KWD_ENUM)                                                                                \
+    X(TOK_KWD_TABLE)                                                                               \
     X(TOK_KWD_VARIANT)                                                                             \
     X(TOK_KWD_IF)                                                                                  \
     X(TOK_KWD_ELIF)                                                                                \

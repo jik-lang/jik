@@ -1,6 +1,6 @@
 [Back to overview](../overview.md)
 
-# 17. Builtins
+# 18. Builtins
 
 Builtins are functions which are part of the language and are always available, without any additional `use` statements.
 
@@ -9,7 +9,7 @@ loop variables, match-bound variables, or top-level type names.
 
 ---
 
-### 17.1 Output
+### 18.1 Output
 
 #### `print(...) -> void`
 
@@ -43,7 +43,7 @@ same := concat("hello", ", ", name, "!", _)
 
 ---
 
-### 17.2 Container builtins
+### 18.2 Container builtins
 
 #### `push(Vec[T], T) -> void`
 Pushes a value of type `T` to the end of a vector of type `Vec[T]`.
@@ -106,7 +106,7 @@ to calls with `v` as their first argument.
 
 ---
 
-### 17.3 Debugging
+### 18.3 Debugging
 
 Debugging builtins return information about a call site. Basic debugging information is obtained
 through the opaque type `Site`.
@@ -156,7 +156,7 @@ println(site_file(s, _), site_line(s), site_code(s, _))
 
 ---
 
-### 17.4 Miscellaneous
+### 18.4 Miscellaneous
 
 #### `copy(T[, Region]) -> T`
 Copies a composite value into the destination region. If the final
@@ -200,10 +200,10 @@ assert(len(v) == 10)
 ```
 
 #### `fail(String[, int]) -> void`
-Marks the current throwing function as failed. See [Error Handling](15-error-handling.md).
+Marks the current throwing function as failed. See [Error Handling](16-error-handling.md).
 
 #### `error_msg([Region]) -> String`
-Returns the current error message. Most commonly used inside `except`. See [Error Handling](15-error-handling.md).
+Returns the current error message. Most commonly used inside `except`. See [Error Handling](16-error-handling.md).
 
 #### `error_code() -> int`
-Returns the current error code. See [Error Handling](15-error-handling.md).
+Returns the current error code. See [Error Handling](16-error-handling.md).
