@@ -69,9 +69,9 @@ extern func jik_impl_process_result_err as
 
 @embed{C_END}
 
-struct vec_JikString;
-JikString *vec_JikString_get(struct vec_JikString *v, size_t idx, char *dbg_info);
-size_t vec_JikString_size(struct vec_JikString *v, char *dbg_info);
+struct jik_vec_JikString;
+JikString *jik_vec_JikString_get(struct jik_vec_JikString *v, size_t idx, char *dbg_info);
+size_t jik_vec_JikString_size(struct jik_vec_JikString *v, char *dbg_info);
 struct jik_impl_bytes_Bytes;
 struct jik_impl_bytes_Bytes *
 jik_impl_bytes_from_raw_copy(uint8_t *data, size_t size, JikRegion *a);
@@ -234,14 +234,14 @@ jik_impl_process_append_windows_arg(JikCharBuffer *b, const char *arg, JikRegion
 
 static char *
 jik_impl_process_build_windows_command_line(
-    JikString *program, struct vec_JikString *args, JikRegion *r)
+    JikString *program, struct jik_vec_JikString *args, JikRegion *r)
 {
     JikCharBuffer *b = jik_char_buffer_new("", r);
     jik_impl_process_append_windows_arg(b, program->data, r);
 
-    size_t n = vec_JikString_size(args, "process::run args");
+    size_t n = jik_vec_JikString_size(args, "process::run args");
     for (size_t i = 0; i < n; i++) {
-        JikString *arg = vec_JikString_get(args, i, "process::run args");
+        JikString *arg = jik_vec_JikString_get(args, i, "process::run args");
         jik_char_buffer_append_char(b, ' ', r);
         jik_impl_process_append_windows_arg(b, arg->data, r);
     }
@@ -250,7 +250,7 @@ jik_impl_process_build_windows_command_line(
 }
 
 int32_t
-jik_impl_process_run(JikString *program, struct vec_JikString *args, JikError *e)
+jik_impl_process_run(JikString *program, struct jik_vec_JikString *args, JikError *e)
 {
     if (program->data[0] == '\0') {
         jik_impl_process_set_error(e, "process::run: invalid program");
@@ -358,7 +358,7 @@ jik_impl_process_create_pipe(HANDLE *read_handle, HANDLE *write_handle)
 }
 
 jik_impl_process_Result *
-jik_impl_process_capture_raw(JikString *program, struct vec_JikString *args, JikRegion *out_region, JikError *e)
+jik_impl_process_capture_raw(JikString *program, struct jik_vec_JikString *args, JikRegion *out_region, JikError *e)
 {
     if (program->data[0] == '\0') {
         jik_impl_process_set_error(e, "process::capture: invalid program");
@@ -501,9 +501,9 @@ jik_impl_process_close_if_open(int fd)
 }
 
 static char **
-jik_impl_process_build_argv(JikString *program, struct vec_JikString *args)
+jik_impl_process_build_argv(JikString *program, struct jik_vec_JikString *args)
 {
-    size_t n = vec_JikString_size(args, "process::run args");
+    size_t n = jik_vec_JikString_size(args, "process::run args");
     char **argv = malloc((n + 2) * sizeof(char *));
     if (!argv) {
         return NULL;
@@ -511,7 +511,7 @@ jik_impl_process_build_argv(JikString *program, struct vec_JikString *args)
 
     argv[0] = program->data;
     for (size_t i = 0; i < n; i++) {
-        JikString *arg = vec_JikString_get(args, i, "process::run args");
+        JikString *arg = jik_vec_JikString_get(args, i, "process::run args");
         argv[i + 1] = arg->data;
     }
     argv[n + 1] = NULL;
@@ -531,7 +531,7 @@ jik_impl_process_exit_code_from_status(int status)
 }
 
 int32_t
-jik_impl_process_run(JikString *program, struct vec_JikString *args, JikError *e)
+jik_impl_process_run(JikString *program, struct jik_vec_JikString *args, JikError *e)
 {
     if (program->data[0] == '\0') {
         jik_impl_process_set_error(e, "process::run: invalid program");
@@ -687,7 +687,7 @@ jik_impl_process_drain_pipes(int stdout_fd,
 }
 
 jik_impl_process_Result *
-jik_impl_process_capture_raw(JikString *program, struct vec_JikString *args, JikRegion *out_region, JikError *e)
+jik_impl_process_capture_raw(JikString *program, struct jik_vec_JikString *args, JikRegion *out_region, JikError *e)
 {
     if (program->data[0] == '\0') {
         jik_impl_process_set_error(e, "process::capture: invalid program");

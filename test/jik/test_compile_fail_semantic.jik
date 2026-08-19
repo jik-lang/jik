@@ -99,7 +99,7 @@ end
 func main():
 end
 """,
-        "uses reserved prefix")
+        "uses one of reserved prefixes")
 end
 
 func test_compile_fail_08(ts):
@@ -109,7 +109,7 @@ func main():
     jik_x := 1
 end
 """,
-        "uses reserved prefix")
+        "uses one of reserved prefixes")
 end
 
 func test_compile_fail_09(ts):
@@ -122,7 +122,7 @@ end
 func main():
 end
 """,
-        "uses reserved prefix")
+        "uses one of reserved prefixes")
 end
 
 func test_compile_fail_10(ts):
@@ -426,6 +426,36 @@ end
         "duplicate variant case: Choice.FIRST")
 end
 
+func test_compile_fail_27(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    size_t := 1
+end
+""",
+        "identifier \"size_t\" is reserved by the C backend")
+end
+
+func test_compile_fail_28(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    EOF := 1
+end
+""",
+        "identifier \"EOF\" is reserved by the C backend")
+end
+
+func test_compile_fail_29(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    _Private := 1
+end
+""",
+        "identifier \"_Private\" is reserved by the C backend")
+end
+
 func run_tests(ts):
     test_compile_fail_01(ts)
     test_compile_fail_02(ts)
@@ -453,4 +483,7 @@ func run_tests(ts):
     test_compile_fail_24(ts)
     test_compile_fail_25(ts)
     test_compile_fail_26(ts)
+    test_compile_fail_27(ts)
+    test_compile_fail_28(ts)
+    test_compile_fail_29(ts)
 end

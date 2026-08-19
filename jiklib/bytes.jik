@@ -181,14 +181,14 @@ extern func jik_impl_bytes_to_bytes as
 typedef struct jik_impl_bytes_Bytes {
     uint8_t *data;
     size_t size;
-    JikRegion *region;
+    JikRegion *jik_region;
 } jik_impl_bytes_Bytes;
 
 typedef struct jik_impl_bytes_ByteBuf {
     uint8_t *data;
     size_t size;
     size_t capacity;
-    JikRegion *region;
+    JikRegion *jik_region;
 } jik_impl_bytes_ByteBuf;
 
 static int32_t
@@ -203,7 +203,7 @@ jik_impl_bytes_alloc_bytes(uint8_t *data, size_t size, JikRegion *a)
     jik_impl_bytes_Bytes *bytes = jik_region_alloc(a, sizeof(jik_impl_bytes_Bytes));
     bytes->data                = data;
     bytes->size                = size;
-    bytes->region              = a;
+    bytes->jik_region              = a;
     return bytes;
 }
 
@@ -229,7 +229,7 @@ jik_impl_bytes_string_from_raw(uint8_t *data, size_t size, JikRegion *a)
     s->data[size] = '\0';
     s->size       = size;
     s->capacity   = size;
-    s->region     = a;
+    s->jik_region     = a;
     return s;
 }
 
@@ -248,7 +248,7 @@ jik_impl_bytes_buf_reserve(jik_impl_bytes_ByteBuf *buf, size_t needed)
         new_cap *= 2;
     }
 
-    uint8_t *new_data = jik_region_alloc(buf->region, new_cap);
+    uint8_t *new_data = jik_region_alloc(buf->jik_region, new_cap);
     if (buf->data && buf->size > 0) {
         memcpy(new_data, buf->data, buf->size);
     }
@@ -355,7 +355,7 @@ jik_impl_bytes_buf_new(JikRegion *a)
     buf->data                  = jik_region_alloc(a, 16);
     buf->size                  = 0;
     buf->capacity              = 16;
-    buf->region                = a;
+    buf->jik_region                = a;
     return buf;
 }
 

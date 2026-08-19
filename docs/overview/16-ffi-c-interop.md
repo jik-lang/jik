@@ -127,7 +127,35 @@ Extern structs without an init function cannot be default-constructed:
 f: io::File // error because io::File has no extern init function
 ```
 
-### 16.4 Native build requirements
+### 16.4 Generated C names and identifier restrictions
+
+Jik reserves identifiers beginning with `jik_`, `Jik`, and `JIK`. Do not use
+these prefixes for functions, types, globals, locals, fields, module aliases,
+or other Jik identifiers.
+
+Jik emits local variables and struct fields using their source spelling. To
+keep the generated C valid, names reserved by the C backend are also rejected
+in those positions. This includes C keywords, implementation-reserved names
+such as `__name` and `_Name`, and common names from the C headers included by
+Jik, such as `size_t`, `FILE`, `EOF`, and `NULL`.
+
+Generated C names are implementation details, not a stable C API. In
+particular, the compiler currently uses these namespaces:
+
+```text
+jik_src_*    symbols derived from Jik source declarations
+jik_vec_*    generated vector types and helpers
+jik_dict_*   generated dictionary types and helpers
+jik_opt_*    generated option types and helpers
+jik_*        compiler and runtime helpers
+Jik*         runtime C types
+```
+
+Embedded C is passed through unchanged and may introduce its own names or C
+macros. It must therefore avoid collisions with Jik-generated names and
+follow the normal C rules itself.
+
+### 16.5 Native build requirements
 
 An FFI module can declare the include paths, library paths, libraries, and runtime files needed to
 build programs that import it:

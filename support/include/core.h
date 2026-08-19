@@ -111,8 +111,8 @@ jik_realloc(void *ptr, size_t n)
 // Configuration
 // -------------------------------------------------------------
 
-#ifndef REGION_DEFAULT_BLOCK_SIZE
-#define REGION_DEFAULT_BLOCK_SIZE (64 * 1024) // 64KB default block size
+#ifndef JIK_REGION_DEFAULT_BLOCK_SIZE
+#define JIK_REGION_DEFAULT_BLOCK_SIZE (64 * 1024) // 64KB default block size
 #endif
 
 // -------------------------------------------------------------
@@ -276,14 +276,14 @@ jik_region_register_global_stats_printer(void)
 }
 
 // Allocate a new jik region on the heap.
-// If block_size == 0, REGION_DEFAULT_BLOCK_SIZE is used.
+// If block_size == 0, JIK_REGION_DEFAULT_BLOCK_SIZE is used.
 JikRegion *
 jik_region_new(size_t block_size)
 {
     JikRegion *a   = jik_malloc(sizeof(JikRegion));
     a->blocks     = NULL;
     a->current    = NULL;
-    a->block_size = (block_size == 0) ? REGION_DEFAULT_BLOCK_SIZE : block_size;
+    a->block_size = (block_size == 0) ? JIK_REGION_DEFAULT_BLOCK_SIZE : block_size;
     a->total_mem  = 0;
 #ifdef JIK_REGION_STATS
     jik_region_stats_record_region_created();
@@ -405,7 +405,7 @@ typedef struct JIK_STRING_TYPE_NAME {
     char     *data;
     size_t    size;
     size_t    capacity;
-    JikRegion *region;
+    JikRegion *jik_region;
 } JIK_STRING_TYPE_NAME;
 
 JikString *
@@ -418,7 +418,7 @@ jik_string_new(char *from, JikRegion *a)
     s->data[n]  = '\0';
     s->size     = n;
     s->capacity = n;
-    s->region    = a;
+    s->jik_region    = a;
     return s;
 }
 
@@ -475,13 +475,13 @@ jik_string_slice(JikString *s,
         start, start_omitted, stop, stop_omitted, s->size, "string", dbg_info, &lower, &upper);
 
     size_t     n   = upper - lower;
-    JikString *out = jik_region_alloc(s->region, sizeof(JikString));
-    out->data      = jik_region_alloc(s->region, n + 1);
+    JikString *out = jik_region_alloc(s->jik_region, sizeof(JikString));
+    out->data      = jik_region_alloc(s->jik_region, n + 1);
     memcpy(out->data, s->data + lower, n);
     out->data[n]  = '\0';
     out->size     = n;
     out->capacity = n;
-    out->region   = s->region;
+    out->jik_region   = s->jik_region;
     return out;
 }
 
@@ -490,11 +490,11 @@ jik_string_slice(JikString *s,
 //      BUILTIN ERRORS
 // ---------------------------------------------------------------------------------------------------
 
-#define MAX_ERR_MSG 256
+#define JIK_MAX_ERR_MSG 256
 
 typedef struct JikError {
     int        code;
-    char msg[MAX_ERR_MSG];
+    char msg[JIK_MAX_ERR_MSG];
 } JikError;
 
 bool
@@ -509,8 +509,8 @@ jik_error_set(JikError *e, int code, char *msg)
     assert(code > 0);
     e->code = code;
     size_t n = strlen(msg);
-    if (n >= MAX_ERR_MSG) {
-        n = MAX_ERR_MSG - 1;
+    if (n >= JIK_MAX_ERR_MSG) {
+        n = JIK_MAX_ERR_MSG - 1;
     }
     memcpy(e->msg, msg, n);
     e->msg[n] = '\0';
@@ -702,7 +702,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
     res->data      = jik_region_alloc(a, total + 1);
     res->size      = total;
     res->capacity  = total;
-    res->region    = a;
+    res->jik_region    = a;
 
     size_t off = 0;
     for (size_t i = 0; i < n; i++) {
@@ -730,7 +730,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         struct struct_name *p =                                                                    \
             (struct struct_name *)jik_region_alloc(a, sizeof(struct struct_name));                  \
         memcpy(p, init, sizeof(struct struct_name));                                               \
-        p->region = a;                                                                              \
+        p->jik_region = a;                                                                              \
         return p;                                                                                  \
     }
 
@@ -773,7 +773,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         vec_elem_type *data;                                                                       \
         size_t         size;                                                                       \
         size_t         capacity;                                                                   \
-        JikRegion      *region;                                                                      \
+        JikRegion      *jik_region;                                                                      \
     };                                                                                             \
                                                                                                    \
     struct vec_name *vec_name##_new(JikRegion *a, size_t n)                        \
@@ -782,7 +782,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         v->data            = jik_region_alloc(a, n * sizeof(vec_elem_type));                        \
         v->size            = n;                                                                    \
         v->capacity        = n;                                                                    \
-        v->region           = a;                                                                    \
+        v->jik_region           = a;                                                                    \
         return v;                                                                                  \
     }                                                                                              \
                                                                                                    \
@@ -796,7 +796,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         for (size_t i = 0; i < n; i++) {                                                           \
             v->data[i] = init_vals[i];                                                             \
         }                                                                                          \
-        v->region = a;                                                                              \
+        v->jik_region = a;                                                                              \
         return v;                                                                                  \
     }                                                                                              \
                                                                                                    \
@@ -818,7 +818,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
     {                                                                                              \
         if (v->size == v->capacity) {                                                              \
             size_t new_cap = 2 * v->capacity + 1;                                                  \
-            v->data        = jik_region_realloc(v->region,                                           \
+            v->data        = jik_region_realloc(v->jik_region,                                           \
                                         v->data,                                            \
                                         v->capacity * sizeof(vec_elem_type),                \
                                         new_cap * sizeof(vec_elem_type));                   \
@@ -840,7 +840,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
             while (new_cap < new_size) {                                                           \
                 new_cap = 2 * new_cap + 1;                                                         \
             }                                                                                      \
-            v->data     = jik_region_realloc(v->region,                                              \
+            v->data     = jik_region_realloc(v->jik_region,                                              \
                                         v->data,                                               \
                                         v->capacity * sizeof(vec_elem_type),                   \
                                         new_cap * sizeof(vec_elem_type));                      \
@@ -877,7 +877,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
                                &lower,                                                             \
                                &upper);                                                            \
         size_t n = upper - lower;                                                                  \
-        struct vec_name *out = vec_name##_new(v->region, n);                                      \
+        struct vec_name *out = vec_name##_new(v->jik_region, n);                                      \
         for (size_t i = 0; i < n; i++) {                                                          \
             out->data[i] = v->data[lower + i];                                                    \
         }                                                                                          \
@@ -889,11 +889,11 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
 // TODO: in the long term, we should get rid if this - its a GNU statement expression and not standard C
 #define JIK_MAKE_VEC(region, vec_name, init_size, initializer)                                 \
     ({                                                                                             \
-        struct vec_name *__v = vec_name##_new((region), (init_size));                        \
-        for (size_t __i = 0; __i < (init_size); __i++) {                                           \
-            __v->data[__i] = initializer;                                                          \
+        struct vec_name *jik_v = vec_name##_new((region), (init_size));                             \
+        for (size_t jik_i = 0; jik_i < (init_size); jik_i++) {                                     \
+            jik_v->data[jik_i] = initializer;                                                      \
         }                                                                                          \
-        __v;                                                                                       \
+        jik_v;                                                                                     \
     })
 
 // ---------------------------------------------------------------------------------------------------
@@ -918,7 +918,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
     struct option_name {                                                                            \
         bool             is_some;                                                                   \
         option_elem_type val;                                                                       \
-        JikRegion       *region;                                                                    \
+        JikRegion       *jik_region;                                                                    \
     };                                                                                              \
                                                                                                     \
     struct option_name *option_name##_some(option_elem_type val, JikRegion *a)                      \
@@ -926,7 +926,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         struct option_name *opt = jik_region_alloc(a, sizeof(struct option_name));                  \
         opt->is_some            = true;                                                             \
         opt->val                = val;                                                              \
-        opt->region             = a;                                                                \
+        opt->jik_region             = a;                                                                \
         return opt;                                                                                 \
     }                                                                                               \
                                                                                                     \
@@ -934,7 +934,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
     {                                                                                               \
         struct option_name *opt = jik_region_alloc(a, sizeof(struct option_name));                  \
         opt->is_some            = false;                                                            \
-        opt->region             = a;                                                                \
+        opt->jik_region             = a;                                                                \
         return opt;                                                                                 \
     }                                                                                               \
                                                                                                     \
@@ -979,7 +979,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         size_t                   capacity;                                                         \
         size_t                   size;                                                             \
         struct dict_name##_item *items;                                                            \
-        JikRegion                *region;                                                            \
+        JikRegion                *jik_region;                                                            \
     };                                                                                             \
                                                                                                    \
     uint32_t dict_name##_hash_key(char *key)                                                       \
@@ -1008,7 +1008,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
     void dict_name##_resize(struct dict_name *ht, size_t capacity)                \
     {                                                                                              \
         struct dict_name##_item *new_items =                                                       \
-            jik_region_calloc(ht->region, capacity, sizeof(struct dict_name##_item));                \
+            jik_region_calloc(ht->jik_region, capacity, sizeof(struct dict_name##_item));                \
         struct dict_name##_item *item;                                                             \
         for (size_t i = 0; i < ht->capacity; i++) {                                                \
             item = &(ht->items[i]);                                                                \
@@ -1031,7 +1031,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         ht->capacity         = JIK_HTAB_INIT_CAPACITY;                                             \
         ht->size             = 0;                                                                  \
         ht->items = jik_region_calloc(a, JIK_HTAB_INIT_CAPACITY, sizeof(struct dict_name##_item));  \
-        ht->region = a;                                                                             \
+        ht->jik_region = a;                                                                             \
         return ht;                                                                                 \
     }                                                                                              \
                                                                                                    \
@@ -1065,7 +1065,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         if (item->key == NULL)                                                                     \
             ht->size++;                                                                            \
         item->ok  = true;                                                                          \
-        item->key = jik_string_new(key->data, ht->region);                                          \
+        item->key = jik_string_new(key->data, ht->jik_region);                                          \
         item->val = val;                                                                           \
         return;                                                                                    \
     }                                                                                              \
@@ -1075,9 +1075,9 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         struct dict_name##_item *item =                                                            \
             dict_name##_find_entry(ht->items, ht->capacity, key->data);                            \
         if (item && item->ok) {                                                                    \
-            return dict_option_type##_some(item->val, ht->region);                                 \
+            return dict_option_type##_some(item->val, ht->jik_region);                                 \
         }                                                                                          \
-        return dict_option_type##_none(ht->region);                                                \
+        return dict_option_type##_none(ht->jik_region);                                                \
     }                                                                                              \
                                                                                                    \
     size_t dict_name##_size(struct dict_name *ht, char *dbg_info) { return ht->size; }
@@ -1087,8 +1087,9 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
 //      SECT HELPERS
 // ---------------------------------------------------------------------------------------------------
 
-#define MAKE_ARG_VEC(argc, argv, region)                                                       \
-    struct vec_JikString *args = vec_JikString_new(region, argc);                              \
-    for (size_t i = 0; i < argc; i++) {                                                            \
-        vec_JikString_set(args, i, jik_string_new(argv[i], region), NULL);                          \
+#define JIK_MAKE_ARG_VEC(argc, argv, region)                                                       \
+    struct jik_vec_JikString *jik_args = jik_vec_JikString_new(region, argc);                       \
+    for (size_t jik_i = 0; jik_i < argc; jik_i++) {                                                \
+        jik_vec_JikString_set(                                                                     \
+            jik_args, jik_i, jik_string_new(argv[jik_i], region), NULL);                           \
     }

@@ -504,7 +504,7 @@ jik_compiler_get_usages(JikContext *ctx, JikModule *mod)
                 if (jik_identifier_has_reserved_prefix(tok->lexeme)) {
                     jik_diag_fatal_error(JIK_STRING_NCAT("identifier \"",
                                                          tok->lexeme,
-                                                         "\" uses reserved prefix \"jik_\""),
+                                                         "\" uses one of reserved prefixes: \"jik_\", \"Jik\", \"JIK\""),
                                          jik_token_to_text(tok));
                 }
                 used_mod.alias = tok->lexeme;
@@ -521,7 +521,7 @@ jik_compiler_get_usages(JikContext *ctx, JikModule *mod)
                 if (jik_identifier_has_reserved_prefix(used_mod.alias)) {
                     jik_diag_fatal_error(JIK_STRING_NCAT("identifier \"",
                                                          used_mod.alias,
-                                                         "\" uses reserved prefix \"jik_\""),
+                                                         "\" uses one of reserved prefixes: \"jik_\", \"Jik\", \"JIK\""),
                                          jik_token_to_text(tok));
                 }
                 jik_diag_fatal_error_if(

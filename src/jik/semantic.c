@@ -93,8 +93,18 @@ jik_semantic_reject_reserved_prefix(char *name, JikToken *tok)
 {
     jik_diag_fatal_error_if(
         jik_identifier_has_reserved_prefix(name),
-        JIK_STRING_NCAT("identifier \"", name, "\" uses reserved prefix \"jik_\""),
+        JIK_STRING_NCAT("identifier \"", name, "\" uses one of reserved prefixes: \"jik_\", \"Jik\", \"JIK\""),
         jik_token_to_text(tok));
+}
+
+static void
+jik_semantic_reject_c_reserved_name(char *name, JikToken *tok)
+{
+    jik_diag_fatal_error_if(jik_identifier_is_c_reserved(name),
+                            JIK_STRING_NCAT("identifier \"",
+                                            name,
+                                            "\" is reserved by the C backend"),
+                            jik_token_to_text(tok));
 }
 
 static void
@@ -306,6 +316,7 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             TabJikNode_item item_field;
             while (TabJikNode_iter_next(&it_fields, &item_field)) {
                 jik_semantic_reject_reserved_prefix(item_field.key, item_field.value->token);
+                jik_semantic_reject_c_reserved_name(item_field.key, item_field.value->token);
             }
             bool res = jik_scope_add_global_symbol(nd->val_struct.name, nd->token->module_id, nd);
             jik_diag_fatal_error_if(!res,
@@ -324,6 +335,7 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             TabJikNode_item item_field;
             while (TabJikNode_iter_next(&it_fields, &item_field)) {
                 jik_semantic_reject_reserved_prefix(item_field.key, item_field.value->token);
+                jik_semantic_reject_c_reserved_name(item_field.key, item_field.value->token);
             }
             jik_diag_warning_if(VecString_size(nd->val_variant.member_order) > 0 &&
                                     TabBool_size(nd->val_variant.payloadless_tags) ==
@@ -345,6 +357,7 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             for (size_t i = 0; i < num_params; i++) {
                 JikNode *param = VecJikNode_get(nd->val_function.params, i);
                 jik_semantic_reject_reserved_prefix(param->val_id.name, param->token);
+                jik_semantic_reject_c_reserved_name(param->val_id.name, param->token);
                 jik_semantic_reject_builtin_name_collision(sa, param->val_id.name, param->token);
                 param->val_id.is_func_param = true;
                 jik_scope_add_local_symbol(
@@ -403,6 +416,8 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                                         "");
             }
             else {
+                jik_semantic_reject_c_reserved_name(nd->val_declare.id->val_id.name,
+                                                    nd->val_declare.id->token);
                 // No shadowing of globals
                 JikNode *gs = jik_scope_get_global_symbol(nd->val_declare.id->val_id.name,
                                                           nd->token->module_id);
@@ -439,6 +454,8 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
         if (nd->type == NODE_LOOP_FOR) {
             jik_semantic_reject_reserved_prefix(nd->val_for.var_name->val_id.name,
                                                 nd->val_for.var_name->token);
+            jik_semantic_reject_c_reserved_name(nd->val_for.var_name->val_id.name,
+                                                nd->val_for.var_name->token);
             jik_semantic_reject_builtin_name_collision(
                 sa, nd->val_for.var_name->val_id.name, nd->val_for.var_name->token);
             JikNode *ls =
@@ -452,6 +469,8 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
         }
         if (nd->type == NODE_LOOP_FOR_IN) {
             jik_semantic_reject_reserved_prefix(nd->val_for_in.var_name->val_id.name,
+                                                nd->val_for_in.var_name->token);
+            jik_semantic_reject_c_reserved_name(nd->val_for_in.var_name->val_id.name,
                                                 nd->val_for_in.var_name->token);
             jik_semantic_reject_builtin_name_collision(
                 sa, nd->val_for_in.var_name->val_id.name, nd->val_for_in.var_name->token);
@@ -469,6 +488,10 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             jik_semantic_reject_reserved_prefix(nd->val_for_in_pair.first_name->val_id.name,
                                                 nd->val_for_in_pair.first_name->token);
             jik_semantic_reject_reserved_prefix(nd->val_for_in_pair.second_name->val_id.name,
+                                                nd->val_for_in_pair.second_name->token);
+            jik_semantic_reject_c_reserved_name(nd->val_for_in_pair.first_name->val_id.name,
+                                                nd->val_for_in_pair.first_name->token);
+            jik_semantic_reject_c_reserved_name(nd->val_for_in_pair.second_name->val_id.name,
                                                 nd->val_for_in_pair.second_name->token);
             jik_semantic_reject_builtin_name_collision(
                 sa, nd->val_for_in_pair.first_name->val_id.name, nd->val_for_in_pair.first_name->token);
@@ -499,6 +522,8 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
             }
             char *id = nd->val_case.variant->val_variant_new.init_expr->val_id.name;
             jik_semantic_reject_reserved_prefix(
+                id, nd->val_case.variant->val_variant_new.init_expr->token);
+            jik_semantic_reject_c_reserved_name(
                 id, nd->val_case.variant->val_variant_new.init_expr->token);
             jik_semantic_reject_builtin_name_collision(
                 sa, id, nd->val_case.variant->val_variant_new.init_expr->token);

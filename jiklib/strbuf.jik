@@ -85,7 +85,7 @@ typedef struct jik_StrBuf {
     char *data;
     size_t size;
     size_t capacity;
-    JikRegion *region;
+    JikRegion *jik_region;
 } jik_StrBuf;
 
 jik_StrBuf *
@@ -98,7 +98,7 @@ jik_strbuf_new(JikString *from, JikRegion *a)
     sb->data[n] = '\0';
     sb->size = n;
     sb->capacity = n;
-    sb->region = a;
+    sb->jik_region = a;
     return sb;
 }
 
@@ -116,7 +116,7 @@ jik_strbuf_append(jik_StrBuf *sb, JikString *s)
             new_cap *= 2;
         }
 
-        char *new_data = jik_region_alloc(sb->region, new_cap + 1);
+        char *new_data = jik_region_alloc(sb->jik_region, new_cap + 1);
         if (sb->data && sb->size) {
             memcpy(new_data, sb->data, sb->size);
         }
@@ -137,7 +137,7 @@ jik_strbuf_append_char(jik_StrBuf *sb, char ch)
         while (new_cap + 1 < req) {
             new_cap *= 2;
         }
-        char *new_data = jik_region_alloc(sb->region, new_cap + 1);
+        char *new_data = jik_region_alloc(sb->jik_region, new_cap + 1);
         if (sb->data && sb->size) {
             memcpy(new_data, sb->data, sb->size);
         }

@@ -17,6 +17,8 @@ shell_quote_arg(const char *arg);
 bool
 jik_identifier_has_reserved_prefix(const char *name);
 bool
+jik_identifier_is_c_reserved(const char *name);
+bool
 system_has_tool(const char *tool_name, const char *probe_arg);
 char *
 jik_get_env_var_value(const char *name);

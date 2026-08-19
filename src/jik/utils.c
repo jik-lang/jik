@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "alloc.h"
 
@@ -123,7 +124,41 @@ shell_quote_arg(const char *arg)
 bool
 jik_identifier_has_reserved_prefix(const char *name)
 {
-    return name != NULL && strncmp(name, "jik_", 4) == 0;
+    return name != NULL && (strncmp(name, "jik_", 4) == 0 || strncmp(name, "Jik", 3) == 0 || strncmp(name, "JIK", 3) == 0);
+}
+
+bool
+jik_identifier_is_c_reserved(const char *name)
+{
+    const char *reserved[] = {
+        // C11 keywords
+        "_Alignas", "_Alignof", "_Atomic", "_Bool", "_Complex", "_Generic",
+        "_Imaginary", "_Noreturn", "_Static_assert", "_Thread_local", "auto", "break",
+        "case", "char", "const", "continue", "default", "do", "double", "else", "enum",
+        "extern", "float", "for", "goto", "if", "inline", "int", "long", "register",
+        "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch",
+        "typedef", "union", "unsigned", "void", "volatile", "while",
+
+        // Typedefs and object-like macros exposed by core.h's standard headers
+        "CLOCKS_PER_SEC", "EOF", "EXIT_FAILURE", "EXIT_SUCCESS", "FILE", "NULL", "RAND_MAX",
+        "alignof", "assert", "bool", "errno", "false", "int8_t", "int16_t", "int32_t",
+        "int64_t", "intptr_t", "max_align_t", "ptrdiff_t", "size_t", "stderr", "stdin",
+        "stdout", "true", "uint8_t", "uint16_t", "uint32_t", "uint64_t", "uintptr_t",
+        "va_list", "wchar_t",
+    };
+    if (name == NULL || *name == '\0') {
+        return false;
+    }
+    // C reserves double underscores everywhere and _Uppercase identifiers at file scope
+    if (strlen(name) > 1 && name[0] == '_' && (name[1] == '_' || isupper((unsigned char)name[1]))) {
+        return true;
+    }
+    for (size_t i = 0; i < sizeof(reserved) / sizeof(reserved[0]); i++) {
+        if (strcmp(name, reserved[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------------------------------
