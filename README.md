@@ -111,7 +111,7 @@ end
 
 ## Explore more
 
-See the [examples](examples/) directory for [variants](examples/variants.jik), [table-driven policies](examples/tables.jik), more [error handling](examples/error_handling.jik), [word count](examples/word_count.jik), [Dijkstra](examples/dijkstra.jik), [Newton's method](examples/newton.jik), [Game of Life](examples/game_of_life.jik), [Forth](examples/forth.jik), and [C interop](examples/ffi_demo.jik).
+See the [examples](examples/) directory for [variants](examples/variants.jik), [tables](examples/tables.jik), more [error handling](examples/error_handling.jik), [word count](examples/word_count.jik), [Dijkstra](examples/dijkstra.jik), [Newton's method](examples/newton.jik), [Game of Life](examples/game_of_life.jik), [Forth](examples/forth.jik), and [C interop](examples/ffi_demo.jik).
 
 ## Packages
 
