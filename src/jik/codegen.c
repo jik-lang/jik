@@ -230,19 +230,6 @@ jik_codegen_emit_block(JikCodeGenerator *cg, JikNode *nd);
 // Top-level program emission helpers
 // -----------------------------------------------------------------------------
 
-static bool
-jik_any_allocated_globals_defined(JikCodeGenerator *cg)
-{
-    JikNode *nd;
-    for (size_t i = 0; i < VecJikNode_size(cg->ast->val_program.globals); i++) {
-        nd = VecJikNode_get(cg->ast->val_program.globals, i);
-        if (jik_type_is_allocated(nd->val_assign.expr->jik_type)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static void
 jik_codegen_emit_main_function(JikCodeGenerator *cg)
 {
@@ -254,8 +241,8 @@ jik_codegen_emit_main_function(JikCodeGenerator *cg)
         jik_writer_write_line(&cg->cw, "jik_region_register_global_stats_printer();");
     }
     // initialize globals
-    bool allocd_globals_defined = jik_any_allocated_globals_defined(cg);
-    if (allocd_globals_defined) {
+    bool needs_global_region = cg->ast->val_program.needs_global_region;
+    if (needs_global_region) {
         jik_writer_write_line(
             &cg->cw,
             JIK_STRING_NCAT(
@@ -299,7 +286,7 @@ jik_codegen_emit_main_function(JikCodeGenerator *cg)
                               JIK_STRING_NCAT("jik_region_free(", JIK_REGION_VAR_NAME, ");"));
     }
 
-    if (allocd_globals_defined) {
+    if (needs_global_region) {
         jik_writer_write_line(
             &cg->cw, JIK_STRING_NCAT("jik_region_free(", JIK_GLOBAL_REGION_VAR_NAME, ");"));
     }

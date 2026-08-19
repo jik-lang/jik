@@ -449,6 +449,7 @@ typedef struct JikNode {
             VecJikNode *enums;
             VecJikNode *variants;
             VecJikNode *hints;
+            bool        needs_global_region;
         } val_program;
     };
 } JikNode;

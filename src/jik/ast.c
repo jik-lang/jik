@@ -58,6 +58,7 @@ jik_node_new_program(void)
     nd->val_program.hints             = VecJikNode_new_empty();
     nd->val_program.enums             = VecJikNode_new_empty();
     nd->val_program.variants          = VecJikNode_new_empty();
+    nd->val_program.needs_global_region   = false;
     nd->context                       = NULL;
     nd->token                         = NULL;
     return nd;

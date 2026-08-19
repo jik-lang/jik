@@ -174,7 +174,7 @@ jik_prepare_functions(JikNode *ast)
 }
 
 static void
-jik_mark_global_initializer_allocs(JikNode *global_nd)
+jik_mark_global_initializer_allocs(JikNode *ast, JikNode *global_nd)
 {
     VecJikNode  *nodes       = VecJikNode_new_empty();
     JikAllocSpec global_spec = {.kind = JIK_ALLOC_GLOBAL, .src = JIK_ALLOC_SRC_FOREIGN};
@@ -185,9 +185,11 @@ jik_mark_global_initializer_allocs(JikNode *global_nd)
     while (VecJikNode_iter_next(&it, &nd)) {
         if (jik_node_is_allocated_literal(nd)) {
             jik_set_alloc_spec(nd, global_spec);
+            ast->val_program.needs_global_region = true;
         }
         else if (nd->type == NODE_EXPR_CALL && nd->val_call.auto_region) {
             nd->val_call.alloc_spec = global_spec;
+            ast->val_program.needs_global_region = true;
         }
     }
 }
@@ -196,9 +198,10 @@ static void
 jik_mark_global_allocs(JikNode *ast)
 {
     JikNode *nd;
+    ast->val_program.needs_global_region = false;
     for (size_t i = 0; i < VecJikNode_size(ast->val_program.globals); i++) {
         nd = VecJikNode_get(ast->val_program.globals, i);
-        jik_mark_global_initializer_allocs(nd);
+        jik_mark_global_initializer_allocs(ast, nd);
     }
 }
 
