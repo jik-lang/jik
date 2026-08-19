@@ -17,6 +17,8 @@ variant BytesVariant:
     LOOKUP: Dict[bytes::Bytes]
 end
 
+default_bytes_holder := BytesHolder{}
+
 
 func test_empty(ts):
     b := bytes::new(_)

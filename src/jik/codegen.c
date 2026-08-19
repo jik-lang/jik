@@ -684,6 +684,10 @@ get_struct_initializer_values(JikCodeGenerator *cg, JikNode *nd)
         if (jik_node_is_allocated_literal(final_node)) {
             jik_set_alloc_spec(final_node, as);
         }
+        else if (override_node == NULL && final_node->type == NODE_EXPR_CALL &&
+                 final_node->val_call.auto_region) {
+            final_node->val_call.alloc_spec = as;
+        }
         char *final_expr = (override_node == NULL)
                                ? jik_codegen_emit_expression(cg, *default_node)
                                : jik_codegen_emit_expression(cg, *override_node);

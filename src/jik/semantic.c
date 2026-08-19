@@ -17,7 +17,8 @@ static JikNode *
 jik_make_init_call_for_extern_struct(JikType  *t,
                                      char     *module_id,
                                      JikScope *context,
-                                     JikToken *token);
+                                     JikToken *token,
+                                     bool      use_auto_region);
 
 static bool
 jik_type_is_extern_struct(JikType *t)
@@ -1265,7 +1266,11 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
                                            nd->token->module_id);
         if (st->val_struct.is_extern) {
             JikNode *call = jik_make_init_call_for_extern_struct(
-                st->jik_type, nd->val_struct_new.name->val_id.module_id, nd->context, nd->token);
+                st->jik_type,
+                nd->val_struct_new.name->val_id.module_id,
+                nd->context,
+                nd->token,
+                false);
             *nd                 = *call;
             sa->needs_recollect = true;
             return;
@@ -1902,7 +1907,8 @@ static JikNode *
 jik_make_init_call_for_extern_struct(JikType  *t,
                                      char     *module_id,
                                      JikScope *context,
-                                     JikToken *token)
+                                     JikToken *token,
+                                     bool      use_auto_region)
 {
     if (!t->init_func) {
         jik_diag_fatal_error(
@@ -1915,7 +1921,9 @@ jik_make_init_call_for_extern_struct(JikType  *t,
     JikNode *name =
         jik_node_new_identifier(func->val_extern_function.name, module_id, context, token);
     VecJikNode *args = VecJikNode_new_empty();
-    VecJikNode_push(args, jik_node_new_local_region(context, token));
+    if (!use_auto_region) {
+        VecJikNode_push(args, jik_node_new_local_region(context, token));
+    }
 
     JikNode *call              = jik_node_new_call(name, args, context, token);
     call->val_call.extern_name = func->val_extern_function.C_func_name;
@@ -1927,7 +1935,11 @@ static JikNode *
 jik_get_default_initializer_for_extern_struct(JikNode *type_desc, JikType *t)
 {
     return jik_make_init_call_for_extern_struct(
-        t, type_desc->val_type_desc.name->val_id.module_id, type_desc->context, type_desc->token);
+        t,
+        type_desc->val_type_desc.name->val_id.module_id,
+        type_desc->context,
+        type_desc->token,
+        true);
 }
 
 static JikNode *

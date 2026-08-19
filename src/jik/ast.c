@@ -1616,25 +1616,31 @@ jik_node_get_vector_elem_expr(JikNode *nd)
     return elem;
 }
 
+static void
+jik_set_child_alloc_spec(JikNode *nd, JikAllocSpec spec)
+{
+    if (jik_node_is_allocated_literal(nd)) {
+        jik_set_alloc_spec(nd, spec);
+    }
+    else if (nd->type == NODE_EXPR_CALL && nd->val_call.auto_region) {
+        nd->val_call.alloc_spec = spec;
+    }
+}
+
 void
 jik_set_alloc_spec(JikNode *nd, JikAllocSpec spec)
 {
-    // TODO: also recursively set for subelements
     if (nd->type == NODE_EXPR_VECTOR) {
         nd->val_vector.alloc_spec = spec;
         if (nd->val_vector.init_elems) {
             VecJikNode_iter it = VecJikNode_iter_new(nd->val_vector.init_elems);
             JikNode        *elem_nd;
             while (VecJikNode_iter_next(&it, &elem_nd)) {
-                if (jik_node_is_allocated_literal(elem_nd)) {
-                    jik_set_alloc_spec(elem_nd, spec);
-                }
+                jik_set_child_alloc_spec(elem_nd, spec);
             }
         }
         else {
-            if (jik_node_is_allocated_literal(nd->val_vector.elem_expr)) {
-                jik_set_alloc_spec(nd->val_vector.elem_expr, spec);
-            }
+            jik_set_child_alloc_spec(nd->val_vector.elem_expr, spec);
         }
     }
     else if (nd->type == NODE_EXPR_STRING) {
@@ -1643,18 +1649,13 @@ jik_set_alloc_spec(JikNode *nd, JikAllocSpec spec)
     else if (nd->type == NODE_EXPR_DICT) {
         nd->val_dict.alloc_spec = spec;
         if (nd->val_dict.elem_expr) {
-            if (jik_node_is_allocated_literal(nd->val_dict.elem_expr)) {
-                jik_set_alloc_spec(nd->val_dict.elem_expr, spec);
-            }
+            jik_set_child_alloc_spec(nd->val_dict.elem_expr, spec);
         }
         else {
             VecJikNode_iter it = VecJikNode_iter_new(nd->val_dict.init_values);
             JikNode        *val;
             while (VecJikNode_iter_next(&it, &val)) {
-                if (!jik_node_is_allocated_literal(val)) {
-                    continue;
-                }
-                jik_set_alloc_spec(val, spec);
+                jik_set_child_alloc_spec(val, spec);
             }
         }
     }
@@ -1663,25 +1664,19 @@ jik_set_alloc_spec(JikNode *nd, JikAllocSpec spec)
         TabJikNode_iter it            = TabJikNode_iter_new(nd->val_struct_new.init_vals);
         TabJikNode_item item;
         while (TabJikNode_iter_next(&it, &item)) {
-            if (!jik_node_is_allocated_literal(item.value)) {
-                continue;
-            }
-            jik_set_alloc_spec(item.value, spec);
+            jik_set_child_alloc_spec(item.value, spec);
         }
     }
     else if (nd->type == NODE_EXPR_VARIANT_NEW) {
         nd->val_variant_new.alloc_spec = spec;
         // assert(nd->val_variant_new.init_expr);
-        if (nd->val_variant_new.init_expr &&
-            jik_node_is_allocated_literal(nd->val_variant_new.init_expr)) {
-            jik_set_alloc_spec(nd->val_variant_new.init_expr, spec);
+        if (nd->val_variant_new.init_expr) {
+            jik_set_child_alloc_spec(nd->val_variant_new.init_expr, spec);
         }
     }
     else if (nd->type == NODE_EXPR_OPTION_SOME) {
         nd->val_option_some.alloc_spec = spec;
-        if (jik_node_is_allocated_literal(nd->val_option_some.expr)) {
-            jik_set_alloc_spec(nd->val_option_some.expr, spec);
-        }
+        jik_set_child_alloc_spec(nd->val_option_some.expr, spec);
     }
     else if (nd->type == NODE_EXPR_OPTION_NONE) {
         nd->val_option_none.alloc_spec = spec;
