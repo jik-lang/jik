@@ -75,6 +75,19 @@ func test_parentheses(ts):
 end
 
 
+func test_strings(ts):
+    tokens := lex_source("\"hello\" \"a\\\"b\"", 1, _)
+    test::suite_assert(ts, len(tokens) == 3, site())
+    test::suite_assert(ts, tokens[0].type == token::TokenType.STRING, site())
+    test::suite_assert(ts, tokens[0].span.start == 0, site())
+    test::suite_assert(ts, tokens[0].span.stop == 7, site())
+    test::suite_assert(ts, tokens[1].type == token::TokenType.STRING, site())
+    test::suite_assert(ts, tokens[1].span.start == 8, site())
+    test::suite_assert(ts, tokens[1].span.stop == 14, site())
+    test::suite_assert(ts, tokens[2].type == token::TokenType.EOF, site())
+end
+
+
 func test_newline_and_error(ts):
     tokens := lex_source("\n=@", 7, _)
     test::suite_assert(ts, len(tokens) == 4, site())
@@ -102,5 +115,6 @@ func run_tests(ts):
 	test_integers_and_offsets(ts)
 	test_identifiers_and_keywords(ts)
 	test_parentheses(ts)
+	test_strings(ts)
 	test_newline_and_error(ts)
 end

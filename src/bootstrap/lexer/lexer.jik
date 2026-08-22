@@ -58,6 +58,10 @@ func get_identifier_type(l: Lexer, start: int, stop: int, r: Region) -> token::T
 	text := must string::slice(l.file.text, start, stop, r)
 	if text == "func":
 		return token::TokenType.KWD_FUNC
+	elif text == "use":
+		return token::TokenType.KWD_USE
+	elif text == "as":
+		return token::TokenType.KWD_AS
 	end
 	return token::TokenType.IDENTIFIER
 end
@@ -89,6 +93,30 @@ func scan_identifier_or_keyword(l: Lexer, r: Region) -> token::Token:
 end
 
 
+func scan_string(l: Lexer, r: Region) -> token::Token:
+    start := l.pos
+    l.advance()
+    while not l.at_end():
+        ch := l.peek()?
+        if ch == '"':
+            l.advance()
+            return token::Token{type = token::TokenType.STRING, span = l.span(start, l.pos, r)}[r]
+        elif ch == '\\':
+            l.advance()
+            if l.at_end():
+                return token::Token{type = token::TokenType.ERROR, span = l.span(start, l.pos, r)}[r]
+            end
+            l.advance()
+        elif ch == '\n':
+            return token::Token{type = token::TokenType.ERROR, span = l.span(start, l.pos, r)}[r]
+        else:
+            l.advance()
+        end
+    end
+    return token::Token{type = token::TokenType.ERROR, span = l.span(start, l.pos, r)}[r]
+end
+
+
 func next_token(l: Lexer, r: Region) -> token::Token:
 	while not l.at_end():
 		ch := l.peek()?
@@ -113,6 +141,11 @@ func next_token(l: Lexer, r: Region) -> token::Token:
 		elif ch == ',':
 			l.advance()
 			return token::Token{type = token::TokenType.COMMA, span = l.span(start, l.pos, r)}[r]
+		elif ch == ':':
+			l.advance()
+			return token::Token{type = token::TokenType.COLON, span = l.span(start, l.pos, r)}[r]
+		elif ch == '"':
+			return l.scan_string(r)
 		elif char::isdigit(ch):
 			return l.scan_integer(r)
 		elif is_identifier_start(ch):

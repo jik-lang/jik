@@ -20,6 +20,7 @@ throws func run(input: String):
     while len(modules) > 0:
         module := modules.pop()
         tokens := lexer::tokenize(module.source)
+        println(tokens)
         // todo: ast := parser::parse(tokens)
         // todo: push to modules from usages        
     end
