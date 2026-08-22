@@ -60,6 +60,21 @@ func test_identifiers_and_keywords(ts):
 end
 
 
+func test_parentheses(ts):
+    tokens := lex_source("func main()", 1, _)
+    test::suite_assert(ts, len(tokens) == 5, site())
+    test::suite_assert(ts, tokens[0].type == token::TokenType.KWD_FUNC, site())
+    test::suite_assert(ts, tokens[1].type == token::TokenType.IDENTIFIER, site())
+    test::suite_assert(ts, tokens[2].type == token::TokenType.LPAREN, site())
+    test::suite_assert(ts, tokens[2].span.start == 9, site())
+    test::suite_assert(ts, tokens[2].span.stop == 10, site())
+    test::suite_assert(ts, tokens[3].type == token::TokenType.RPAREN, site())
+    test::suite_assert(ts, tokens[3].span.start == 10, site())
+    test::suite_assert(ts, tokens[3].span.stop == 11, site())
+    test::suite_assert(ts, tokens[4].type == token::TokenType.EOF, site())
+end
+
+
 func test_newline_and_error(ts):
     tokens := lex_source("\n=@", 7, _)
     test::suite_assert(ts, len(tokens) == 4, site())
@@ -86,5 +101,6 @@ func run_tests(ts):
 	test_empty_input(ts)
 	test_integers_and_offsets(ts)
 	test_identifiers_and_keywords(ts)
+	test_parentheses(ts)
 	test_newline_and_error(ts)
 end

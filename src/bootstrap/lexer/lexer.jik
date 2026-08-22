@@ -104,6 +104,15 @@ func next_token(l: Lexer, r: Region) -> token::Token:
 		elif ch == '=':
 			l.advance()
 			return token::Token{type = token::TokenType.ASSIGN, span = l.span(start, l.pos, r)}[r]
+		elif ch == '(':
+			l.advance()
+			return token::Token{type = token::TokenType.LPAREN, span = l.span(start, l.pos, r)}[r]
+		elif ch == ')':
+			l.advance()
+			return token::Token{type = token::TokenType.RPAREN, span = l.span(start, l.pos, r)}[r]
+		elif ch == ',':
+			l.advance()
+			return token::Token{type = token::TokenType.COMMA, span = l.span(start, l.pos, r)}[r]
 		elif char::isdigit(ch):
 			return l.scan_integer(r)
 		elif is_identifier_start(ch):
