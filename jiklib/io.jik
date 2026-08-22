@@ -48,6 +48,14 @@ extern throws func jik_impl_io_read as
 extern throws func jik_impl_io_write as
     write(file: File, foreign text: String) -> void
 
+/// Write a string to standard error.
+///
+/// Write errors are ignored.
+///
+/// @param text String to write.
+extern func jik_impl_io_write_stderr as
+    write_stderr(text: String) -> void
+
 /// Read an entire file by path.
 ///
 /// @param path File path.
@@ -204,6 +212,12 @@ jik_impl_io_write(jik_impl_io_File *fh, JikString *s, JikError *e)
         jik_error_set(e, 1, "io::write: fflush failed");
         return;
     }
+}
+
+void
+jik_impl_io_write_stderr(JikString *s)
+{
+    fputs(s->data, stderr);
 }
 
 C_END

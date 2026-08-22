@@ -97,6 +97,18 @@ Write a string to a file.
 
 ---
 
+### `write_stderr(text: String) -> void`
+
+Write a string to standard error.
+
+**Behavior**
+- Write errors are ignored.
+
+**Parameters**
+1. `text: String` - String to write.
+
+---
+
 ### `throws write_file(foreign path: String, foreign text: String, region: Region) -> void`
 
 Write a string to a file by path, truncating existing contents.

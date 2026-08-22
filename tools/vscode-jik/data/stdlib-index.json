@@ -426,6 +426,13 @@
         "throws": true
       },
       {
+        "name": "write_stderr",
+        "kind": "function",
+        "signature": "write_stderr(text: String) -> void",
+        "doc": "Write a string to standard error.\n\nThis is best-effort diagnostic output: errors while writing are ignored.",
+        "throws": false
+      },
+      {
         "name": "read_file",
         "kind": "function",
         "signature": "read_file(path: String, region: Region) -> String",
