@@ -34,6 +34,15 @@ func advance(l: Lexer) -> void:
 end
 
 
+func match_next(l: Lexer, expected: char) -> bool:
+	if l.at_end() or l.peek()? != expected:
+		return false
+	end
+	l.advance()
+	return true
+end
+
+
 func is_whitespace(ch: char) -> bool:
 	return ch == ' ' or ch == '\t' or ch == '\r'
 end
@@ -132,6 +141,12 @@ func next_token(l: Lexer, r: Region) -> token::Token:
 		elif ch == '=':
 			l.advance()
 			return token::Token{type = token::TokenType.ASSIGN, span = l.span(start, l.pos, r)}[r]
+		elif ch == ':':
+			l.advance()
+			if l.match_next('='):
+				return token::Token{type = token::TokenType.DECLARE, span = l.span(start, l.pos, r)}[r]
+			end
+			return token::Token{type = token::TokenType.COLON, span = l.span(start, l.pos, r)}[r]
 		elif ch == '(':
 			l.advance()
 			return token::Token{type = token::TokenType.LPAREN, span = l.span(start, l.pos, r)}[r]
@@ -141,9 +156,9 @@ func next_token(l: Lexer, r: Region) -> token::Token:
 		elif ch == ',':
 			l.advance()
 			return token::Token{type = token::TokenType.COMMA, span = l.span(start, l.pos, r)}[r]
-		elif ch == ':':
+		elif ch == '+':
 			l.advance()
-			return token::Token{type = token::TokenType.COLON, span = l.span(start, l.pos, r)}[r]
+			return token::Token{type = token::TokenType.OP_PLUS, span = l.span(start, l.pos, r)}[r]
 		elif ch == '"':
 			return l.scan_string(r)
 		elif char::isdigit(ch):
