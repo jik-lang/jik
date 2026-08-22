@@ -57,7 +57,7 @@ CORE_OBJS := $(filter-out $(OBJ_DIR)/jik.o,$(OBJS))
 DEPS = $(OBJS:.o=.d) $(TEST_OBJS:.o=.d)
 ARCHIVE_BASENAME = jik-$(VERSION)-$(PLATFORM)-$(ARCH)
 
-.PHONY: all run test test-core test-bootstrap bootstrap clean ensuredirs testlang release release-archive force-version
+.PHONY: all run test test-core test-boot boot clean ensuredirs testlang release release-archive force-version
 
 all: ensuredirs $(TARGET)
 
@@ -79,7 +79,7 @@ $(OBJ_DIR)/test_%.o: $(TEST_DIR)/%.c
 run: $(TARGET)
 	$(RUN)
 
-bootstrap: ensuredirs $(TARGET)
+boot: ensuredirs $(TARGET)
 	$(RUN) build $(BOOTSTRAP_DIR)/main.jik --out $(BOOTSTRAP_TARGET)
 
 test: test-core
@@ -87,7 +87,7 @@ test: test-core
 test-core: $(TARGET)
 	$(RUN) run test/jik/tests.jik
 
-test-bootstrap: $(TARGET)
+test-boot: $(TARGET)
 	$(RUN) run test/bootstrap/tests.jik
 
 testlang: ensuredirs $(TEST_TARGET)

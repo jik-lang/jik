@@ -1,11 +1,12 @@
 use "cli/cli"
+use "jik/io"
 
 
 func main(args):
 	try cli::run(args):
 		return 0
 	except:
-		println("jik error: ", error_msg())
+		io::write_stderr(concat("jik error: ", error_msg(), "\n"))
 		return 1
 	end
 end

@@ -1,4 +1,5 @@
 use "source"
+use "jik/io"
 
 
 enum MessageLevel:
@@ -45,7 +46,15 @@ end
 
 
 func print_message(message: Message) -> void:
-    println("jik ", level_name(message.level, .message), ": ", message.summary, "\n    ", message.detail)
+    io::write_stderr(concat(
+        "jik ",
+        level_name(message.level, .message),
+        ": ",
+        message.summary,
+        "\n    ",
+        message.detail,
+        "\n"
+    ))
 end
 
 

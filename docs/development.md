@@ -16,7 +16,7 @@
 ## Building and testing
 
 Build the C seed compiler from the repository root with `make`. Build the Jik
-bootstrap compiler as `jik1` with `make bootstrap`. Run the test suite with `make test`.
+bootstrap compiler as `jik1` with `make boot`. Run the test suite with `make test`.
 
 ## Roadmap
 
