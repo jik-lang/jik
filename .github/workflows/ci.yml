@@ -43,3 +43,11 @@ jobs:
       - name: Test
         shell: pwsh
         run: make test
+
+      - name: Test Bootstrap
+        shell: pwsh
+        run: make test-boot
+
+      - name: Build Bootstrap
+        shell: pwsh
+        run: make boot
