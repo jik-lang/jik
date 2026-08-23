@@ -20,15 +20,14 @@ bootstrap compiler as `jik1` with `make boot`. Run the test suite with `make tes
 
 ## Roadmap
 
-### 0.1.x — implementation stabilisation
+### 0.1.0-alpha.x — implementation stabilisation and bootstrapping
 
 - Keep the intended language syntax stable.
 - Find and fix compiler and support-library issues.
 - Extend the standard library where needed.
 - Expand the test suite.
-- Validate the implementation by writing real Jik programs.
+- Bootstrap the implementation by rewriting Jik in Jik.
 
 ### Later
 
-- Continue bootstrapping the implementation by rewriting Jik in Jik.
-- Add concurrency support, either in the C implementation or during bootstrapping.
+- Add concurrency support

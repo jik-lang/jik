@@ -10,7 +10,7 @@ _A readable, statically typed language that compiles to C and manages memory wit
   <a href="https://github.com/jik-lang/jik/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jik-lang/jik/actions/workflows/ci.yml/badge.svg?branch=main&event=push"></a>
   <a href="https://jik-lang.org"><img alt="Website" src="https://img.shields.io/badge/website-jik--lang.org-111827"></a>
   <a href="https://discord.gg/cnA8X5yKeA"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join%20chat-5865F2?logo=discord&logoColor=white"></a>
-  <img alt="Status" src="https://img.shields.io/badge/status-alpha-b45309">
+  <a href="docs/development.md#roadmap"><img alt="Status" src="https://img.shields.io/badge/status-alpha-b45309"></a>
   <img alt="Backend" src="https://img.shields.io/badge/backend-C-2563eb">
   <img alt="Memory" src="https://img.shields.io/badge/memory-region--based-0f766e">
 </p>
