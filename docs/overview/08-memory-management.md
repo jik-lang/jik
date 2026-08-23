@@ -464,7 +464,7 @@ It is not a general expression operator and cannot be attached to names, calls,
 or primitive values. It may also follow a local composite type description, as
 in `values: Vec[String]@`. It is invalid in a compiler-proven region-safe
 function: such functions are exempt from the same-region rule, so their
-signatures do uniquely determine an allocation ragion `@`.
+signatures do not uniquely determine an allocation ragion `@`.
 
 Named allocation specifiers remain available and are required when no implicit
 region exists or when a region-safe function must select a particular parameter
