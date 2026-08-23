@@ -3,7 +3,7 @@
 ## Repository layout
 
 - `src/jik/` - C seed compiler source
-- `src/bootstrap/` - Jik bootstrap compiler source
+- [`src/bootstrap/`](../src/bootstrap/) - Jik bootstrap compiler source (work in progress)
 - `jiklib/` - Jik standard library modules
 - `support/` - Jik support library
 - `test/` - test suite
@@ -26,7 +26,7 @@ bootstrap compiler as `jik1` with `make boot`. Run the test suite with `make tes
 - Find and fix compiler and support-library issues.
 - Extend the standard library where needed.
 - Expand the test suite.
-- Bootstrap the implementation by rewriting Jik in Jik.
+- Bootstrap the implementation by [rewriting Jik in Jik](../src/bootstrap/)
 
 ### Later
 
