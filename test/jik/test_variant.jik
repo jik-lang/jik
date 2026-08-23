@@ -154,11 +154,11 @@ variant Token:
 end
 
 func make_eof(r: Region) -> Token:
-    return Token.EOF[r]
+    return Token.EOF{}[r]
 end
 
 func test_var_07(ts):
-    eof := Token.EOF
+    eof := Token.EOF{}
     test::suite_assert(ts, eof is Token.EOF, site())
 
     match eof:
@@ -168,12 +168,12 @@ func test_var_07(ts):
             test::suite_assert(ts, true, site())
     end
 
-    tokens := [Token.EOF, Token.INTEGER{42}]
+    tokens := [Token.EOF{}, Token.INTEGER{42}]
     test::suite_assert(ts, tokens[0] is Token.EOF, site())
     test::suite_assert(ts, tokens[1][Token.INTEGER] == 42, site())
 
     holder := TokenHolder{}
-    holder.token = Token.EOF[.holder]
+    holder.token = Token.EOF{}[.holder]
     test::suite_assert(ts, holder.token is Token.EOF, site())
 
     holder.token = make_eof(.holder)

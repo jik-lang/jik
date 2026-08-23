@@ -28,7 +28,7 @@ v2 := Value.INT{}
 
 v3 := Value.TEXT{"hello"}
 v4 := Value.NUMS{[10 of 0]}
-v5 := Value.EOF
+v5 := Value.EOF{}
 ```
 
 
@@ -86,9 +86,9 @@ Each `case`:
 - Tests the tag
 - **Binds** the payload to a local name (`v`, `msg`, `vec`).
 
-Tags may omit their payload type. Construct and match those tags without braces, as with
-`Value.EOF`; braces always indicate a payload. If every tag has no payload, declare an `enum`
-instead of a `variant`.
+Tags may omit their payload type. Construct those tags with empty braces, as with
+`Value.EOF{}`, and match them without braces, as with `case Value.EOF:`. If every tag has no
+payload, declare an `enum` instead of a `variant`.
 
 When printed, variants show their type, active tag, and payload when present: for example,
 `<Value INT=7>` and `<Value EOF>`.

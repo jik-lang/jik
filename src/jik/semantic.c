@@ -197,16 +197,7 @@ jik_semantic_reject_invalid_value_expr(JikNode *nd)
                                                  nd->val_variant_new.name->val_id.module_id,
                                                  nd->token->module_id);
         if (variant && variant->type == NODE_VARIANT &&
-            jik_variant_tag_is_payloadless(variant, nd->val_variant_new.tag)) {
-            jik_diag_fatal_error_if(nd->val_variant_new.has_initializer_syntax,
-                                    "payloadless variant tag cannot use braces",
-                                    JIK_STRING_NCAT("use ",
-                                                    nd->val_variant_new.name->val_id.name,
-                                                    ".",
-                                                    nd->val_variant_new.tag));
-        }
-        else if (variant && variant->type == NODE_VARIANT &&
-                 !nd->val_variant_new.has_initializer_syntax) {
+            !nd->val_variant_new.has_initializer_syntax) {
             jik_diag_fatal_error(JIK_STRING_NCAT("variant tag cannot be used as a value; use ",
                                                  nd->val_variant_new.name->val_id.name,
                                                  ".",
@@ -681,33 +672,6 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                 *member = *tag;
             }
         }
-        else if (nd->type == NODE_EXPR_SUBSCRIPT_GET &&
-                 nd->val_subscript_get.node->type == NODE_EXPR_MEMBER_ACCESS &&
-                 nd->val_subscript_get.node->val_member_access.node->type ==
-                     NODE_EXPR_IDENTIFIER &&
-                 nd->val_subscript_get.expr->type == NODE_EXPR_IDENTIFIER) {
-            JikNode *member = nd->val_subscript_get.node;
-            JikNode *variant = jik_scope_get_symbol(
-                nd->context,
-                member->val_member_access.node->val_id.name,
-                member->val_member_access.node->val_id.module_id,
-                nd->token->module_id);
-            if (variant && variant->type == NODE_VARIANT &&
-                jik_variant_tag_is_payloadless(variant, member->val_member_access.member_name)) {
-                JikNode *ret = jik_node_new_variant_new(member->val_member_access.node,
-                                                        NULL,
-                                                        member->val_member_access.member_name,
-                                                        nd->context,
-                                                        nd->token);
-                ret->val_variant_new.name->val_id.module_id = variant->token->module_id;
-                jik_set_alloc_spec(ret,
-                                   (JikAllocSpec){.kind = JIK_ALLOC_NAMED_REGION,
-                                                  .src = JIK_ALLOC_SRC_UNKNOWN,
-                                                  .region_name =
-                                                      nd->val_subscript_get.expr->val_id.name});
-                *nd = *ret;
-            }
-        }
         else if (nd->type == NODE_EXPR_MEMBER_ACCESS) {
             if (nd->val_member_access.node->type == NODE_EXPR_IDENTIFIER) {
                 char    *module_id = nd->val_member_access.node->val_id.module_id
@@ -729,31 +693,15 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                         jik_token_to_text(nd->token));
                 }
                 else if (enum_node && enum_node->type == NODE_VARIANT) {
-                    if (jik_variant_tag_is_payloadless(enum_node,
-                                                       nd->val_member_access.member_name)) {
-                        JikNode *var_new_nd = jik_node_new_variant_new(
-                            nd->val_member_access.node,
-                            NULL,
-                            nd->val_member_access.member_name,
-                            nd->context,
-                            nd->token);
-                        var_new_nd->val_variant_new.name->val_id.module_id = module_id;
-                        jik_set_alloc_spec(var_new_nd,
-                                           (JikAllocSpec){.kind = JIK_ALLOC_LOCAL,
-                                                          .src = JIK_ALLOC_SRC_LOCAL});
-                        *nd = *var_new_nd;
-                    }
-                    else {
-                        JikNode *var_new_nd =
-                            jik_node_new_variant_tag(nd->val_member_access.node,
-                                                     nd->val_member_access.member_name,
-                                                     nd->context,
-                                                     nd->token);
-                        nd->type                 = var_new_nd->type;
-                        nd->jik_type             = var_new_nd->jik_type;
-                        nd->val_variant_tag.name = var_new_nd->val_variant_tag.name;
-                        nd->val_variant_tag.tag  = var_new_nd->val_variant_tag.tag;
-                    }
+                    JikNode *var_new_nd =
+                        jik_node_new_variant_tag(nd->val_member_access.node,
+                                                 nd->val_member_access.member_name,
+                                                 nd->context,
+                                                 nd->token);
+                    nd->type                 = var_new_nd->type;
+                    nd->jik_type             = var_new_nd->jik_type;
+                    nd->val_variant_tag.name = var_new_nd->val_variant_tag.name;
+                    nd->val_variant_tag.tag  = var_new_nd->val_variant_tag.tag;
                 }
             }
         }

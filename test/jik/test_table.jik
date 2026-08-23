@@ -114,7 +114,7 @@ func test_table_variant_tags(ts):
     first := Token.IDENT{"first"}
     second := Token.IDENT{"second"}
     number := Token.NUMBER{42}
-    end_token := Token.END
+    end_token := Token.END{}
 
     test::suite_assert(ts, TokenNames[first] == "identifier", site())
     test::suite_assert(ts, TokenNames[second] == "identifier", site())

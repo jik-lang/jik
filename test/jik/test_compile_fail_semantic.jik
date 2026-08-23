@@ -456,6 +456,37 @@ end
         "identifier \"_Private\" is reserved by the C backend")
 end
 
+func test_compile_fail_30(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    EMPTY
+end
+
+func main():
+    value := Value.EMPTY
+end
+""",
+        "variant tag cannot be used as a value"
+    )
+
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    EMPTY
+end
+
+func invalid(r: Region):
+    value := Value.EMPTY[r]
+end
+
+func main():
+end
+""",
+        "unsubscriptable type"
+    )
+end
+
 func run_tests(ts):
     test_compile_fail_01(ts)
     test_compile_fail_02(ts)
@@ -486,4 +517,5 @@ func run_tests(ts):
     test_compile_fail_27(ts)
     test_compile_fail_28(ts)
     test_compile_fail_29(ts)
+    test_compile_fail_30(ts)
 end

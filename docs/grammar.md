@@ -510,8 +510,7 @@ struct_field ::= identifier "=" expr
 ### Variant Literals
 
 ```ebnf
-variant_literal ::= qualified_identifier "." identifier
-                  | qualified_identifier "." identifier "{" [ expr ] "}"
+variant_literal ::= qualified_identifier "." identifier "{" [ expr ] "}"
 ```
 
 Examples:
@@ -520,7 +519,7 @@ Examples:
 Value.INT{3}
 Value.TEXT{"hi"}[r]
 Value.INT{}
-Value.EOF
+Value.EOF{}
 ```
 
 ### Vector Literals
@@ -555,8 +554,8 @@ These forms are parsed first and refined later:
 
 - `EnumName.VALUE` is initially parsed as member access, then rewritten as an
   enum value during semantic analysis.
-- `VariantName.TAG` is initially parsed as member access, then rewritten during semantic
-  analysis as either a payloadless variant value or a variant tag marker.
+- `VariantName.TAG` is initially parsed as member access, then rewritten as a variant tag marker
+  during semantic analysis. Constructing a variant value always requires braces.
 - `value[VariantName.TAG]` is syntactically a subscript expression and becomes
   variant payload access only after semantic resolution.
 

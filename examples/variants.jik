@@ -41,7 +41,7 @@ func main():
     show_result(compute(Op.ADD, 2, 3, _))
     show_result(compute(Op.MUL, 4, 5, _))
     show_result(compute(Op.MUL, 7, 0, _))
-    finished := CalcResult.END
+    finished := CalcResult.END{}
     show_result(finished)
     println("done: ", finished.is_done())
 end

@@ -372,19 +372,6 @@ jik_parser_parse_primary(JikParser *p)
             }
         }
         else if (tok->type == TOK_LANG) {
-            if (node->type == NODE_EXPR_MEMBER_ACCESS &&
-                node->val_member_access.node->type == NODE_EXPR_IDENTIFIER &&
-                jik_parser_match_token_sequence(
-                    p, (JikTokenType[]){TOK_LANG, TOK_DOT, TOK_ID, TOK_RANG, TOK_ERROR})) {
-                JikNode *ret = jik_node_new_variant_new(node->val_member_access.node,
-                                                        NULL,
-                                                        node->val_member_access.member_name,
-                                                        jik_parser_current_context(p),
-                                                        node->token);
-                jik_set_alloc_spec(ret, jik_parser_get_region_spec(p));
-                node = ret;
-                continue;
-            }
             JikToken *lang_tok = jik_parser_eat_token(p, TOK_LANG);
             JikNode  *expr     = NULL;
             if (jik_parser_current_token(p)->type != TOK_COLON) {
@@ -1438,16 +1425,11 @@ jik_parser_parse_variant_new(JikParser *p, JikToken *var_name_tok, char *module_
     JikToken *variant = jik_parser_eat_token(p, TOK_ID);
     jik_parser_eat_token(p, TOK_LCURL);
     jik_parser_eat_newlines_if_found(p);
-    if (jik_parser_current_token(p)->type == TOK_RCURL) {
-        jik_parser_eat_token(p, TOK_RCURL);
-        JikNode *ret = jik_node_new_variant_new(
-            id, NULL, variant->lexeme, jik_parser_current_context(p), var_name_tok);
-        ret->val_variant_new.has_initializer_syntax = true;
-        jik_set_alloc_spec(ret, jik_parser_get_region_spec(p));
-        return ret;
+    JikNode *init_expr = NULL;
+    if (jik_parser_current_token(p)->type != TOK_RCURL) {
+        init_expr = jik_parser_parse_expr(p);
+        jik_parser_eat_newlines_if_found(p);
     }
-    JikNode *init_expr = jik_parser_parse_expr(p);
-    jik_parser_eat_newlines_if_found(p);
     jik_parser_eat_token(p, TOK_RCURL);
     JikNode *ret = jik_node_new_variant_new(
         id, init_expr, variant->lexeme, jik_parser_current_context(p), var_name_tok);
