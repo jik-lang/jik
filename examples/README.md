@@ -8,19 +8,20 @@ standard library.
 1. `hello.jik` - the smallest complete Jik program
 2. `fib.jik` - functions, loops, recursion, and region-based allocation
 3. `regions_copy.jik` - returning copied composite values in a caller-chosen region
-4. `primes.jik` - loops and vectors
-5. `word_count.jik` - structs, file I/O, and standard library use
-6. `text_processing.jik` - string/vector slices, indexed iteration, and comparisons
-7. `modules/main.jik` - multi-file programs, modules, and imports
-8. `enum_match.jik` - exhaustive matching over enum values
-9. `variants.jik` - enums, payload-less variants, `match`, and UFCS
-10. `tables.jik` - exhaustive enum lookup tables and table-driven transitions
-11. `error_handling.jik` - `throws`, recovery, propagation, `must`, and postfix `!`
-12. `ffi_demo.jik` - calling C functions and opaque C structs through Jik's FFI
-13. `testing_demo.jik` - basic use of `jik/testing`
-14. `cl_args.jik` - raw command-line argument handling
-15. `argparse_demo.jik` - parsed arguments, generated help, and path normalization
-16. `process_capture.jik` - capture a process and inspect stdout/stderr
+4. `region_ergonomics.jik` - inferred regions for returned, nested, and stored literals
+5. `primes.jik` - loops and vectors
+6. `word_count.jik` - structs, file I/O, and standard library use
+7. `text_processing.jik` - string/vector slices, indexed iteration, and comparisons
+8. `modules/main.jik` - multi-file programs, modules, and imports
+9. `enum_match.jik` - exhaustive matching over enum values
+10. `variants.jik` - enums, payload-less variants, `match`, and UFCS
+11. `tables.jik` - exhaustive enum lookup tables and table-driven transitions
+12. `error_handling.jik` - `throws`, recovery, propagation, `must`, and postfix `!`
+13. `ffi_demo.jik` - calling C functions and opaque C structs through Jik's FFI
+14. `testing_demo.jik` - basic use of `jik/testing`
+15. `cl_args.jik` - raw command-line argument handling
+16. `argparse_demo.jik` - parsed arguments, generated help, and path normalization
+17. `process_capture.jik` - capture a process and inspect stdout/stderr
 
 The remaining examples are larger demonstrations:
 

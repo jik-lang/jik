@@ -1,0 +1,44 @@
+// Example: region ergonomics in Jik.
+
+struct User:
+    name: String
+    labels: Vec[String]
+end
+
+
+func new_user(foreign name: String, r: Region) -> User:
+    // The returned struct and its composite field `labels` are automatically
+    // allocated in r, since this is the only possible valid allocation destination.
+    // Since `name` is marked as a foreign parameter, we still need to copy it to `r`.
+    return User{
+        name = copy(name, r),
+        labels = ["new", "active"]
+    }
+end
+
+
+func display_name(user: User) -> String:
+    if user.name == "":
+        // The returned string literal is allocated in user's region, since
+        // this is the only valid destination.
+        return "Anonymous"
+    end
+    return user.name
+end
+
+
+func add_default_label(user: User):
+    // The string literal is automatically allocated in user's region.
+    // This is also valid for other store operations involving composite values.
+    push(user.labels, "member")
+end
+
+
+func main():
+    // An omitted final Region argument automatically passes the current
+    // function's local region `_`.
+    user := new_user("Ada")
+
+    add_default_label(user)
+    println(display_name(user), ": ", user.labels)
+end

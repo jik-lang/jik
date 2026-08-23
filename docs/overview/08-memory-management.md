@@ -106,7 +106,7 @@ struct Point:
 end
 
 func make_point(x, y, r: Region) -> Point:
-    return Point{x = x, y = y}[r]    // OK: allocated caller-provided region 
+    return Point{x = x, y = y}[r]    // OK: allocated in caller-provided region
 end
 
 func bad_point(x, y) -> Point:
@@ -397,7 +397,39 @@ func main():
 end
 ```
 
-#### 8.5.3 Nested composite literals
+#### 8.5.3 Returned literal retargeting
+
+For a composite-returning function, the same-region rule determines a shared
+caller-owned result region from its non-`foreign` composite parameters and
+`Region` parameters. A composite literal used directly as a return expression
+is automatically allocated in that region:
+
+```jik
+func display_name(user: Person) -> String:
+    if user.name == "":
+        return "Anonymous"     // allocated in user's region
+    end
+    return user.name
+end
+
+func make_point(x, y, r: Region) -> Point:
+    return Point{x = x, y = y}     // allocated in r
+end
+```
+
+This rule applies only to a directly returned composite literal. It does not
+retarget a local variable, a literal with an explicit allocation specifier, a
+`foreign` value, or a global value. Without an eligible parameter, returning a
+local literal remains an error. Explicit allocation remains valid when it
+improves clarity:
+
+```jik
+func make_point_explicit(x, y, r: Region) -> Point:
+    return Point{x = x, y = y}[r]
+end
+```
+
+#### 8.5.4 Nested composite literals
 
 Composite literals that contain other composite values must be internally region-consistent.
 The outer value and the contained composite values must belong to the same region.
@@ -426,7 +458,7 @@ func foo(v: Vec[String]):
 end
 ```
 
-#### 8.5.4 Temporary containers passed to `foreign` parameters
+#### 8.5.5 Temporary containers passed to `foreign` parameters
 
 A temporary `Vec` or `Dict` literal passed directly to a `foreign` parameter
 may contain composite elements from different regions. This exception applies
@@ -459,7 +491,7 @@ Since `args` in `process::capture` is a `foreign` vector, at the call site the e
 need not be in the same region.
 
 
-#### 8.5.5 Region-safe builtins
+#### 8.5.6 Region-safe builtins
 
 All currently provided builtins except `push` are region-safe, so their calls
 do not need to satisfy the same-region rule. Some only inspect their composite

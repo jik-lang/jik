@@ -622,6 +622,29 @@ jik_alloc_spec_complete(JikAllocSpec s)
     return s.kind != JIK_ALLOC_UNKNOWN && s.src != JIK_ALLOC_SRC_UNKNOWN;
 }
 
+static JikAllocSpec *
+get_function_implicit_region_spec(JikNode *func_nd, TabJikAllocSpec *spec_tab)
+{
+    assert(func_nd->type == NODE_FUNCTION);
+    if (!jik_type_is_allocated(func_nd->jik_type->val_func.ret_type)) {
+        return NULL;
+    }
+
+    for (size_t i = 0; i < VecJikNode_size(func_nd->val_function.params); i++) {
+        JikNode *param = VecJikNode_get(func_nd->val_function.params, i);
+        if (param->jik_type != &JIK_TYPE_REGION &&
+            (!jik_type_is_allocated(param->jik_type) || param->val_id.is_foreign)) {
+            continue;
+        }
+
+        JikAllocSpec *spec = TabJikAllocSpec_get(spec_tab, param->val_id.name);
+        if (spec && jik_alloc_spec_complete(*spec)) {
+            return spec;
+        }
+    }
+    return NULL;
+}
+
 static bool
 jik_alloc_sources_match(JikAllocSpec s1, JikAllocSpec s2)
 {
@@ -1021,18 +1044,27 @@ jik_check_region_integrity(JikNode *ast)
                 if (!jik_type_is_allocated(nd->val_return.expr->jik_type)) {
                     continue;
                 }
-                JikAllocSpec spec = get_expression_alloc_spec(nd->val_return.expr, spec_tab);
+                JikNode     *expr = nd->val_return.expr;
+                JikAllocSpec spec = get_expression_alloc_spec(expr, spec_tab);
+                if (jik_node_is_allocated_literal(expr) && spec.src == JIK_ALLOC_SRC_LOCAL) {
+                    JikAllocSpec *implicit_spec =
+                        get_function_implicit_region_spec(func_nd, spec_tab);
+                    if (implicit_spec && can_retarget_literal(expr, *implicit_spec)) {
+                        jik_set_alloc_spec(expr, *implicit_spec);
+                        spec = get_expression_alloc_spec(expr, spec_tab);
+                    }
+                }
                 if (jik_alloc_source_known(spec) && spec.src == JIK_ALLOC_SRC_LOCAL) {
                     jik_diag_fatal_error("cannot return local allocation",
-                                         jik_token_to_text(nd->val_return.expr->token));
+                                         jik_token_to_text(expr->token));
                 }
                 else if (jik_alloc_source_known(spec) && spec.src == JIK_ALLOC_SRC_CROSS) {
                     jik_diag_fatal_error("cannot return foreign composite value",
-                                         jik_token_to_text(nd->val_return.expr->token));
+                                         jik_token_to_text(expr->token));
                 }
                 else if (jik_alloc_source_known(spec) && spec.kind == JIK_ALLOC_GLOBAL) {
                     jik_diag_fatal_error("cannot return composite global",
-                                         jik_token_to_text(nd->val_return.expr->token));
+                                         jik_token_to_text(expr->token));
                 }
             }
             else if (jik_node_is_allocated_literal(nd)) {
