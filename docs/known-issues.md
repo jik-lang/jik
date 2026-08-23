@@ -10,7 +10,7 @@ being refined, and some portability work remains to be completed.
 
 ## Known limitations
 
-- Generated C is currently intended for `clang` and `gcc`. MSVC is not part of the default supported path.
+- Generated C is currently intended for `gcc` and `clang`. MSVC is not part of the default supported path.
 - Some generated code currently relies on GNU-compatible C extensions, especially for vector
   repeat-initializers of the form `[n of expr]`.
 - Portability work for strict non-GNU C toolchains is not complete.

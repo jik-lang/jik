@@ -133,15 +133,14 @@ To start programming in Jik:
 - extract the release archive
 - from the extracted directory, run `jik help` to confirm the executable works
 - (optional) add the extracted directory to `PATH`
-- if you plan to use `jik run` or `jik build`, either pass the compiler name with `--cc` or set `JIK_CC`, for example to `clang` or `gcc`
+- if you plan to use `jik run` or `jik build`, either pass the compiler name with `--cc` or set `JIK_CC`, for example to `gcc` or `clang`
     - Windows: For a simple GCC setup, download from [WinLibs](https://winlibs.com/), and add its `bin` directory to `PATH`
 - save a copy of [the example](#hello-regions) as `hello.jik`
 - run it: `jik run hello.jik`
 - generate C output: `jik tran hello.jik`
 - build an executable: `jik build hello.jik`
 
-Only `clang` and `gcc` host compilers were tested. MSVC was not tested.
-
+Only `gcc` and `clang` host compilers were tested. MSVC was not tested.
 
 <a id="build-from-src"></a>
 ## Building Jik from source
@@ -156,6 +155,12 @@ Additionally, to run the Jik test suite:
 - run `make test`
 
 Note that MSVC was not tested and is not the default build path in this repository
+
+## VS Code support
+
+Download `jik-language-tools-*.vsix` from the [latest release](../../releases/latest). In VS Code, open the Extensions view, select the `...` menu, choose **Install from VSIX...**, and select the downloaded file.
+
+The extension provides syntax highlighting, import-aware standard-library completion, and hover documentation and signatures.
 
 ## Further reading
 
