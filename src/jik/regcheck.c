@@ -169,6 +169,7 @@ jik_prepare_functions(JikNode *ast)
         func_nd->val_function.subnodes         = subnodes;
         func_nd->val_function.info             = (FuncInfo *)jik_alloc(sizeof(FuncInfo));
         func_nd->val_function.info->has_allocs = false;
+        func_nd->val_function.info->implicit_region_alloc = NULL;
         create_alloc_spec_tab_for_function(func_nd);
     }
 }
@@ -626,10 +627,6 @@ static JikAllocSpec *
 get_function_implicit_region_spec(JikNode *func_nd, TabJikAllocSpec *spec_tab)
 {
     assert(func_nd->type == NODE_FUNCTION);
-    if (!jik_type_is_allocated(func_nd->jik_type->val_func.ret_type)) {
-        return NULL;
-    }
-
     for (size_t i = 0; i < VecJikNode_size(func_nd->val_function.params); i++) {
         JikNode *param = VecJikNode_get(func_nd->val_function.params, i);
         if (param->jik_type != &JIK_TYPE_REGION &&
@@ -643,6 +640,34 @@ get_function_implicit_region_spec(JikNode *func_nd, TabJikAllocSpec *spec_tab)
         }
     }
     return NULL;
+}
+
+static void
+jik_resolve_implicit_region_allocs(JikNode *ast)
+{
+    for (size_t i = 0; i < VecJikNode_size(ast->val_program.functions); i++) {
+        JikNode         *func_nd       = VecJikNode_get(ast->val_program.functions, i);
+        TabJikAllocSpec *spec_tab      = func_nd->val_function.info->spec_tab;
+        JikAllocSpec    *implicit_spec = get_function_implicit_region_spec(func_nd, spec_tab);
+        VecJikNode_iter  it = VecJikNode_iter_new(func_nd->val_function.subnodes);
+        JikNode         *nd;
+        while (VecJikNode_iter_next(&it, &nd)) {
+            if (!jik_node_is_allocated_literal(nd) ||
+                jik_get_alloc_spec(nd).kind != JIK_ALLOC_IMPLICIT) {
+                continue;
+            }
+            jik_diag_fatal_error_if(!implicit_spec,
+                                    "no implicit region is available for this allocation",
+                                    jik_token_to_text(nd->token));
+            assert(implicit_spec->kind == JIK_ALLOC_CONTAINER ||
+                   implicit_spec->kind == JIK_ALLOC_NAMED_REGION);
+            assert(implicit_spec->src == JIK_ALLOC_SRC_FOREIGN);
+            if (!func_nd->val_function.info->implicit_region_alloc) {
+                func_nd->val_function.info->implicit_region_alloc = nd;
+            }
+            jik_set_alloc_spec(nd, *implicit_spec);
+        }
+    }
 }
 
 static bool
@@ -829,6 +854,20 @@ jik_classify_region_safe_functions(JikNode *ast)
                 func_nd->val_function.is_region_safe = false;
                 changed = true;
             }
+        }
+    }
+}
+
+static void
+jik_check_implicit_region_allocs(JikNode *ast)
+{
+    for (size_t i = 0; i < VecJikNode_size(ast->val_program.functions); i++) {
+        JikNode *func_nd  = VecJikNode_get(ast->val_program.functions, i);
+        JikNode *alloc_nd = func_nd->val_function.info->implicit_region_alloc;
+        if (func_nd->val_function.is_region_safe && alloc_nd) {
+            jik_diag_fatal_error(
+                "implicit region allocation cannot be used in a region-safe function",
+                jik_token_to_text(alloc_nd->token));
         }
     }
 }
@@ -1245,12 +1284,14 @@ void
 jik_check_regions(JikNode *ast)
 {
     jik_prepare_functions(ast);
+    jik_resolve_implicit_region_allocs(ast);
     jik_mark_global_allocs(ast);
     jik_check_orphaned_allocations(ast);
     jik_check_region_semantics(ast);
     // We need a first pass here, in order to properly classify region safe functions next
     jik_check_region_integrity(ast);
     jik_classify_region_safe_functions(ast);
+    jik_check_implicit_region_allocs(ast);
 
     VecJikNode *unknown_allocs = VecJikNode_new_empty();
     size_t      prev_len       = SIZE_MAX;

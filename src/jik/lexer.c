@@ -633,6 +633,9 @@ match_char(char ch)
     case '!': {
         return TOK_BANG;
     }
+    case '@': {
+        return TOK_AT;
+    }
     default:
         return TOK_ERROR;
     }

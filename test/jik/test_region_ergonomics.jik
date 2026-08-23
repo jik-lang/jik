@@ -1,0 +1,234 @@
+use "jik/testing" as test
+use "utils"
+
+
+func test_implicit_region_suffix(ts):
+    utils::assert_compile_succeeds_source(ts,
+"""
+struct Anchor:
+    value: int
+end
+
+struct Owner:
+    values: Vec[String]
+end
+
+variant Choice:
+    EMPTY
+    TEXT: String
+end
+
+func from_anchor(anchor: Anchor) -> Anchor:
+    text := "text"@
+    values := ["one", "two"]@
+    record := Anchor{}@
+    some := Some{"value"}@
+    none: Option[String]@
+    none = None@
+    choice := Choice.TEXT{"value"}@
+    empty_choice := Choice.EMPTY{}@
+    dictionary := {"key": "value"}@
+    typed_string: String@
+    typed_vector: Vec[int]@
+    typed_dictionary: Dict[String]@
+    typed_option: Option[String]@
+    typed_record: Anchor@
+    return record
+end
+
+func from_region(out: Region) -> Anchor:
+    record := Anchor{}@
+    return record
+end
+
+func void_use(owner: Owner, value: String):
+    intermediate := "value"@
+    push(owner.values, value)
+    push(owner.values, intermediate)
+end
+
+func primitive_use(owner: Owner, value: String) -> int:
+    intermediate := "value"@
+    push(owner.values, value)
+    push(owner.values, intermediate)
+    return len(intermediate)
+end
+
+func use_shared_region(left: Owner, right: Owner):
+    push(right.values, "value"@)
+end
+
+global_anchor := Anchor{}
+global_from_anchor := from_anchor(global_anchor)
+global_from_region := from_region()
+
+func main():
+    anchor := Anchor{}
+    owner := Owner{}
+    value := "value"
+    result := from_anchor(anchor)
+    global_result := from_anchor(global_anchor)
+    region_result := from_region(_)
+    void_use(owner, value)
+    count := primitive_use(owner, value)
+    use_shared_region(owner, owner)
+end
+"""
+    )
+end
+
+
+func test_implicit_region_suffix_failures(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Owner:
+    value: int
+end
+
+func safe(owner: Owner):
+    value := Owner{}@
+end
+
+func main():
+end
+""",
+        "implicit region allocation cannot be used in a region-safe function"
+    )
+
+    utils::assert_compile_fail_source(ts,
+"""
+struct Owner:
+    values: Vec[String]
+end
+
+func safe(owner: Owner):
+    push(owner.values, "value"@)
+end
+
+func main():
+end
+""",
+        "implicit region allocation cannot be used in a region-safe function"
+    )
+
+    utils::assert_compile_fail_source(ts,
+"""
+struct Owner:
+    value: int
+end
+
+func safe(left: Owner, right: Owner):
+    value := Owner{}@
+end
+
+func main():
+end
+""",
+        "implicit region allocation cannot be used in a region-safe function"
+    )
+
+    utils::assert_compile_fail_source(ts,
+"""
+struct Owner:
+    value: int
+end
+
+func factory() -> Owner:
+    value := Owner{}@
+    return value
+end
+
+func main():
+end
+""",
+        "no implicit region is available for this allocation"
+    )
+
+    utils::assert_compile_fail_source(ts,
+"""
+struct Owner:
+    value: int
+end
+
+func factory(foreign source: String) -> Owner:
+    return Owner{}@
+end
+
+func main():
+end
+""",
+        "no implicit region is available for this allocation"
+    )
+
+    utils::assert_compile_fail_source(ts,
+"""
+value := "value"@
+
+func main():
+end
+""",
+        "implicit region allocation is only valid inside a function"
+    )
+
+    utils::assert_compile_fail_source(ts,
+"""
+struct Owner:
+    value: int
+end
+
+func invalid(owner: Owner) -> Owner:
+    value := 1@
+    return owner
+end
+
+func main():
+end
+""",
+        "implicit region allocation suffix is only valid on a composite"
+    )
+
+    utils::assert_compile_fail_source(ts,
+"""
+struct Owner:
+    value: int
+end
+
+func identity(owner: Owner) -> Owner:
+    return owner
+end
+
+func invalid(owner: Owner) -> Owner:
+    value := identity(owner)@
+    return value
+end
+
+func main():
+end
+""",
+        "implicit region allocation suffix is only valid on a composite"
+    )
+
+    utils::assert_compile_fail_source(ts,
+"""
+struct Owner:
+    value: int
+end
+
+func invalid(owner: Owner) -> Owner:
+    value := owner@
+    return value
+end
+
+func main():
+end
+""",
+        "implicit region allocation suffix is only valid on a composite"
+    )
+
+end
+
+
+func run_tests(ts):
+    test_implicit_region_suffix(ts)
+    test_implicit_region_suffix_failures(ts)
+end

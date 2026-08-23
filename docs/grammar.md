@@ -14,7 +14,7 @@ are resolved later during semantic analysis.
 - Some constructs are context-sensitive. In particular:
   - `Type.Member` may denote enum values or variant tags.
   - `x[Tag]` may denote variant payload access only after semantic resolution.
-  - allocation suffixes such as `[r]` and `[.x]` are syntactically regular, but
+  - allocation suffixes such as `[r]`, `[.x]`, and `@` are syntactically regular, but
     semantically restricted.
 - Newlines are significant between statements and after block headers.
 
@@ -138,6 +138,7 @@ suffix:
 ```ebnf
 alloc_suffix ::= "[" identifier "]"
                | "[" "." identifier "]"
+               | "@"
 ```
 
 Examples:
@@ -147,10 +148,16 @@ Point{}[r]
 Point{}[.p]
 Some{"x"}[r]
 None[r]
+[1, 2, 3]@
 ```
 
 The parser also accepts the local region value `_` as an ordinary expression,
-but allocation suffix syntax itself expects either `id` or `.id`.
+but bracketed allocation suffix syntax expects either `id` or `.id`.
+
+Postfix `@` selects the enclosing function's implicit region. It is available
+only where the same-region rule establishes one shared region from the
+function's non-`foreign` composite and `Region` parameters. It is invalid
+outside a function and in compiler-proven region-safe functions.
 
 Allocation suffix syntax takes precedence immediately after composite literals.
 As a result, forms like `[1, 2][0]` are not parsed as direct subscripting of a

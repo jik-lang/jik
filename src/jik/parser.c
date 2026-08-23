@@ -150,6 +150,18 @@ static JikAllocSpec
 jik_parser_get_region_spec(JikParser *p)
 {
     JikAllocSpec as = (JikAllocSpec){.kind = JIK_ALLOC_LOCAL, .src = JIK_ALLOC_SRC_UNKNOWN};
+    if (jik_parser_current_token(p)->type == TOK_AT) {
+        JikToken *tok = jik_parser_current_token(p);
+        jik_diag_fatal_error_if(p->container_depth > 0,
+                                "illegal nested region specifier",
+                                jik_token_to_text(tok));
+        jik_diag_fatal_error_if(!p->parsed_function,
+                                "implicit region allocation is only valid inside a function",
+                                jik_token_to_text(tok));
+        jik_parser_eat_token(p, TOK_AT);
+        as.kind = JIK_ALLOC_IMPLICIT;
+        return as;
+    }
     if (jik_parser_current_token(p)->type != TOK_LANG) {
         as.src = JIK_ALLOC_SRC_LOCAL;
         return as;
@@ -347,7 +359,7 @@ jik_parser_parse_primary(JikParser *p)
     JikToken *tok;
     while ((tok = jik_parser_current_token(p)) != NULL &&
            (tok->type == TOK_DOT || tok->type == TOK_LANG || tok->type == TOK_QMARK ||
-            tok->type == TOK_BANG)) {
+            tok->type == TOK_BANG || tok->type == TOK_AT)) {
         if (tok->type == TOK_DOT) {
             jik_parser_eat_token(p, tok->type);
             JikToken *id_tok = jik_parser_eat_token(p, TOK_ID);
@@ -404,6 +416,10 @@ jik_parser_parse_primary(JikParser *p)
                                     jik_token_to_text(bang_tok));
             node->val_call.must = true;
             node = jik_node_new_must(node, jik_parser_current_context(p), bang_tok);
+        }
+        else if (tok->type == TOK_AT) {
+            jik_diag_fatal_error("implicit region allocation suffix is only valid on a composite",
+                                 jik_token_to_text(tok));
         }
     }
     return node;

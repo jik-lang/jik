@@ -9,6 +9,7 @@ JIK_HTAB_DECLARE(TabInt, int);
 
 typedef struct FuncInfo {
     bool             has_allocs;
+    JikNode         *implicit_region_alloc;
     TabJikAllocSpec *spec_tab;
 } FuncInfo;
 

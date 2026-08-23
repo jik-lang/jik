@@ -93,6 +93,7 @@ typedef enum JikAllocKind {
     JIK_ALLOC_GLOBAL,
     JIK_ALLOC_CONTAINER,
     JIK_ALLOC_NAMED_REGION,
+    JIK_ALLOC_IMPLICIT,
 } JikAllocKind;
 
 typedef enum JikAllocSource {

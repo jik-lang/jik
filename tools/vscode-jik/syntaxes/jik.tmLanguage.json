@@ -4,6 +4,7 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#annotations" },
+    { "include": "#allocation-suffix" },
     { "include": "#strings" },
     { "include": "#numbers" },
     { "include": "#table-defs" },
@@ -37,6 +38,14 @@
         {
           "match": "@[A-Za-z_][A-Za-z0-9_]*(\\{[A-Za-z_][A-Za-z0-9_]*\\})?",
           "name": "meta.annotation.jik"
+        }
+      ]
+    },
+    "allocation-suffix": {
+      "patterns": [
+        {
+          "match": "@",
+          "name": "keyword.operator.allocation.jik"
         }
       ]
     },

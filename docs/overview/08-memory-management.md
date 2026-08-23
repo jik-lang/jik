@@ -429,7 +429,49 @@ func make_point_explicit(x, y, r: Region) -> Point:
 end
 ```
 
-#### 8.5.4 Nested composite literals
+#### 8.5.4 Implicit allocation suffix
+
+Postfix `@` explicitly allocates a composite in the enclosing function's
+implicit region without naming the parameter that supplies it. By implicit region,
+we are referring to the unique region of the function arguments, determined by
+the same-region rule.
+
+It follows that `@` is meaningful and can be used in functions which have
+at least one non-foreign composite or region parameter.
+
+It is useful for an intermediate value that must eventually be returned:
+
+```jik
+func values_for(owner: Person) -> Vec[String]:
+    values := ["primary", "secondary"]@
+    return values
+end
+
+func make_point(x, y, r: Region) -> Point:
+    point := Point{x = x, y = y}@
+    return point
+end
+```
+
+In the first function, `@` is equivalent to `[.owner]`. In the second, it is
+equivalent to `[r]`. Only non-`foreign` composite parameters and `Region`
+parameters contribute to the implicit region. Like the equivalent named
+specifier, `@` allocates in the global region when that parameter denotes the
+global region at a call site.
+
+The suffix is valid only where `[r]` or `[.value]` would otherwise be accepted.
+It is not a general expression operator and cannot be attached to names, calls,
+or primitive values. It may also follow a local composite type description, as
+in `values: Vec[String]@`. It is invalid in a compiler-proven region-safe
+function: such functions are exempt from the same-region rule, so their
+signatures do uniquely determine an allocation ragion `@`.
+
+Named allocation specifiers remain available and are required when no implicit
+region exists or when a region-safe function must select a particular parameter
+region. They may also be preferred when explicitly naming the allocation source
+makes the code clearer.
+
+#### 8.5.5 Nested composite literals
 
 Composite literals that contain other composite values must be internally region-consistent.
 The outer value and the contained composite values must belong to the same region.
@@ -458,7 +500,7 @@ func foo(v: Vec[String]):
 end
 ```
 
-#### 8.5.5 Temporary containers passed to `foreign` parameters
+#### 8.5.6 Temporary containers passed to `foreign` parameters
 
 A temporary `Vec` or `Dict` literal passed directly to a `foreign` parameter
 may contain composite elements from different regions. This exception applies
@@ -491,7 +533,7 @@ Since `args` in `process::capture` is a `foreign` vector, at the call site the e
 need not be in the same region.
 
 
-#### 8.5.6 Region-safe builtins
+#### 8.5.7 Region-safe builtins
 
 All currently provided builtins except `push` are region-safe, so their calls
 do not need to satisfy the same-region rule. Some only inspect their composite
