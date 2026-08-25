@@ -233,27 +233,32 @@ jik_semantic_reject_invalid_value_exprs_in_expr(JikNode *nd)
     if (nd->type == NODE_EXPR_CALL) {
         size_t n = VecJikNode_size(nd->val_call.args);
         for (size_t i = 0; i < n; i++) {
-            jik_semantic_reject_invalid_value_expr(VecJikNode_get(nd->val_call.args, i));
+            jik_semantic_reject_invalid_value_exprs_in_expr(VecJikNode_get(nd->val_call.args, i));
         }
     }
     else if (nd->type == NODE_EXPR_VECTOR && nd->val_vector.init_elems) {
         size_t n = VecJikNode_size(nd->val_vector.init_elems);
         for (size_t i = 0; i < n; i++) {
-            jik_semantic_reject_invalid_value_expr(VecJikNode_get(nd->val_vector.init_elems, i));
+            jik_semantic_reject_invalid_value_exprs_in_expr(
+                VecJikNode_get(nd->val_vector.init_elems, i));
         }
     }
     else if (nd->type == NODE_EXPR_DICT && nd->val_dict.init_values) {
         size_t n = VecJikNode_size(nd->val_dict.init_values);
         for (size_t i = 0; i < n; i++) {
-            jik_semantic_reject_invalid_value_expr(VecJikNode_get(nd->val_dict.init_values, i));
+            jik_semantic_reject_invalid_value_exprs_in_expr(
+                VecJikNode_get(nd->val_dict.init_values, i));
         }
     }
     else if (nd->type == NODE_EXPR_STRUCT_NEW) {
         TabJikNode_iter it = TabJikNode_iter_new(nd->val_struct_new.init_vals);
         TabJikNode_item item;
         while (TabJikNode_iter_next(&it, &item)) {
-            jik_semantic_reject_invalid_value_expr(item.value);
+            jik_semantic_reject_invalid_value_exprs_in_expr(item.value);
         }
+    }
+    else if (nd->type == NODE_EXPR_VARIANT_NEW && nd->val_variant_new.init_expr) {
+        jik_semantic_reject_invalid_value_exprs_in_expr(nd->val_variant_new.init_expr);
     }
     else if (nd->type == NODE_EXPR_TABLE_LOOKUP) {
         jik_semantic_reject_invalid_value_exprs_in_expr(nd->val_table_lookup.key);
