@@ -247,6 +247,15 @@ jik_check_types(VecJikNode *nodes)
                                     "type is not accessible",
                                     jik_token_to_text(nd->val_member_access.node->token));
         }
+        else if (nd->type == NODE_EXPR_REGIONOF) {
+            JikNode *symbol = jik_scope_get_local_symbol(nd->context, nd->token->lexeme);
+            assert(symbol);
+            jik_diag_fatal_error_if(
+                !jik_type_is_allocated(symbol->jik_type),
+                JIK_STRING_NCAT("cannot get region of non-composite local symbol: ",
+                                nd->token->lexeme),
+                jik_token_to_text(nd->token));
+        }
         else if (nd->type == NODE_EXPR_OPTION_SOME) {
             jik_diag_fatal_error_if(nd->jik_type->name != TYPE_OPTION,
                                     "expected option type",

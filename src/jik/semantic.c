@@ -583,6 +583,13 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                                      jik_token_to_text(nd->token));
             }
         }
+        else if (nd->type == NODE_EXPR_REGIONOF) {
+            JikNode *symbol = jik_scope_get_local_symbol(nd->context, nd->token->lexeme);
+            jik_diag_fatal_error_if(
+                !symbol,
+                JIK_STRING_NCAT("cannot get region of unknown local symbol: ", nd->token->lexeme),
+                jik_token_to_text(nd->token));
+        }
         else if (nd->type == NODE_EXPR_CALL) {
             if (nd->val_call.ufc) {
                 continue;
