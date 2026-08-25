@@ -301,9 +301,6 @@ jik_check_orphaned_allocations(JikNode *ast)
                 jik_diag_fatal_error_if(base->type == NODE_EXPR_STRUCT_NEW,
                                         "composite value must be bound before member access",
                                         jik_token_to_text(nd->token));
-                jik_diag_fatal_error_if(base->type == NODE_EXPR_CALL,
-                                        "cannot access member on function call",
-                                        jik_token_to_text(nd->token));
             }
             else if (nd->type == NODE_STMNT_MEMBER_SET) {
                 base = nd->val_member_set.node;
@@ -312,9 +309,6 @@ jik_check_orphaned_allocations(JikNode *ast)
                 }
                 jik_diag_fatal_error_if(base->type == NODE_EXPR_STRUCT_NEW,
                                         "composite value must be bound before mutation",
-                                        jik_token_to_text(nd->token));
-                jik_diag_fatal_error_if(base->type == NODE_EXPR_CALL,
-                                        "cannot set member on function call",
                                         jik_token_to_text(nd->token));
             }
             else if (nd->type == NODE_EXPR_SUBSCRIPT_GET) {
@@ -325,9 +319,6 @@ jik_check_orphaned_allocations(JikNode *ast)
                 jik_diag_fatal_error_if(base->type == NODE_EXPR_VECTOR,
                                         "composite value must be bound before subscripting",
                                         jik_token_to_text(nd->token));
-                jik_diag_fatal_error_if(base->type == NODE_EXPR_CALL,
-                                        "cannot set subscript on function call",
-                                        jik_token_to_text(nd->token));
             }
             else if (nd->type == NODE_STMNT_SUBSCRIPT_SET) {
                 base = nd->val_subscript_set.node;
@@ -336,9 +327,6 @@ jik_check_orphaned_allocations(JikNode *ast)
                 }
                 jik_diag_fatal_error_if(base->type == NODE_EXPR_VECTOR,
                                         "composite value must be bound before mutation",
-                                        jik_token_to_text(nd->token));
-                jik_diag_fatal_error_if(base->type == NODE_EXPR_CALL,
-                                        "cannot set member on function call",
                                         jik_token_to_text(nd->token));
             }
             else if (nd->type == NODE_LOOP_FOR_IN) {

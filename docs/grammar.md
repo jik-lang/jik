@@ -161,8 +161,8 @@ outside a function and in compiler-proven region-safe functions.
 
 Allocation suffix syntax takes precedence immediately after composite literals.
 As a result, forms like `[1, 2][0]` are not parsed as direct subscripting of a
-literal. In the current language, composite temporaries must first be bound to
-a name before subscripting, member access, mutation, or iteration.
+literal. Composite literals must first be bound to a name before subscripting,
+member access, mutation, or iteration.
 
 ## Program Structure
 

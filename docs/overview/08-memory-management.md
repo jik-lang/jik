@@ -75,7 +75,7 @@ Allocation specifiers syntactically bind to their accompanying composite literal
 This means the first trailing `[...]` after a composite literal is reserved for allocation syntax
 such as `[r]` or `[.x]`.
 
-Because of this, composite temporaries must be bound to a name before member access, subscripting,
+Because of this, a composite literal must be bound to a name before member access, subscripting,
 mutation, or iteration. For example, writing `t := [1, 2][0]` is not allowed.
 
 Example:
