@@ -155,7 +155,21 @@ typedef struct JikRegionStats {
 } JikRegionStats;
 
 static JikRegionStats jik_region_global_stats = {0};
-static bool           jik_region_global_stats_printed = false;
+#endif
+
+#ifdef JIK_REGION_TREE
+#define JIK_REGION_TREE_MAX_RECORDS 10000
+
+typedef struct JikRegionTreeEntry {
+    const char *label;
+    size_t      depth;
+} JikRegionTreeEntry;
+
+static JikRegionTreeEntry *jik_region_tree_entries   = NULL;
+static size_t              jik_region_tree_count     = 0;
+static size_t              jik_region_tree_capacity  = 0;
+static size_t              jik_region_tree_depth     = 0;
+static bool                jik_region_tree_truncated = false;
 #endif
 
 // -------------------------------------------------------------
@@ -219,6 +233,68 @@ jik_region_stats_record_block_destroyed(size_t capacity)
 }
 #endif
 
+#ifdef JIK_REGION_TREE
+void
+jik_region_tree_enter(const char *label)
+{
+    if (jik_region_tree_count >= JIK_REGION_TREE_MAX_RECORDS) {
+        jik_region_tree_truncated = true;
+        jik_region_tree_depth++;
+        return;
+    }
+
+    if (jik_region_tree_count == jik_region_tree_capacity) {
+        size_t new_capacity =
+            jik_region_tree_capacity == 0 ? 16 : jik_region_tree_capacity * 2;
+        jik_region_tree_entries =
+            jik_realloc(jik_region_tree_entries, new_capacity * sizeof(JikRegionTreeEntry));
+        jik_region_tree_capacity = new_capacity;
+    }
+
+    JikRegionTreeEntry *entry = &jik_region_tree_entries[jik_region_tree_count++];
+    entry->label = label;
+    entry->depth = jik_region_tree_depth++;
+}
+
+void
+jik_region_tree_leave(void)
+{
+    if (jik_region_tree_depth > 0) {
+        jik_region_tree_depth--;
+    }
+}
+
+void
+jik_region_print_tree(void)
+{
+    fprintf(stderr, "\njik: region lifetime tree\n");
+    if (jik_region_tree_count == 0) {
+        fprintf(stderr, "  no regions created\n");
+        return;
+    }
+
+    for (size_t i = 0; i < jik_region_tree_count; i++) {
+        JikRegionTreeEntry *entry = &jik_region_tree_entries[i];
+        for (size_t j = 0; j < entry->depth; j++) {
+            fputs("  ", stderr);
+        }
+        fprintf(stderr, "R%zu %s\n", i + 1, entry->label);
+    }
+
+    if (jik_region_tree_truncated) {
+        fprintf(stderr, "  tree truncated after %d regions\n", JIK_REGION_TREE_MAX_RECORDS);
+    }
+}
+
+void
+jik_region_register_tree_printer(void)
+{
+    if (atexit(jik_region_print_tree) != 0) {
+        fprintf(stderr, "jik: warning: failed to register region tree printer\n");
+    }
+}
+#endif
+
 static JikRegionBlock *
 jik_region_new_block(size_t capacity)
 {
@@ -241,11 +317,6 @@ void
 jik_region_print_global_stats(void)
 {
 #ifdef JIK_REGION_STATS
-    if (jik_region_global_stats_printed) {
-        return;
-    }
-    jik_region_global_stats_printed = true;
-
     fprintf(stderr,
             "\njik: region stats\n"
             "  regions: created=%zu destroyed=%zu alive=%zu peak_alive=%zu\n"

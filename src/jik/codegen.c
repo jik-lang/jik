@@ -141,6 +141,19 @@ sanitize_string(const char *input)
 }
 
 static char *
+jik_codegen_region_tree_module_path(char *filepath)
+{
+    size_t len = strlen(filepath);
+    if (len >= 4 && strcmp(filepath + len - 4, ".jik") == 0) {
+        char *path = jik_alloc(len - 3);
+        memcpy(path, filepath, len - 4);
+        path[len - 4] = '\0';
+        return path;
+    }
+    return filepath;
+}
+
+static char *
 jik_codegen_format_site(JikToken *tok)
 {
     char *filepath = sanitize_string(tok->filepath);
@@ -271,6 +284,9 @@ jik_codegen_emit_main_function(JikCodeGenerator *cg)
     if (cg->ctx->conf.region_stats) {
         jik_writer_write_line(&cg->cw, "jik_region_register_global_stats_printer();");
     }
+    if (cg->ctx->conf.region_tree) {
+        jik_writer_write_line(&cg->cw, "jik_region_register_tree_printer();");
+    }
     // initialize globals
     bool needs_global_region = cg->ast->val_program.needs_global_region;
     if (needs_global_region) {
@@ -278,6 +294,9 @@ jik_codegen_emit_main_function(JikCodeGenerator *cg)
             &cg->cw,
             JIK_STRING_NCAT(
                 JIK_REGION_TYPE_NAME, " ", JIK_GLOBAL_REGION_VAR_NAME, " = jik_region_new(0);"));
+        if (cg->ctx->conf.region_tree) {
+            jik_writer_write_line(&cg->cw, "jik_region_tree_enter(\"global\");");
+        }
     }
 
     jik_writer_blank_line(&cg->cw);
@@ -312,6 +331,9 @@ jik_codegen_emit_main_function(JikCodeGenerator *cg)
             &cg->cw,
             JIK_STRING_NCAT(
                 JIK_REGION_TYPE_NAME, " ", JIK_REGION_VAR_NAME, " = jik_region_new(0);"));
+        if (cg->ctx->conf.region_tree) {
+            jik_writer_write_line(&cg->cw, "jik_region_tree_enter(\"main.arguments\");");
+        }
         jik_writer_write_line(
             &cg->cw, JIK_STRING_NCAT("JIK_MAKE_ARG_VEC(argc, argv, ", JIK_REGION_VAR_NAME, ");"));
         main_arg = "jik_args";
@@ -326,11 +348,17 @@ jik_codegen_emit_main_function(JikCodeGenerator *cg)
                                           ");"));
 
     if (cg->ctx->args_type) {
+        if (cg->ctx->conf.region_tree) {
+            jik_writer_write_line(&cg->cw, "jik_region_tree_leave();");
+        }
         jik_writer_write_line(&cg->cw,
                               JIK_STRING_NCAT("jik_region_free(", JIK_REGION_VAR_NAME, ");"));
     }
 
     if (needs_global_region) {
+        if (cg->ctx->conf.region_tree) {
+            jik_writer_write_line(&cg->cw, "jik_region_tree_leave();");
+        }
         jik_writer_write_line(
             &cg->cw, JIK_STRING_NCAT("jik_region_free(", JIK_GLOBAL_REGION_VAR_NAME, ");"));
     }
@@ -1725,6 +1753,16 @@ jik_codegen_emit_prologue(JikCodeGenerator *cg, JikNode *nd)
     jik_writer_write_line(
         &cg->cw,
         JIK_STRING_NCAT(JIK_REGION_TYPE_NAME, " ", JIK_REGION_VAR_NAME, " = jik_region_new(0);"));
+    if (cg->ctx->conf.region_tree) {
+        char *label = JIK_STRING_NCAT(sanitize_string(jik_codegen_region_tree_module_path(
+                                          nd->token->filepath)),
+                                      "::",
+                                      nd->val_function.name,
+                                      ".local");
+        jik_writer_write_line(
+            &cg->cw,
+            JIK_STRING_NCAT("jik_region_tree_enter(\"", label, "\");"));
+    }
 }
 
 static void
@@ -1734,6 +1772,9 @@ jik_codegen_emit_cleanup(JikCodeGenerator *cg, JikNode *nd)
     jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(JIK_CLEANUP_LABEL_NAME, ":"));
     jik_writer_indent(&cg->cw);
     if (fun_has_allocs(nd)) {
+        if (cg->ctx->conf.region_tree) {
+            jik_writer_write_line(&cg->cw, "jik_region_tree_leave();");
+        }
         jik_writer_write_line(&cg->cw,
                               JIK_STRING_NCAT("jik_region_free(", JIK_REGION_VAR_NAME, ");"));
     }
@@ -3343,6 +3384,9 @@ jik_codegen_emit_support_library(JikCodeGenerator *cg)
     }
     if (cg->ctx->conf.region_stats) {
         jik_writer_write_line(&cg->cw, "#define JIK_REGION_STATS");
+    }
+    if (cg->ctx->conf.region_tree) {
+        jik_writer_write_line(&cg->cw, "#define JIK_REGION_TREE");
     }
     if (cg->ctx->conf.embed_core) {
         char *core_content = jik_read_file(cg->ctx->conf.jik_core_h_path);

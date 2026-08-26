@@ -27,12 +27,21 @@ Options:
 - `--release`: Build with release-oriented host compiler flags.
 - `--unsafe-no-bounds-checks`: Disable runtime vector bounds checks
 - `--region-stats`: Print runtime region statistics at program exit.
+- `--region-tree`: Print the runtime region lifetime hierarchy.
 - `--verbose`: Print detailed pipeline status information.
 
 Example:
 
 ```sh
 jik run hello.jik --cc clang
+```
+
+`--region-tree` draws one row per runtime region. Region IDs show creation order,
+and indentation shows nested lifetimes:
+
+```text
+R1 examples/hello::main.local
+  R2 src/parser::parse.local
 ```
 
 ### `jik build <filepath>`
@@ -51,6 +60,7 @@ Options:
 - `--release`: Build with release-oriented host compiler flags.
 - `--unsafe-no-bounds-checks`: Disable runtime vector bounds checks
 - `--region-stats`: Print runtime region statistics at program exit.
+- `--region-tree`: Print the runtime region lifetime hierarchy.
 - `--verbose`: Print detailed pipeline status information.
 
 Example:
@@ -87,6 +97,7 @@ Options:
 - `--format-c`: Format the generated C file in place with `clang-format`.
 - `--unsafe-no-bounds-checks`: Disable runtime vector bounds checks
 - `--region-stats`: Print runtime region statistics at program exit.
+- `--region-tree`: Print the runtime region lifetime hierarchy.
 - `--verbose`: Print detailed pipeline status information.
 
 Generated C includes the Jik support header as `#include "core.h"`. For manual compilation,

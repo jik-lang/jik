@@ -92,6 +92,12 @@
         .help_desc = "Print runtime region lifecycle statistics at program exit.", .num_args = 0,  \
     }
 
+#define JIK_OPT_REGION_TREE                                                                        \
+    {                                                                                              \
+        .name      = "--region-tree",                                                             \
+        .help_desc = "Print the runtime region lifetime hierarchy.", .num_args = 0,                \
+    }
+
 #define JIK_OPT_VERBOSE                                                                            \
     {                                                                                              \
         .name = "--verbose", .help_desc = "Print detailed pipeline status information.",           \
@@ -113,7 +119,7 @@ const JikCommand JIK_COMMANDS[] = {
             {
                 JIK_ARG_INPUT_FILE,
             },
-        .num_options = 7,
+        .num_options = 8,
         .options =
             {
                 JIK_OPT_OUT,
@@ -122,6 +128,7 @@ const JikCommand JIK_COMMANDS[] = {
                 JIK_OPT_FORMAT_C,
                 JIK_OPT_UNSAFE_NO_BOUNDS_CHECKS,
                 JIK_OPT_REGION_STATS,
+                JIK_OPT_REGION_TREE,
                 JIK_OPT_VERBOSE,
             },
     },
@@ -163,7 +170,7 @@ const JikCommand JIK_COMMANDS[] = {
             {
                 JIK_ARG_INPUT_FILE,
             },
-        .num_options = 8,
+        .num_options = 9,
         .options =
             {
                 JIK_OPT_OUT,
@@ -173,6 +180,7 @@ const JikCommand JIK_COMMANDS[] = {
                 JIK_OPT_RELEASE,
                 JIK_OPT_UNSAFE_NO_BOUNDS_CHECKS,
                 JIK_OPT_REGION_STATS,
+                JIK_OPT_REGION_TREE,
                 JIK_OPT_VERBOSE,
             },
     },
@@ -191,7 +199,7 @@ const JikCommand JIK_COMMANDS[] = {
             {
                 JIK_ARG_INPUT_FILE,
             },
-        .num_options = 6,
+        .num_options = 7,
         .options =
             {
                 JIK_OPT_CC,
@@ -199,6 +207,7 @@ const JikCommand JIK_COMMANDS[] = {
                 JIK_OPT_RELEASE,
                 JIK_OPT_UNSAFE_NO_BOUNDS_CHECKS,
                 JIK_OPT_REGION_STATS,
+                JIK_OPT_REGION_TREE,
                 JIK_OPT_VERBOSE,
             },
     },

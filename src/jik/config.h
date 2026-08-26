@@ -22,6 +22,7 @@ typedef struct JikConfig {
     bool  preview;
     bool  release;
     bool  region_stats;
+    bool  region_tree;
     bool  unsafe_no_bounds_checks;
     bool  verbose;
 } JikConfig;
