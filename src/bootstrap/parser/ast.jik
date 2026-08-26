@@ -71,7 +71,7 @@ end
 
 func add(ast: Ast, span: source::Span, kind: NodeKind) -> int:
     id := len(ast.nodes)
-    ast.nodes.push(Node{span = span, kind = kind})
+    ast.nodes.push(Node{span, kind})
     return id
 end
 

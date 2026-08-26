@@ -97,7 +97,7 @@ throws func run(comp: Compiler):
             return
         end
         //println(format::format(ast, .comp))
-        mod := module::Module{source_id = src.id, tokens = tokens, ast = ast}@
+        mod := module::Module{source_id = src.id, tokens, ast}@
         comp.modules.push(mod)
 
         imports := resolve_imports(comp.src_mngr, ast, comp.diagnostics, src)

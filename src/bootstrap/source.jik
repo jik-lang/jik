@@ -50,7 +50,7 @@ throws func add_source(sm: SourceManager, foreign path: String) -> int:
     sf := SourceFile{
         id = num_sources,
         path = normalized,
-        text = text
+        text
     }@
     _add_line_starts(sf)
     sm.sources.push(sf)

@@ -16,7 +16,7 @@ end
 
 
 func new(file: source::SourceFile, tokens: Vec[token::Token], diagnostics: diag::Diagnostics) -> Parser:
-    p := Parser{file = file, tokens = tokens, diagnostics = diagnostics, ast = ast::Ast{}}@
+    p := Parser{file, tokens, diagnostics, ast = ast::Ast{}}@
     span := source::Span{source_id = file.id, start = 0, stop = len(file.text)}@
     p.ast.root = p.ast.add(span, ast::NodeKind.MODULE{ast::Module{}})
     return p
@@ -126,7 +126,7 @@ throws func parse_import(p: Parser) -> int:
     try p.expect(token::TokenType.NEWLINE)
 
     span := source::Span{source_id = start.span.source_id, start = start.span.start, stop = stop}@
-    return p.ast.add(span, ast::NodeKind.IMPORT{ast::Import{path = path, alias = alias}})
+    return p.ast.add(span, ast::NodeKind.IMPORT{ast::Import{path, alias}})
 end
 
 
@@ -147,7 +147,7 @@ throws func parse_expression(p: Parser) -> int:
             stop = p.ast.nodes[right].span.stop
         }@
         left = p.ast.add(span, ast::NodeKind.BINARY{
-            ast::BinaryExpr{left = left, right = right, op = ast::BinaryOp.PLUS}
+            ast::BinaryExpr{left, right, op = ast::BinaryOp.PLUS}
         })
     end
     return left

@@ -31,10 +31,10 @@ end
 
 func new_message(level: MessageLevel, foreign summary: String, foreign detail: String, span: Option[source::Span], r: Region) -> Message:
     return Message{
-        level = level,
+        level,
         summary = copy(summary, r),
         detail = copy(detail, r),
-        span = span
+        span
     }[r]
 end
 

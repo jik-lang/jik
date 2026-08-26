@@ -13,7 +13,7 @@ end
 
 
 func new(file: source::SourceFile) -> Lexer:
-	return Lexer{file = file, pos = 0}
+	return Lexer{file, pos = 0}
 end
 
 
@@ -57,7 +57,7 @@ end
 
 
 func span(l: Lexer, start: int, stop: int) -> source::Span:
-	return source::Span{source_id = l.file.id, start = start, stop = stop}
+	return source::Span{source_id = l.file.id, start, stop}
 end
 
 
