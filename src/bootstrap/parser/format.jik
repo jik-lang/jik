@@ -1,0 +1,101 @@
+use "ast"
+use "jik/strbuf"
+use "jik/string"
+
+
+func append_indent(sb: strbuf::StrBuf, depth: int) -> void:
+    i := 0
+    while i < depth:
+        sb.append("  ")
+        i += 1
+    end
+end
+
+
+func append_int(sb: strbuf::StrBuf, value: int) -> void:
+    sb.append(string::from_int(value, .sb))
+end
+
+
+func format(ast: ast::Ast, r: Region) -> String:
+    sb := strbuf::new("")
+    if len(ast.nodes) > 0:
+        format_node(ast, ast.root, 0, sb)
+    end
+    return strbuf::to_string(sb, r)
+end
+
+
+func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf) -> void:
+    node := ast.nodes[id]
+    kind := node.kind
+    append_indent(sb, depth)
+
+    if kind is ast::NodeKind.MODULE:
+        sb.append("MODULE #")
+        append_int(sb, id)
+        sb.append(" [")
+        append_int(sb, node.span.start)
+        sb.append("..")
+        append_int(sb, node.span.stop)
+        sb.append(")\n")
+        module := kind[ast::NodeKind.MODULE]
+        for import in module.imports:
+            format_node(ast, import, depth + 1, sb)
+        end
+        for declaration in module.declarations:
+            format_node(ast, declaration, depth + 1, sb)
+        end
+    elif kind is ast::NodeKind.IMPORT:
+        import := kind[ast::NodeKind.IMPORT]
+        sb.append("IMPORT #")
+        append_int(sb, id)
+        sb.append(" path=\"")
+        sb.append(import.path)
+        sb.append("\"")
+        if import.alias is Some:
+            sb.append(" alias=\"")
+            sb.append(import.alias?)
+            sb.append("\"")
+        end
+        sb.append("\n")
+    elif kind is ast::NodeKind.FUNCTION_DECL:
+        function := kind[ast::NodeKind.FUNCTION_DECL]
+        sb.append("FUNCTION #")
+        append_int(sb, id)
+        sb.append(" name=")
+        sb.append(function.name)
+        sb.append("\n")
+        for statement in function.body:
+            format_node(ast, statement, depth + 1, sb)
+        end
+    elif kind is ast::NodeKind.LOCAL_DECL:
+        declaration := kind[ast::NodeKind.LOCAL_DECL]
+        sb.append("DECLARE #")
+        append_int(sb, id)
+        sb.append(" name=")
+        sb.append(declaration.name)
+        sb.append("\n")
+        format_node(ast, declaration.initializer, depth + 1, sb)
+    elif kind is ast::NodeKind.INTEGER_LITERAL:
+        sb.append("INTEGER #")
+        append_int(sb, id)
+        sb.append(" [")
+        append_int(sb, node.span.start)
+        sb.append("..")
+        append_int(sb, node.span.stop)
+        sb.append(")\n")
+    elif kind is ast::NodeKind.BINARY:
+        binary := kind[ast::NodeKind.BINARY]
+        sb.append("BINOP #")
+        append_int(sb, id)
+        sb.append(" ")
+        if binary.op == ast::BinaryOp.PLUS:
+            sb.append("PLUS\n")
+        elif binary.op == ast::BinaryOp.MINUS:
+            sb.append("MINUS\n")
+        end
+        format_node(ast, binary.left, depth + 1, sb)
+        format_node(ast, binary.right, depth + 1, sb)
+    end
+end

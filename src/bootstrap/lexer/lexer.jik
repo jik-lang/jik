@@ -2,6 +2,7 @@ use "jik/char"
 use "jik/string"
 
 use "../source"
+use "../diag"
 use "token"
 
 
@@ -11,8 +12,8 @@ struct Lexer:
 end
 
 
-func new(file: source::SourceFile, r: Region) -> Lexer:
-	return Lexer{file = file, pos = 0}[r]
+func new(file: source::SourceFile) -> Lexer:
+	return Lexer{file = file, pos = 0}
 end
 
 
@@ -21,11 +22,8 @@ func at_end(l: Lexer) -> bool:
 end
 
 
-func peek(l: Lexer) -> Option[char]:
-	if l.at_end():
-		return None[.l]
-	end
-	return Some{l.file.text[l.pos]}[.l]
+func current(l: Lexer) -> char:
+	return l.file.text[l.pos]
 end
 
 
@@ -35,7 +33,7 @@ end
 
 
 func match_next(l: Lexer, expected: char) -> bool:
-	if l.at_end() or l.peek()? != expected:
+	if l.at_end() or l.current() != expected:
 		return false
 	end
 	l.advance()
@@ -58,15 +56,17 @@ func valid_identifier_char(ch: char) -> bool:
 end
 
 
-func span(l: Lexer, start: int, stop: int, r: Region) -> source::Span:
-	return source::Span{source_id = l.file.id, start = start, stop = stop}[r]
+func span(l: Lexer, start: int, stop: int) -> source::Span:
+	return source::Span{source_id = l.file.id, start = start, stop = stop}
 end
 
 
-func get_identifier_type(l: Lexer, start: int, stop: int, r: Region) -> token::TokenType:
-	text := must string::slice(l.file.text, start, stop, r)
+func get_identifier_type(l: Lexer, start: int, stop: int) -> token::TokenType:
+	text := must string::slice(l.file.text, start, stop)
 	if text == "func":
 		return token::TokenType.KWD_FUNC
+	elif text == "end":
+		return token::TokenType.KWD_END
 	elif text == "use":
 		return token::TokenType.KWD_USE
 	elif text == "as":
@@ -76,59 +76,66 @@ func get_identifier_type(l: Lexer, start: int, stop: int, r: Region) -> token::T
 end
 
 
-func scan_integer(l: Lexer, r: Region) -> token::Token:
+func scan_integer(l: Lexer) -> token::Token:
     start := l.pos
 	while not l.at_end():
-        ch := l.peek()?
+        ch := l.current()
         if not char::isdigit(ch):
             break
 		end
         l.advance()
     end
-	return token::Token{type = token::TokenType.INTEGER, span = l.span(start, l.pos, r)}[r]
+	return token::Token{type = token::TokenType.INTEGER, span = l.span(start, l.pos)}
 end
 
 
-func scan_identifier_or_keyword(l: Lexer, r: Region) -> token::Token:
+func scan_identifier_or_keyword(l: Lexer) -> token::Token:
 	start := l.pos
 	while not l.at_end():
-		ch := l.peek()?
+		ch := l.current()
 		if not valid_identifier_char(ch):
 			break
 		end
 		l.advance()
 	end
-	return token::Token{type = get_identifier_type(l, start, l.pos, r), span = l.span(start, l.pos, r)}[r]
+	return token::Token{type = get_identifier_type(l, start, l.pos), span = l.span(start, l.pos)}
 end
 
 
-func scan_string(l: Lexer, r: Region) -> token::Token:
+func error_token(l: Lexer, diag: diag::Diagnostics, start: int, stop: int, foreign summary: String, foreign detail: String) -> token::Token:
+    error_span := l.span(start, stop)
+    diag::error(diag, summary, detail, Some{error_span})
+    return token::Token{type = token::TokenType.ERROR, span = error_span}
+end
+
+
+func scan_string(l: Lexer, diag: diag::Diagnostics) -> token::Token:
     start := l.pos
     l.advance()
     while not l.at_end():
-        ch := l.peek()?
+        ch := l.current()
         if ch == '"':
             l.advance()
-            return token::Token{type = token::TokenType.STRING, span = l.span(start, l.pos, r)}[r]
+            return token::Token{type = token::TokenType.STRING, span = l.span(start, l.pos)}
         elif ch == '\\':
             l.advance()
             if l.at_end():
-                return token::Token{type = token::TokenType.ERROR, span = l.span(start, l.pos, r)}[r]
+                return l.error_token(diag, start, l.pos, "unterminated string literal", "")
             end
             l.advance()
         elif ch == '\n':
-            return token::Token{type = token::TokenType.ERROR, span = l.span(start, l.pos, r)}[r]
+            return l.error_token(diag, start, l.pos, "unterminated string literal", "")
         else:
             l.advance()
         end
     end
-    return token::Token{type = token::TokenType.ERROR, span = l.span(start, l.pos, r)}[r]
+    return l.error_token(diag, start, l.pos, "unterminated string literal", "")
 end
 
 
-func next_token(l: Lexer, r: Region) -> token::Token:
+func next_token(l: Lexer, diag: diag::Diagnostics) -> token::Token:
 	while not l.at_end():
-		ch := l.peek()?
+		ch := l.current()
 		if is_whitespace(ch):
 			l.advance()
 			continue
@@ -137,56 +144,56 @@ func next_token(l: Lexer, r: Region) -> token::Token:
 		start := l.pos
 		if ch == '\n':
 			l.advance()
-			return token::Token{type = token::TokenType.NEWLINE, span = l.span(start, l.pos, r)}[r]
+			return token::Token{type = token::TokenType.NEWLINE, span = l.span(start, l.pos)}
 		elif ch == '=':
 			l.advance()
-			return token::Token{type = token::TokenType.ASSIGN, span = l.span(start, l.pos, r)}[r]
+			return token::Token{type = token::TokenType.ASSIGN, span = l.span(start, l.pos)}
 		elif ch == ':':
 			l.advance()
 			if l.match_next('='):
-				return token::Token{type = token::TokenType.DECLARE, span = l.span(start, l.pos, r)}[r]
+				return token::Token{type = token::TokenType.DECLARE, span = l.span(start, l.pos)}
 			end
-			return token::Token{type = token::TokenType.COLON, span = l.span(start, l.pos, r)}[r]
+			return token::Token{type = token::TokenType.COLON, span = l.span(start, l.pos)}
 		elif ch == '(':
 			l.advance()
-			return token::Token{type = token::TokenType.LPAREN, span = l.span(start, l.pos, r)}[r]
+			return token::Token{type = token::TokenType.LPAREN, span = l.span(start, l.pos)}
 		elif ch == ')':
 			l.advance()
-			return token::Token{type = token::TokenType.RPAREN, span = l.span(start, l.pos, r)}[r]
+			return token::Token{type = token::TokenType.RPAREN, span = l.span(start, l.pos)}
 		elif ch == ',':
 			l.advance()
-			return token::Token{type = token::TokenType.COMMA, span = l.span(start, l.pos, r)}[r]
+			return token::Token{type = token::TokenType.COMMA, span = l.span(start, l.pos)}
 		elif ch == '+':
 			l.advance()
-			return token::Token{type = token::TokenType.OP_PLUS, span = l.span(start, l.pos, r)}[r]
+			return token::Token{type = token::TokenType.OP_PLUS, span = l.span(start, l.pos)}
 		elif ch == '"':
-			return l.scan_string(r)
+			return l.scan_string(diag)
 		elif char::isdigit(ch):
-			return l.scan_integer(r)
+			return l.scan_integer()
 		elif is_identifier_start(ch):
-			return l.scan_identifier_or_keyword(r)
+			return l.scan_identifier_or_keyword()
 		else:
 			l.advance()
-			return token::Token{type = token::TokenType.ERROR, span = l.span(start, l.pos, r)}[r]
+			return l.error_token(diag, start, l.pos, "unexpected character", "")
 		end
 	end
-	return token::Token{type = token::TokenType.EOF, span = l.span(l.pos, l.pos, r)}[r]
+	return token::Token{type = token::TokenType.EOF, span = l.span(l.pos, l.pos)}
 end
 
 
-func lex(l: Lexer, r: Region) -> Vec[token::Token]:
-	tokens: Vec[token::Token][r]
-	t := l.next_token(r)
+func lex(l: Lexer, diag: diag::Diagnostics) -> Vec[token::Token]:
+	tokens: Vec[token::Token]@
+	t := l.next_token(diag)
 	while t.type != token::TokenType.EOF:
 		tokens.push(t)
-		t = l.next_token(r)
+		t = l.next_token(diag)
 	end
     tokens.push(t)
 	return tokens
 end
 
 
-func tokenize(file: source::SourceFile, r: Region) -> Vec[token::Token]:
-	lexer := new(file, r)
-	return lexer.lex(r)
+func tokenize(file: source::SourceFile, diag: diag::Diagnostics) -> Vec[token::Token]:
+	lexer := new(file)
+	return lexer.lex(diag)
 end

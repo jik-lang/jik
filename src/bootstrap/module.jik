@@ -1,8 +1,10 @@
 use "source"
 use "lexer/token"
+use "parser/ast"
 
 
 struct Module:
-    source: source::SourceFile
+    source_id: int
     tokens: Vec[token::Token]
+    ast: ast::Ast
 end

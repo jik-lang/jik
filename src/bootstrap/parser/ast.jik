@@ -1,32 +1,77 @@
-use "../surce"
+use "../source"
 
 
 struct Node:
     span: source::Span
-    data: NodeData
+    kind: NodeKind
 end
 
 
-variant NodeData:
-    INTEGER
-    BINOP: NodeBinop
+variant NodeKind:
+    MODULE: Module
+    IMPORT: Import
+    FUNCTION_DECL: FunctionDecl
+    LOCAL_DECL: LocalDecl
+    INTEGER_LITERAL
+    BINARY: BinaryExpr
 end
 
 
-struct NodeBinop:
+struct LocalDecl:
+    name: String
+    initializer: int
+end
+
+
+enum BinaryOp:
+    PLUS
+    MINUS
+end
+
+
+struct BinaryExpr:
     left: int
     right: int
-    op: String
+    op: BinaryOp
 end
 
 
-struct Ast:
+struct Module:
+    imports: Vec[int]
+    declarations: Vec[int]
+end
+
+
+struct Import:
+    path: String
+    alias: Option[String]
+end
+
+
+func as_import(nd: Node) -> Import:
+    return nd.kind[NodeKind.IMPORT]
+end
+
+
+struct FunctionDecl:
+    name: String
+    body: Vec[int]
+end
+
+// Represents entire program ast
+struct Ast:    
+    root: int
     nodes: Vec[Node]
 end
 
+func get_root_module(ast: Ast):
+    return ast.nodes[ast.root].kind[NodeKind.MODULE]
+end
 
-func add(ast: Ast, span: source::Span, data: NodeData) -> int:
+
+func add(ast: Ast, span: source::Span, kind: NodeKind) -> int:
     id := len(ast.nodes)
-    push(ast.nodes, Node{span = span, data = data})
+    ast.nodes.push(Node{span = span, kind = kind})
     return id
 end
+

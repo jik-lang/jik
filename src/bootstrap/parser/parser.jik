@@ -1,0 +1,234 @@
+use "jik/string"
+
+use "../diag"
+use "../source"
+use "../lexer/token"
+use "ast"
+
+
+struct Parser:
+    file: source::SourceFile
+    tokens: Vec[token::Token]
+    diagnostics: diag::Diagnostics
+    pos: int
+    ast: ast::Ast
+end
+
+
+func new(file: source::SourceFile, tokens: Vec[token::Token], diagnostics: diag::Diagnostics) -> Parser:
+    p := Parser{file = file, tokens = tokens, diagnostics = diagnostics, ast = ast::Ast{}}@
+    span := source::Span{source_id = file.id, start = 0, stop = len(file.text)}@
+    p.ast.root = p.ast.add(span, ast::NodeKind.MODULE{ast::Module{}})
+    return p
+end
+
+
+func current(p: Parser) -> token::Token:
+    return p.tokens[p.pos]
+end
+
+
+func current_type(p: Parser) -> token::TokenType:
+    return p.tokens[p.pos].type
+end
+
+
+func at_end(p: Parser) -> bool:
+    return p.current_type() == token::TokenType.EOF
+end
+
+
+func advance(p: Parser) -> token::Token:
+    tok := p.current()
+    if not p.at_end():
+        p.pos += 1
+    end
+    return tok
+end
+
+
+throws func expect(p: Parser, kind: token::TokenType) -> token::Token:
+    if p.current_type() != kind:
+        actual := p.current()
+        if actual.type == token::TokenType.ERROR:
+            p.advance()
+            fail("parse error")
+        end
+        diag::error(p.diagnostics, "unexpected token", concat("expected ", token::TokenTypeNames[kind]), Some{actual.span})
+        fail("parse error")
+    end
+    return p.advance()
+end
+
+
+func skip_newlines(p: Parser) -> void:
+    while p.current_type() == token::TokenType.NEWLINE:
+        p.advance()
+    end
+end
+
+
+func synchronize_statement(p: Parser) -> void:
+    while not p.at_end():
+        if p.current_type() == token::TokenType.NEWLINE:
+            p.advance()
+            return
+        end
+        if p.current_type() == token::TokenType.KWD_END:
+            return
+        end
+        p.advance()
+    end
+end
+
+
+func synchronize_top_level(p: Parser) -> void:
+    while not p.at_end():
+        if p.current_type() == token::TokenType.KWD_USE or p.current_type() == token::TokenType.KWD_FUNC:
+            return
+        end
+        p.advance()
+    end
+end
+
+
+func text(p: Parser, span: source::Span) -> String:
+    return must string::slice(p.file.text, span.start, span.stop, .p)
+end
+
+
+func add_import(p: Parser, id: int) -> void:
+    module := p.ast.nodes[p.ast.root].kind[ast::NodeKind.MODULE]
+    module.imports.push(id)
+end
+
+
+func add_function(p: Parser, id: int) -> void:
+    module := p.ast.nodes[p.ast.root].kind[ast::NodeKind.MODULE]
+    module.declarations.push(id)
+end
+
+
+throws func parse_import(p: Parser) -> int:
+    start := try p.expect(token::TokenType.KWD_USE)
+    path_tok := try p.expect(token::TokenType.STRING)
+    path := must string::slice(p.file.text, path_tok.span.start + 1, path_tok.span.stop - 1, .p)
+    stop := path_tok.span.stop
+
+    alias: Option[String]@
+    alias = None@
+    if p.current_type() == token::TokenType.KWD_AS:
+        p.advance()
+        alias_tok := try p.expect(token::TokenType.IDENTIFIER)
+        alias = Some{p.text(alias_tok.span)}@
+        stop = alias_tok.span.stop
+    end
+    try p.expect(token::TokenType.NEWLINE)
+
+    span := source::Span{source_id = start.span.source_id, start = start.span.start, stop = stop}@
+    return p.ast.add(span, ast::NodeKind.IMPORT{ast::Import{path = path, alias = alias}})
+end
+
+
+throws func parse_primary(p: Parser) -> int:
+    tok := try p.expect(token::TokenType.INTEGER)
+    return p.ast.add(tok.span, ast::NodeKind.INTEGER_LITERAL{})
+end
+
+
+throws func parse_expression(p: Parser) -> int:
+    left := try p.parse_primary()
+    while p.current_type() == token::TokenType.OP_PLUS:
+        p.advance()
+        right := try p.parse_primary()
+        span := source::Span{
+            source_id = p.ast.nodes[left].span.source_id,
+            start = p.ast.nodes[left].span.start,
+            stop = p.ast.nodes[right].span.stop
+        }@
+        left = p.ast.add(span, ast::NodeKind.BINARY{
+            ast::BinaryExpr{left = left, right = right, op = ast::BinaryOp.PLUS}
+        })
+    end
+    return left
+end
+
+
+throws func parse_declaration(p: Parser) -> int:
+    name_tok := try p.expect(token::TokenType.IDENTIFIER)
+    try p.expect(token::TokenType.DECLARE)
+    value := try p.parse_expression()
+    try p.expect(token::TokenType.NEWLINE)
+    span := source::Span{source_id = name_tok.span.source_id, start = name_tok.span.start, stop = p.ast.nodes[value].span.stop}@
+    return p.ast.add(span, ast::NodeKind.LOCAL_DECL{
+        ast::LocalDecl{name = p.text(name_tok.span), initializer = value}
+    })
+end
+
+
+throws func parse_function(p: Parser) -> int:
+    start := try p.expect(token::TokenType.KWD_FUNC)
+    name_tok := try p.expect(token::TokenType.IDENTIFIER)
+    try p.expect(token::TokenType.LPAREN)
+    try p.expect(token::TokenType.RPAREN)
+    try p.expect(token::TokenType.COLON)
+    try p.expect(token::TokenType.NEWLINE)
+
+    function := ast::FunctionDecl{name = p.text(name_tok.span)}@
+    p.skip_newlines()
+    while p.current_type() != token::TokenType.KWD_END:
+        if p.at_end():
+            actual := p.current()
+            diag::error(p.diagnostics, "unterminated function", "expected end", Some{actual.span})
+            fail("unterminated function")
+        end
+        try statement := p.parse_declaration():
+            function.body.push(statement)
+        except:
+            p.synchronize_statement()
+        end
+        p.skip_newlines()
+    end
+
+    end_tok := try p.expect(token::TokenType.KWD_END)
+    span := source::Span{source_id = start.span.source_id, start = start.span.start, stop = end_tok.span.stop}@
+    return p.ast.add(span, ast::NodeKind.FUNCTION_DECL{function})
+end
+
+
+func parse(file: source::SourceFile, tokens: Vec[token::Token], diagnostics: diag::Diagnostics) -> ast::Ast:
+    p := new(file, tokens, diagnostics)
+    imports_finished := false
+    p.skip_newlines()
+    while not p.at_end():
+        if p.current_type() == token::TokenType.KWD_USE:
+            if imports_finished:
+                actual := p.current()
+                diag::error(p.diagnostics, "imports must precede top-level declarations", "", Some{actual.span})
+            end
+            try import := p.parse_import():
+                if not imports_finished:
+                    p.add_import(import)
+                end
+            except:
+                p.synchronize_top_level()
+            end
+        elif p.current_type() == token::TokenType.KWD_FUNC:
+            imports_finished = true
+            try function := p.parse_function():
+                p.add_function(function)
+            except:
+                p.synchronize_top_level()
+            end
+        else:
+            imports_finished = true
+            actual := p.current()
+            if actual.type != token::TokenType.ERROR:
+                diag::error(p.diagnostics, "expected import or function declaration", "", Some{actual.span})
+            end
+            p.synchronize_top_level()
+        end
+        p.skip_newlines()
+    end
+    return p.ast
+end

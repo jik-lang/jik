@@ -1,11 +1,20 @@
 use "source"
 use "jik/io"
+use "jik/string"
+use "jik/strbuf"
 
 
 enum MessageLevel:
     ERROR
     WARNING
 end
+
+
+table MessageLevelNames[MessageLevel] -> String:
+    ERROR: "error"
+    WARNING: "warning"
+end
+
 
 struct Message:
     level: MessageLevel
@@ -20,7 +29,7 @@ struct Diagnostics:
 end
 
 
-func new_message(level: MessageLevel, summary: String, detail: String, span: Option[source::Span], r: Region) -> Message:
+func new_message(level: MessageLevel, foreign summary: String, foreign detail: String, span: Option[source::Span], r: Region) -> Message:
     return Message{
         level = level,
         summary = copy(summary, r),
@@ -30,36 +39,75 @@ func new_message(level: MessageLevel, summary: String, detail: String, span: Opt
 end
 
 
-func error(diag: Diagnostics, summary: String, detail: String, span: Option[source::Span]) -> void:
+func error(diag: Diagnostics, foreign summary: String, foreign detail: String, span: Option[source::Span]) -> void:
     message := new_message(MessageLevel.ERROR, summary, detail, span, .diag)
     diag.messages.push(message)
     diag.error_count += 1
 end
 
 
-func level_name(level: MessageLevel, r: Region) -> String:
-    if level == MessageLevel.ERROR:
-        return "error"[r]
+func append_spaces(sb: strbuf::StrBuf, count: int) -> void:
+    i := 0
+    while i < count:
+        sb.append(" ")
+        i += 1
     end
-    return "warning"[r]
 end
 
 
-func print_message(message: Message) -> void:
-    io::write_stderr(concat(
-        "jik ",
-        level_name(message.level, .message),
-        ": ",
-        message.summary,
-        "\n    ",
-        message.detail,
-        "\n"
-    ))
+func append_message(sb: strbuf::StrBuf, foreign message: Message, foreign src_mngr: source::SourceManager) -> void:
+    sb.append("jik ")
+    sb.append(MessageLevelNames[message.level])
+    sb.append(": ")
+    sb.append(message.summary)
+    sb.append("\n")
+
+    if message.span is None:
+        if len(message.detail) > 0:
+            sb.append("    ")
+            sb.append(message.detail)
+            sb.append("\n")
+        end
+        return
+    end
+
+    span := message.span?
+    file := src_mngr.sources[span.source_id]
+    line := source::line_index(file, span.start)
+    start := source::line_start(file, line)
+    stop := source::line_stop(file, line)
+    column := span.start - start
+    line_number := string::from_int(line + 1)
+    line_text := must string::slice(file.text, start, stop)
+
+    sb.append("      --> ")
+    sb.append(file.path)
+    sb.append(":")
+    sb.append(line_number)
+    sb.append(":")
+    sb.append(string::from_int(column + 1))
+    sb.append("\n  |\n")
+    sb.append(line_number)
+    sb.append(" |")
+    sb.append(line_text)
+    sb.append("\n")
+    append_spaces(sb, len(line_number) + 1)
+    sb.append("|")
+    append_spaces(sb, column)
+    sb.append("^\n")
+
+    if len(message.detail) > 0:
+        sb.append("    = ")
+        sb.append(message.detail)
+        sb.append("\n")
+    end
 end
 
 
-func print_all(diag: Diagnostics) -> void:
+func print_all(diag: Diagnostics, foreign src_mngr: source::SourceManager) -> void:
+    sb := strbuf::new("")
     for m in diag.messages:
-        print_message(m)
+        append_message(sb, m, src_mngr)
     end
+    io::write_stderr(strbuf::to_string(sb))
 end

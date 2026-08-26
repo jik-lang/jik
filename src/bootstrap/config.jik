@@ -1,7 +1,0 @@
-
-use "source"
-
-
-struct Config:
-    source_file: source::SourceFile
-end

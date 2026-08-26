@@ -8,6 +8,8 @@ func make_parser(r: Region) -> ap::Parser:
     parser := ap::new("jik tran", r)
     ap::set_description(parser, "Translate a Jik source file to C.")
     ap::add_positional(parser, "input", "Input file")
+    opt_out := ap::add_option(parser, "--out", "-o", "Output file")
+    ap::add_option_positional(opt_out, "file", "Output path.")
     return parser
 end
 
@@ -16,5 +18,8 @@ throws func run(args: Vec[String]):
     p := make_parser()
     res := try ap::parse(p, args)
     input_file := res.positionals["input"]?
-    try compiler::run(input_file)
+    output_file := res.options["--out"]?["file"]? if res.options["--out"] is Some else ""
+    config := compiler::Config{input_path = input_file, output_path = output_file}
+    comp := compiler::new(config)
+    try comp.run()
 end

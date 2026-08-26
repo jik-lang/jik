@@ -2,12 +2,14 @@ use "jik/testing" as test
 
 use "../../src/bootstrap/lexer/lexer" as lex
 use "../../src/bootstrap/lexer/token"
+use "../../src/bootstrap/diag"
 use "../../src/bootstrap/source"
 
 
 func lex_source(text: String, source_id: int, r: Region) -> Vec[token::Token]:
     file := source::SourceFile{id = source_id, path = "<test>", text = text}[r]
-    return lex::tokenize(file, r)
+    diagnostics := diag::Diagnostics{}[r]
+    return lex::tokenize(file, diagnostics)
 end
 
 

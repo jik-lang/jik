@@ -1,0 +1,96 @@
+use "jik/testing" as test
+
+use "../../src/bootstrap/diag"
+use "../../src/bootstrap/source"
+use "../../src/bootstrap/lexer/lexer" as lex
+use "../../src/bootstrap/parser/ast"
+use "../../src/bootstrap/parser/parser"
+
+
+struct ParseResult:
+    ast: ast::Ast
+    diagnostics: diag::Diagnostics
+end
+
+
+func parse_source(text: String, r: Region) -> ParseResult:
+    file := source::SourceFile{id = 0, path = "<test>", text = text}[r]
+    diagnostics := diag::Diagnostics{}[r]
+    tokens := lex::tokenize(file, diagnostics)
+    parsed := parser::parse(file, tokens, diagnostics)
+    return ParseResult{ast = parsed, diagnostics = diagnostics}[r]
+end
+
+
+func test_imports_and_function(ts):
+    parsed := parse_source("use \"math\" as m\nuse \"io\"\n\nfunc main():\n    answer := 1 + 2 + 3\nend\n", _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+
+    module := ast::get_root_module(parsed.ast)
+    test::suite_assert(ts, len(module.imports) == 2, site())
+    test::suite_assert(ts, len(module.declarations) == 1, site())
+
+    first_import := ast::as_import(parsed.ast.nodes[module.imports[0]])
+    second_import := ast::as_import(parsed.ast.nodes[module.imports[1]])
+    test::suite_assert(ts, first_import.path == "math", site())
+    test::suite_assert(ts, first_import.alias is Some, site())
+    test::suite_assert(ts, first_import.alias? == "m", site())
+    test::suite_assert(ts, second_import.path == "io", site())
+    test::suite_assert(ts, second_import.alias is None, site())
+
+    function_nd := parsed.ast.nodes[module.declarations[0]]
+    test::suite_assert(ts, function_nd.kind is ast::NodeKind.FUNCTION_DECL, site())
+    function := function_nd.kind[ast::NodeKind.FUNCTION_DECL]
+    test::suite_assert(ts, function.name == "main", site())
+    test::suite_assert(ts, len(function.body) == 1, site())
+
+    declaration_nd := parsed.ast.nodes[function.body[0]]
+    test::suite_assert(ts, declaration_nd.kind is ast::NodeKind.LOCAL_DECL, site())
+    declaration := declaration_nd.kind[ast::NodeKind.LOCAL_DECL]
+    test::suite_assert(ts, declaration.name == "answer", site())
+
+    outer := parsed.ast.nodes[declaration.initializer].kind[ast::NodeKind.BINARY]
+    test::suite_assert(ts, outer.op == ast::BinaryOp.PLUS, site())
+    test::suite_assert(ts, parsed.ast.nodes[outer.right].kind is ast::NodeKind.INTEGER_LITERAL, site())
+    inner := parsed.ast.nodes[outer.left].kind[ast::NodeKind.BINARY]
+    test::suite_assert(ts, inner.op == ast::BinaryOp.PLUS, site())
+    test::suite_assert(ts, parsed.ast.nodes[inner.left].kind is ast::NodeKind.INTEGER_LITERAL, site())
+    test::suite_assert(ts, parsed.ast.nodes[inner.right].kind is ast::NodeKind.INTEGER_LITERAL, site())
+end
+
+
+func test_statement_recovery(ts):
+    parsed := parse_source("func main():\n    first := 1\n    malformed\n    second := 2\nend\n", _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 1, site())
+
+    module := ast::get_root_module(parsed.ast)
+    test::suite_assert(ts, len(module.declarations) == 1, site())
+    function := parsed.ast.nodes[module.declarations[0]].kind[ast::NodeKind.FUNCTION_DECL]
+    test::suite_assert(ts, len(function.body) == 2, site())
+
+    first := parsed.ast.nodes[function.body[0]].kind[ast::NodeKind.LOCAL_DECL]
+    second := parsed.ast.nodes[function.body[1]].kind[ast::NodeKind.LOCAL_DECL]
+    test::suite_assert(ts, first.name == "first", site())
+    test::suite_assert(ts, second.name == "second", site())
+end
+
+
+func test_top_level_errors(ts):
+    late_import := parse_source("func first():\nend\nuse \"late\"\n", _)
+    test::suite_assert(ts, late_import.diagnostics.error_count == 1, site())
+    late_module := ast::get_root_module(late_import.ast)
+    test::suite_assert(ts, len(late_module.imports) == 0, site())
+    test::suite_assert(ts, len(late_module.declarations) == 1, site())
+
+    unterminated := parse_source("func broken():\n    value := 1\n", _)
+    test::suite_assert(ts, unterminated.diagnostics.error_count == 1, site())
+    unterminated_module := ast::get_root_module(unterminated.ast)
+    test::suite_assert(ts, len(unterminated_module.declarations) == 0, site())
+end
+
+
+func run_tests(ts):
+    test_imports_and_function(ts)
+    test_statement_recovery(ts)
+    test_top_level_errors(ts)
+end

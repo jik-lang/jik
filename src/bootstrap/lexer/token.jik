@@ -14,10 +14,32 @@ enum TokenType:
 	COMMA
 	OP_PLUS
 	KWD_FUNC
+	KWD_END
 	KWD_USE
 	KWD_AS
 	ERROR
 	EOF
+end
+
+
+table TokenTypeNames[TokenType] -> String:
+    INTEGER: "integer"
+    STRING: "string"
+    IDENTIFIER: "identifier"
+    ASSIGN: "="
+    DECLARE: ":="
+    COLON: ":"
+    NEWLINE: "newline"
+    LPAREN: "("
+    RPAREN: ")"
+    COMMA: ","
+    OP_PLUS: "+"
+    KWD_FUNC: "func"
+    KWD_END: "end"
+    KWD_USE: "use"
+    KWD_AS: "as"
+    ERROR: "invalid token"
+    EOF: "end of file"
 end
 
 

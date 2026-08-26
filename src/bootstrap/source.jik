@@ -2,6 +2,9 @@ use "jik/io"
 use "jik/path"
 
 
+FILE_EXTENSION_JIK := ".jik"
+
+
 struct SourceFile:
     id: int
     path: String
@@ -11,21 +14,47 @@ end
 
 
 struct SourceManager:
-    source_cnt: int
     sources: Vec[SourceFile]
+    source_id_by_path: Dict[int]
 end
 
 
-throws func add_source(sm: SourceManager, foreign path: String):
-    text := try io::read_file(path, .sm)
+func construct_full_path(sm: SourceManager, foreign path: String, foreign src: SourceFile) -> String:
+    base_dir := path::dirname(src.path, .sm)
+    full_path := path::join([base_dir, path], .sm)
+    return path::normalize(concat(full_path, FILE_EXTENSION_JIK, .sm), .sm)
+end
+
+
+func _add_line_starts(sf: SourceFile) -> void:
+    sf.line_starts.push(0)
+    i := 0
+    while i < len(sf.text):
+        if sf.text[i] == '\n':
+            sf.line_starts.push(i + 1)
+        end
+        i += 1
+    end
+end
+
+
+throws func add_source(sm: SourceManager, foreign path: String) -> int:
     normalized := path::normalize(path, .sm)
+    src_id := sm.source_id_by_path[normalized]
+    if src_id is Some:
+        return src_id?
+    end
+    text := try io::read_file(path, .sm)    
+    num_sources := len(sm.sources)
+    sm.source_id_by_path[normalized] = num_sources
     sf := SourceFile{
-        id = sm.source_cnt,
+        id = num_sources,
         path = normalized,
         text = text
-    }[.sm]
+    }@
+    _add_line_starts(sf)
     sm.sources.push(sf)
-    sm.source_cnt += 1
+    return sf.id
 end
 
 
@@ -33,4 +62,30 @@ struct Span:
     source_id: int
     start: int
     stop: int
+end
+
+
+func line_index(file: SourceFile, offset: int) -> int:
+    line := 0
+    while line + 1 < len(file.line_starts) and file.line_starts[line + 1] <= offset:
+        line += 1
+    end
+    return line
+end
+
+
+func line_start(file: SourceFile, line: int) -> int:
+    return file.line_starts[line]
+end
+
+
+func line_stop(file: SourceFile, line: int) -> int:
+    stop := len(file.text)
+    if line + 1 < len(file.line_starts):
+        stop = file.line_starts[line + 1] - 1
+    end
+    if stop > file.line_starts[line] and file.text[stop - 1] == '\r':
+        stop -= 1
+    end
+    return stop
 end

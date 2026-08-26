@@ -2,27 +2,116 @@ use "diag"
 use "source"
 use "module"
 use "lexer/lexer"
+use "lexer/token"
+use "parser/parser"
+use "parser/ast"
+use "parser/format"
+
+use "jik/path"
+
+
+struct Config:
+    input_path: String
+    output_path: String
+end
 
 
 struct Compiler:
+    config: Config
     diagnostics: diag::Diagnostics
     src_mngr: source::SourceManager
     modules: Vec[module::Module]
 end
 
 
-throws func run(input: String):
-    comp := Compiler{}
-    try comp.src_mngr.add_source(input)
+func new(conf: Config, r: Region):
+    comp := Compiler{config = conf}[r]
+    return comp
+end
 
-    modules: Vec[module::Module]
-    modules.push(module::Module{source = comp.src_mngr.sources[0]})
-    while len(modules) > 0:
-        module := modules.pop()
-        tokens := lexer::tokenize(module.source)
-        println(tokens)
-        // todo: ast := parser::parse(tokens)
-        // todo: push to modules from usages        
+
+func print_diagnostics(comp: Compiler) -> void:
+    diag::print_all(comp.diagnostics, comp.src_mngr)
+end
+
+
+func resolve_imports(src_mngr: source::SourceManager, ast: ast::Ast, diag: diag::Diagnostics, src: source::SourceFile) -> Vec[source::SourceFile]:
+    sources: Vec[source::SourceFile]@
+    root_mod := ast.get_root_module()    
+    seen_aliases: Dict[bool]
+    seen_paths: Dict[bool]    
+    for id in root_mod.imports:
+        import_nd := ast.nodes[id]     
+        import := ast::as_import(import_nd)
+
+        if import.alias is Some:
+            if seen_aliases[import.alias?] is Some:
+                diag::error(diag, concat("duplicate import alias: ", import.alias?), "aliases should be unique across module", Some{import_nd.span})
+            else:
+                seen_aliases[import.alias?] = true
+            end
+        end        
+
+        full_path := src_mngr.construct_full_path(import.path, src)
+        if seen_paths[full_path] is Some:
+            diag::error(diag, concat("duplicate import path: ", import.path), "paths should be unique across module", Some{import_nd.span})
+            continue
+        else:
+            seen_paths[full_path] = true
+        end
+
+        try sid := src_mngr.add_source(full_path):
+            mod_src := src_mngr.sources[sid]
+            sources.push(mod_src)
+        except:
+            diag::error(diag, concat("file not found: ", full_path), "could not resolve import", Some{import_nd.span})
+        end
+    end
+    return sources
+end
+
+
+throws func run(comp: Compiler):
+    sid := try comp.src_mngr.add_source(comp.config.input_path)
+    main_src := comp.src_mngr.sources[sid]
+  
+    sources: Vec[source::SourceFile]@
+    sources.push(main_src)
+    seen_paths: Dict[bool]
+    while len(sources) > 0:
+        src := sources.pop()
+
+        if seen_paths[src.path] is Some:
+            continue
+        end
+        
+        seen_paths[src.path] = true       
+        tokens := lexer::tokenize(src, comp.diagnostics)
+        if comp.diagnostics.error_count > 0:
+            comp.print_diagnostics()
+            return
+        end
+        ast := parser::parse(src, tokens, comp.diagnostics)
+        if comp.diagnostics.error_count > 0:
+            comp.print_diagnostics()
+            return
+        end
+        //println(format::format(ast, .comp))
+        mod := module::Module{source_id = src.id, tokens = tokens, ast = ast}@
+        comp.modules.push(mod)
+
+        imports := resolve_imports(comp.src_mngr, ast, comp.diagnostics, src)
+        if comp.diagnostics.error_count > 0:
+            comp.print_diagnostics()
+            return
+        end
+        for import in imports:
+            sources.push(import)
+        end
+    end
+
+    for mod in comp.modules:
+        println(mod)
     end
 
 end

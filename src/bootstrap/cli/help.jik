@@ -6,7 +6,7 @@ use "tran"
 
 
 func format_help(r: Region) -> String:
-    sb := strbuf::new("", r)
+    sb := strbuf::new("")
     strbuf::append(sb, "The command-line toolchain for the Jik programming language.\n\n")
     strbuf::append(sb, "Usage:\n\n")
     strbuf::append(sb, "    jik <command> [<args>...] [--<option> [<value>]]...\n\n")
