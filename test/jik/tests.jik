@@ -44,6 +44,7 @@ use "test_compile_fail_regions"
 use "test_region_safe_functions"
 use "test_region_ergonomics"
 use "test_compile_fail_modules"
+use "test_struct_field_init"
 
 
 func main():
@@ -93,6 +94,7 @@ func main():
     test_region_safe_functions::run_tests(ts)
     test_region_ergonomics::run_tests(ts)
     test_compile_fail_modules::run_tests(ts)
+    test_struct_field_init::run_tests(ts)
     
     test::suite_finish(ts)
 

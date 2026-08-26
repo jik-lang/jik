@@ -487,6 +487,50 @@ end
     )
 end
 
+func test_compile_fail_31(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    x: int
+end
+
+func main():
+    y := 1
+    value := Foo{y}
+end
+""",
+        "unknown field name: \"y\"")
+end
+
+func test_compile_fail_32(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    x: int
+end
+
+func main():
+    value := Foo{x}
+end
+""",
+        "undefined symbol: x")
+end
+
+func test_compile_fail_33(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    x: int
+end
+
+func main():
+    x := "wrong"
+    value := Foo{x}
+end
+""",
+        "type mismatch: required int, got String")
+end
+
 func run_tests(ts):
     test_compile_fail_01(ts)
     test_compile_fail_02(ts)
@@ -518,4 +562,7 @@ func run_tests(ts):
     test_compile_fail_28(ts)
     test_compile_fail_29(ts)
     test_compile_fail_30(ts)
+    test_compile_fail_31(ts)
+    test_compile_fail_32(ts)
+    test_compile_fail_33(ts)
 end

@@ -29,6 +29,22 @@ c1.port = 3
 c1.host = "foo"
 ```
 
+When a visible value has the same name as a field, its field initializer may
+omit `= value`:
+
+```jik
+host := "localhost"
+port := 8080
+verbose := true
+
+c2 := Config{host, port, verbose}
+c3 := Config{host = "example.com", port, verbose}
+```
+
+`Config{host, port, verbose}` is exactly equivalent to
+`Config{host = host, port = port, verbose = verbose}`. These entries are always
+named, not positional: their order does not need to match the declaration order.
+
 Struct values can be read and updated through their fields using the usual `.` syntax.
 
 ### 7.3 Uniform function calls

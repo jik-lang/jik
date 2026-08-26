@@ -1,0 +1,80 @@
+use "jik/testing" as test
+use "support/module_shapes" as shapes
+
+
+struct Settings:
+    host: String
+    port: int
+    verbose: bool
+end
+
+struct Label:
+    text: String
+end
+
+struct Holder:
+    label: Label
+end
+
+
+func test_all_shorthand(ts):
+    host := "localhost"
+    port := 8080
+    verbose := true
+    settings := Settings{host, port, verbose}
+
+    test::suite_assert(ts, settings.host == "localhost", site())
+    test::suite_assert(ts, settings.port == 8080, site())
+    test::suite_assert(ts, settings.verbose, site())
+end
+
+func test_mixed_and_omitted_fields(ts):
+    port := 9000
+    verbose := true
+    settings := Settings{port, host = "example.com", verbose}
+    defaults := Settings{port}
+
+    test::suite_assert(ts, settings.host == "example.com", site())
+    test::suite_assert(ts, settings.port == 9000, site())
+    test::suite_assert(ts, settings.verbose, site())
+    test::suite_assert(ts, defaults.host == "", site())
+    test::suite_assert(ts, defaults.port == 9000, site())
+end
+
+func test_reordered_multiline_shorthand(ts):
+    host := "reordered"
+    port := 1234
+    verbose := false
+    settings := Settings{
+        verbose,
+        host,
+        port
+    }
+
+    test::suite_assert(ts, settings.host == "reordered", site())
+    test::suite_assert(ts, settings.port == 1234, site())
+    test::suite_assert(ts, not settings.verbose, site())
+end
+
+func test_imported_struct_and_composite_field(ts):
+    name := "Ada"
+    tags := ["compiler"]
+    nickname := Some{"analyst"}
+    person := shapes::Person{name, tags, nickname}
+
+    text := "nested"
+    label := Label{text}
+    holder := Holder{label}
+
+    test::suite_assert(ts, person.name == "Ada", site())
+    test::suite_assert(ts, person.tags[0] == "compiler", site())
+    test::suite_assert(ts, person.nickname? == "analyst", site())
+    test::suite_assert(ts, holder.label.text == "nested", site())
+end
+
+func run_tests(ts):
+    test_all_shorthand(ts)
+    test_mixed_and_omitted_fields(ts)
+    test_reordered_multiline_shorthand(ts)
+    test_imported_struct_and_composite_field(ts)
+end

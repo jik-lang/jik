@@ -1416,9 +1416,18 @@ jik_parser_parse_struct_new(JikParser *p, JikToken *struct_name_tok, char *modul
     TabJikNode *init_vals = TabJikNode_new();
     while ((tok = jik_parser_current_token(p)) != NULL && tok->type != TOK_RCURL) {
         jik_parser_eat_newlines_if_found(p);
-        char *field_name = jik_parser_eat_token(p, TOK_ID)->lexeme;
-        jik_parser_eat_token(p, TOK_ASSIGN);
-        JikNode *expr = jik_parser_parse_expr(p);
+        JikToken *field_tok  = jik_parser_eat_token(p, TOK_ID);
+        char     *field_name = field_tok->lexeme;
+        JikNode  *expr;
+        if (jik_parser_current_token(p)->type == TOK_ASSIGN) {
+            jik_parser_eat_token(p, TOK_ASSIGN);
+            expr = jik_parser_parse_expr(p);
+        }
+        else {
+            // Field shorthand: `Point{x}` is equivalent to `Point{x = x}`
+            expr = jik_node_new_identifier(
+                field_name, NULL, jik_parser_current_context(p), field_tok);
+        }
         jik_parser_eat_newlines_if_found(p);
         TabJikNode_set(init_vals, field_name, expr);
         if (jik_parser_current_token(p)->type != TOK_RCURL) {
