@@ -77,6 +77,7 @@ typedef struct JikToken JikToken;
     X(TOK_KWD_NONE)                                                                                \
     X(TOK_KWD_MATCH)                                                                               \
     X(TOK_KWD_CASE)                                                                                \
+    X(TOK_KWD_OTHER)                                                                               \
     X(TOK_KWD_FOREIGN)                                                                             \
     X(TOK_UNDERSCORE)                                                                              \
     X(TOK_ASSIGN)                                                                                  \

@@ -87,7 +87,7 @@ func main():
     end
 end
 """,
-        "match doesn't exhaust all variant tags")
+        "match does not exhaust variant Value")
 end
 
 func test_compile_fail_07(ts):
@@ -288,7 +288,7 @@ func main():
     end
 end
 """,
-        "match does not exhaust enum Color; missing Color.GREEN")
+        "match does not exhaust enum Color")
 end
 
 func test_compile_fail_20(ts):
@@ -551,6 +551,107 @@ end
         "allocation suffix belongs on initializer")
 end
 
+func test_compile_fail_36(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+    GREEN
+end
+
+func main():
+    match Color.RED:
+        other:
+            println("other")
+        case Color.RED:
+            println("red")
+    end
+end
+""",
+        "other must be the final match arm")
+end
+
+func test_compile_fail_37(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+    GREEN
+end
+
+func main():
+    match Color.RED:
+        case Color.RED:
+            println("red")
+        other:
+            println("first")
+        other:
+            println("second")
+    end
+end
+""",
+        "other must be the final match arm")
+end
+
+func test_compile_fail_38(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+end
+
+func main():
+    match Color.RED:
+        case Color.BLUE:
+            println("blue")
+        other:
+            println("other")
+    end
+end
+""",
+        "unknown enum member in match for Color: BLUE")
+end
+
+func test_compile_fail_39(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+end
+
+func main():
+    match Color.RED:
+        case Color.RED:
+            println("red")
+        case Color.RED:
+            println("red again")
+        other:
+            println("other")
+    end
+end
+""",
+        "duplicate enum case: Color.RED")
+end
+
+func test_compile_fail_40(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+    GREEN
+    BLUE
+end
+
+func main():
+    match Color.RED:
+        case Color.RED:
+            println("red")
+    end
+end
+""",
+        "unhandled cases:\n        - Color.GREEN\n        - Color.BLUE\n    add cases for these, or use \"other:\" to handle all remaining cases")
+end
+
 func run_tests(ts):
     test_compile_fail_01(ts)
     test_compile_fail_02(ts)
@@ -587,4 +688,9 @@ func run_tests(ts):
     test_compile_fail_33(ts)
     test_compile_fail_34(ts)
     test_compile_fail_35(ts)
+    test_compile_fail_36(ts)
+    test_compile_fail_37(ts)
+    test_compile_fail_38(ts)
+    test_compile_fail_39(ts)
+    test_compile_fail_40(ts)
 end

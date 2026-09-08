@@ -1,8 +1,35 @@
 #include "typecheck.h"
 
+#include "charbuf.h"
 #include "diag.h"
 #include "semantic.h"
 #include "types.h"
+
+static void
+jik_check_match_exhaustiveness(char      *kind,
+                               char      *type_name,
+                               VecString *member_order,
+                               TabBool   *seen_tags,
+                               JikToken  *token)
+{
+    CharBuffer *summary = char_buffer_new(
+        JIK_STRING_NCAT("match does not exhaust ", kind, " ", type_name, "\n    unhandled cases:"));
+    size_t num_unhandled = 0;
+    for (size_t i = 0; i < VecString_size(member_order); i++) {
+        char *member = VecString_get(member_order, i);
+        if (!TabBool_get(seen_tags, member)) {
+            char_buffer_append(summary, JIK_STRING_NCAT("\n        - ", type_name, ".", member));
+            num_unhandled++;
+        }
+    }
+    if (num_unhandled == 0) {
+        return;
+    }
+    char_buffer_append(
+        summary, "\n    add cases for these, or use \"other:\" to handle all remaining cases");
+    jik_diag_fatal_error(summary->data, jik_token_to_text(token));
+}
+
 
 static void
 jik_check_builtin_push(JikNode *nd)
@@ -610,7 +637,6 @@ jik_check_types(VecJikNode *nodes)
             size_t   n            = VecJikNode_size(nd->val_match.cases);
             jik_diag_fatal_error_if(n == 0, "no cases provided", jik_token_to_text(nd->token));
             TabBool *seen_tags = TabBool_new();
-            size_t   cnt       = 0;
             char    *type_name = jik_type_pretty_name(match_type);
             for (size_t i = 0; i < n; i++) {
                 JikNode *case_nd = VecJikNode_get(nd->val_match.cases, i);
@@ -647,35 +673,37 @@ jik_check_types(VecJikNode *nodes)
                                                         tag),
                                         jik_token_to_text(case_nd->val_case.variant->token));
                 TabBool_set(seen_tags, tag, true);
-                cnt++;
             }
             if (match_type->name == TYPE_ENUM) {
+                if (nd->val_match.other_body) {
+                    continue;
+                }
                 JikNode *first_case = VecJikNode_get(nd->val_match.cases, 0);
                 JikNode *owner      = first_case->val_case.variant->val_variant_new.name;
                 JikNode *enum_nd = jik_scope_get_symbol(
                     nd->context, owner->val_id.name, owner->val_id.module_id, nd->token->module_id);
                 assert(enum_nd && enum_nd->type == NODE_ENUM);
-                for (size_t i = 0; i < VecString_size(enum_nd->val_enum.enumerator_order); i++) {
-                    char *member = VecString_get(enum_nd->val_enum.enumerator_order, i);
-                    if (!TabBool_get(seen_tags, member)) {
-                        jik_diag_fatal_error(
-                            JIK_STRING_NCAT("match does not exhaust enum ",
-                                            type_name,
-                                            "; missing ",
-                                            type_name,
-                                            ".",
-                                            member),
-                            jik_token_to_text(nd->token));
-                    }
-                }
+                jik_check_match_exhaustiveness("enum",
+                                                type_name,
+                                                enum_nd->val_enum.enumerator_order,
+                                                seen_tags,
+                                                nd->token);
                 continue;
             }
-            JikType *variant_type = match_type;
-            size_t   num_tags     = TabJikType_size(variant_type->val_variant.variant_types) +
-                                  TabBool_size(variant_type->val_variant.payloadless_tags);
-            jik_diag_fatal_error_if(cnt != num_tags,
-                                    "match doesn't exhaust all variant tags",
-                                    jik_token_to_text(nd->token));
+            if (nd->val_match.other_body) {
+                continue;
+            }
+            JikNode *first_case = VecJikNode_get(nd->val_match.cases, 0);
+            JikNode *pattern    = first_case->val_case.variant;
+            JikNode *owner      = pattern->val_variant_new.name;
+            JikNode *variant_nd = jik_scope_get_symbol(
+                nd->context, owner->val_id.name, owner->val_id.module_id, nd->token->module_id);
+            assert(variant_nd && variant_nd->type == NODE_VARIANT);
+            jik_check_match_exhaustiveness("variant",
+                                            type_name,
+                                            variant_nd->val_variant.member_order,
+                                            seen_tags,
+                                            nd->token);
         }
         else if (nd->type == NODE_CASE) {
             if (nd->val_case.match->val_match.expr->jik_type->name == TYPE_VARIANT) {

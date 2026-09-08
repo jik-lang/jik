@@ -565,6 +565,8 @@ match_keyword_or_id(const char *kwd)
         return TOK_KWD_MATCH;
     if (strcmp(kwd, "case") == 0)
         return TOK_KWD_CASE;
+    if (strcmp(kwd, "other") == 0)
+        return TOK_KWD_OTHER;
     if (strcmp(kwd, "foreign") == 0)
         return TOK_KWD_FOREIGN;
     if (strcmp(kwd, "_") == 0)

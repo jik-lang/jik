@@ -840,7 +840,7 @@ jik_parser_parse_block(JikParser *p)
     JikNode  *nd;
     while ((tok = jik_parser_current_token(p)) != NULL && tok->type != TOK_KWD_END &&
            tok->type != TOK_KWD_ELSE && tok->type != TOK_KWD_ELIF && tok->type != TOK_KWD_CASE &&
-           tok->type != TOK_KWD_EXCEPT) {
+           tok->type != TOK_KWD_OTHER && tok->type != TOK_KWD_EXCEPT) {
         nd = jik_parser_parse_statement(p);
         jik_parser_eat_newlines(p);
         VecJikNode_push(block->val_block, nd);
@@ -909,7 +909,7 @@ jik_parser_parse_match(JikParser *p)
     JikToken   *curr  = jik_parser_current_token(p);
     VecJikNode *cases = VecJikNode_new_empty();
     JikNode    *match = jik_node_new_match(NULL, NULL, jik_parser_current_context(p), tok);
-    while (curr->type != TOK_KWD_END) {
+    while (curr->type == TOK_KWD_CASE) {
         jik_parser_eat_token(p, TOK_KWD_CASE);
         JikNode *var_tag = jik_parser_parse_atom(p);
         if (var_tag->type == NODE_EXPR_IDENTIFIER &&
@@ -938,6 +938,16 @@ jik_parser_parse_match(JikParser *p)
             jik_node_new_case(var_tag, body, match, jik_parser_current_context(p), tok);
         VecJikNode_push(cases, case_);
         curr = jik_parser_current_token(p);
+    }
+    if (curr->type == TOK_KWD_OTHER) {
+        jik_parser_eat_token(p, TOK_KWD_OTHER);
+        jik_parser_eat_token(p, TOK_COLON);
+        jik_parser_eat_newlines(p);
+        match->val_match.other_body = jik_parser_parse_block(p);
+        curr = jik_parser_current_token(p);
+        jik_diag_fatal_error_if(curr->type != TOK_KWD_END,
+                                "other must be the final match arm",
+                                jik_token_to_text(curr));
     }
     jik_parser_eat_token(p, TOK_KWD_END);
     match->val_match.expr  = expr;

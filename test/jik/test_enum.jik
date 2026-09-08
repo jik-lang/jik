@@ -129,6 +129,29 @@ func test_enum_07(ts):
     test::suite_assert(ts, count == 1, site())
 end
 
+func test_enum_08(ts):
+    result := 0
+    match Color.GREEN:
+        case Color.RED:
+            result = 1
+        other:
+            result = 2
+    end
+    test::suite_assert(ts, result == 2, site())
+
+    match Color.GREEN:
+        case Color.RED:
+            result = 1
+        case Color.GREEN:
+            result = 2
+        case Color.BLUE:
+            result = 3
+        other:
+            result = 4
+    end
+    test::suite_assert(ts, result == 2, site())
+end
+
 func run_tests(ts):
     test_enum_01(ts)
     test_enum_02(ts)
@@ -137,4 +160,5 @@ func run_tests(ts):
     test_enum_05(ts)
     test_enum_06(ts)
     test_enum_07(ts)
+    test_enum_08(ts)
 end

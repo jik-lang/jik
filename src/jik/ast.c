@@ -731,6 +731,7 @@ jik_node_new_match(JikNode *expr, VecJikNode *cases, JikScope *ctx, JikToken *to
     nd->type            = NODE_STMNT_MATCH;
     nd->val_match.expr  = expr;
     nd->val_match.cases = cases;
+    nd->val_match.other_body = NULL;
     nd->context         = ctx;
     nd->token           = tok;
     return nd;
@@ -1489,6 +1490,9 @@ jik_collect_nodes(JikNode *nd, VecJikNode *nodes)
         jik_collect_nodes(nd->val_match.expr, nodes);
         for (size_t i = 0; i < VecJikNode_size(nd->val_match.cases); i++) {
             jik_collect_nodes(VecJikNode_get(nd->val_match.cases, i), nodes);
+        }
+        if (nd->val_match.other_body) {
+            jik_collect_nodes(nd->val_match.other_body, nodes);
         }
     }
     else if (nd->type == NODE_CASE) {

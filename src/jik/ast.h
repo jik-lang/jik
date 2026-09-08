@@ -403,6 +403,7 @@ typedef struct JikNode {
         struct {
             struct JikNode *expr;
             VecJikNode     *cases;
+            struct JikNode *other_body;
         } val_match;
 
         // Conditionals

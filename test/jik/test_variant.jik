@@ -42,6 +42,18 @@ func test_var_01(ts):
     _test_match_02(ts, 2, 0)
 end
 
+func test_var_other(ts):
+    result := foo(1, 0, ts)
+    handled := false
+    match result:
+        case Result.OK{value}:
+            test::suite_assert(ts, false, site())
+        other:
+            handled = true
+    end
+    test::suite_assert(ts, handled, site())
+end
+
 
 variant Node:
     INTEGER: int
@@ -185,6 +197,7 @@ end
 
 
 func run_tests(ts):
+    test_var_other(ts)
     test_var_01(ts)
     test_var_02(ts)
     test_var_03(ts)

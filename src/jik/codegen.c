@@ -1344,6 +1344,13 @@ jik_codegen_emit_stmnt_match(JikCodeGenerator *cg, JikNode *nd)
         jik_writer_dedent(&cg->cw);
         jik_writer_write_line(&cg->cw, "}");
     }
+    if (nd->val_match.other_body) {
+        jik_writer_write_line(&cg->cw, "else {");
+        jik_writer_indent(&cg->cw);
+        jik_codegen_emit_block(cg, nd->val_match.other_body);
+        jik_writer_dedent(&cg->cw);
+        jik_writer_write_line(&cg->cw, "}");
+    }
     jik_writer_end_block(&cg->cw);
 }
 

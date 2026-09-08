@@ -371,10 +371,12 @@ The call-only propagation form has no trailing colon. A colon starts the local
 ```ebnf
 match_stmt ::= "match" expr ":" newline
                { case_clause }
+               [ other_clause ]
                "end"
 
 case_clause ::= "case" variant_pattern ":" newline block
               | "case" enum_pattern ":" newline block
+other_clause ::= "other" ":" newline block
 variant_pattern ::= qualified_identifier "." identifier
                   | qualified_identifier "." identifier "{" identifier "}"
 enum_pattern ::= qualified_identifier "." identifier
@@ -386,6 +388,8 @@ Current implementation note:
   variant tag or an enum member.
 - The matched value determines whether a qualified case denotes a variant tag or enum member.
   Enum matches require every member exactly once and do not permit payload bindings.
+- `other:` is optional, may appear only once as the final match arm, and handles every tag not
+  covered by an explicit case. A match with `other:` need not be exhaustive.
 
 ## Expressions
 

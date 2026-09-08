@@ -93,8 +93,21 @@ payload, declare an `enum` instead of a `variant`.
 When printed, variants show their type, active tag, and payload when present: for example,
 `<Value INT=7>` and `<Value EOF>`.
 
-It is important to note that `match` is exhaustive, which means it requires every variant tag or
-enum member to be handled by a respective `case`, otherwise there is a compile error.
+By default, `match` is exhaustive: every variant tag or enum member must be handled by a
+respective `case`, otherwise there is a compile error.
+
+A final `other:` arm handles every tag not covered by an explicit case. It cannot bind a payload.
+When `other:` is present, the match need not list every tag. Without it, the normal exhaustiveness
+requirement applies.
+
+```jik
+match val:
+    case Value.INT{v}:
+        print("integer: ", v)
+    other:
+        print("another value")
+end
+```
 
 Variants can be placed freely into vectors, dictionaries, and other structs, and behave as regular values.
 

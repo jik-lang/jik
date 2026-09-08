@@ -184,6 +184,8 @@ jik_token_type_pretty_name(JikTokenType type)
         return "match";
     case TOK_KWD_CASE:
         return "case";
+    case TOK_KWD_OTHER:
+        return "other";
     case TOK_KWD_FOREIGN:
         return "foreign";
     case TOK_UNDERSCORE:
