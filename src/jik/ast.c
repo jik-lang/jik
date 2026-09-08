@@ -1165,7 +1165,7 @@ jik_node_print(JikNode *nd, size_t level)
         if (nd->val_declare.expr) {
             jik_node_print(nd->val_declare.expr, level + 1);
         }
-        else if (nd->val_declare.type_desc) {
+        if (nd->val_declare.type_desc) {
             jik_node_print(nd->val_declare.type_desc, level + 1);
         }
     }

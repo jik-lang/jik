@@ -83,6 +83,26 @@ func test_nested_dicts(ts):
     test::suite_assert(ts, commands["move"]?["recursive"]? == 1, site())
 end
 
+func typed_missing(r: Region) -> Option[int]:
+    missing: Option[int] = None@
+    return missing
+end
+
+func test_typed_initializers(ts):
+    count: int = 42
+    enabled: bool = true
+    values: Vec[int] = [1, 2, 3]
+    present: Option[int] = Some{7}
+    missing := typed_missing(_)
+
+    test::suite_assert(ts, count == 42, site())
+    test::suite_assert(ts, enabled, site())
+    test::suite_assert(ts, len(values) == 3, site())
+    test::suite_assert(ts, present is Some, site())
+    test::suite_assert(ts, present? == 7, site())
+    test::suite_assert(ts, missing is None, site())
+end
+
 func run_tests(ts):
     test_dict_string(ts)
     test_dict_vec_int(ts)
@@ -90,4 +110,5 @@ func run_tests(ts):
     test_vec_dict_int(ts)
     test_option_dict_string(ts)
     test_nested_dicts(ts)
+    test_typed_initializers(ts)
 end

@@ -115,8 +115,7 @@ throws func parse_import(p: Parser) -> int:
     path := must string::slice(p.file.text, path_tok.span.start + 1, path_tok.span.stop - 1, .p)
     stop := path_tok.span.stop
 
-    alias: Option[String]@
-    alias = None@
+    alias: Option[String] = None@
     if p.current_type() == token::TokenType.KWD_AS:
         p.advance()
         alias_tok := try p.expect(token::TokenType.IDENTIFIER)

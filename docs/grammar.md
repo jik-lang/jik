@@ -306,6 +306,7 @@ continue_stmt  ::= "continue"
 decl_stmt      ::= identifier ":=" expr
                  | identifier ":=" "try" call_expr
                  | identifier ":" type_desc
+                 | identifier ":" type_desc "=" expr
 
 assign_stmt    ::= lvalue assign_op expr
 assign_op      ::= "=" | "+=" | "-=" | "*=" | "/=" | "%="

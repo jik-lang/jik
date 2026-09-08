@@ -660,6 +660,16 @@ jik_parser_parse_try(JikParser *p);
 static JikNode *
 jik_parser_parse_type_desc(JikParser *p);
 
+static bool
+jik_parser_type_desc_has_alloc_suffix(JikNode *type_desc)
+{
+    if (type_desc->val_type_desc.alloc_spec.kind != JIK_ALLOC_LOCAL) {
+        return true;
+    }
+    return type_desc->val_type_desc.desc &&
+           jik_parser_type_desc_has_alloc_suffix(type_desc->val_type_desc.desc);
+}
+
 static JikNode *
 jik_parser_get_assigned_expr(JikParser *p, JikNode *lhs)
 {
@@ -766,9 +776,17 @@ jik_parser_parse_statement(JikParser *p)
                 if (jik_parser_current_token(p)->type == TOK_COLON) {
                     jik_parser_eat_token(p, TOK_COLON);
                     JikNode *td = jik_parser_parse_type_desc(p);
+                    JikNode *rhs = jik_node_new_placeholder(jik_parser_current_context(p), tok);
+                    if (jik_parser_current_token(p)->type == TOK_ASSIGN) {
+                        jik_diag_fatal_error_if(jik_parser_type_desc_has_alloc_suffix(td),
+                                                "allocation suffix belongs on initializer",
+                                                jik_token_to_text(td->token));
+                        jik_parser_eat_token(p, TOK_ASSIGN);
+                        rhs = jik_parser_parse_expr(p);
+                    }
                     return jik_node_new_declare(
                         expr,
-                        jik_node_new_placeholder(jik_parser_current_context(p), tok),
+                        rhs,
                         td,
                         jik_parser_current_context(p),
                         tok);

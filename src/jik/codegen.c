@@ -1823,7 +1823,7 @@ jik_codegen_emit_stmnt_declare(JikCodeGenerator *cg, JikNode *nd)
     jik_writer_write_line(
         &cg->cw,
         JIK_STRING_NCAT(
-            nd->val_declare.expr->jik_type->C_name, " ", id_name, " = ", te, ";", NULL));
+            nd->val_declare.id->jik_type->C_name, " ", id_name, " = ", te, ";", NULL));
 }
 
 static void

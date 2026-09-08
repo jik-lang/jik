@@ -241,6 +241,16 @@ jik_check_types(VecJikNode *nodes)
                 jik_type_equal(nd->val_declare.expr->jik_type, &JIK_TYPE_VOID)) {
                 jik_diag_fatal_error("cannot declare from void", jik_token_to_text(nd->token));
             }
+            if (nd->val_declare.type_desc->type != NODE_PLACEHOLDER) {
+                JikType *declared_type = nd->val_declare.id->jik_type;
+                jik_diag_fatal_error_if(
+                    !jik_type_equal(declared_type, nd->val_declare.expr->jik_type),
+                    JIK_STRING_NCAT("type mismatch: required ",
+                                    jik_type_pretty_name(declared_type),
+                                    ", got ",
+                                    jik_type_pretty_name(nd->val_declare.expr->jik_type)),
+                    jik_token_to_text(nd->val_declare.expr->token));
+            }
         }
         else if (nd->type == NODE_EXPR_MEMBER_ACCESS) {
             jik_diag_fatal_error_if(!(jik_type_is_accessible(nd->val_member_access.node->jik_type)),

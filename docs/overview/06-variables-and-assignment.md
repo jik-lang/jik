@@ -25,6 +25,23 @@ nums: Vec[int]
 people: Dict[Vec[Person]]
 ```
 
+You can combine an explicit type with an initializer when the type makes the
+declaration clearer or supplies context for the value:
+
+```jik
+count: int = 3
+enabled: bool = true
+missing: Option[int] = None
+```
+
+The initializer must have exactly the declared type. For composite values, an
+allocation suffix belongs on the initializer, not the type annotation:
+
+```jik
+name: String = "Alice"[r]
+maybe: Option[int] = None@
+```
+
 Defaults per type are:
 
 - **Integers**: `0`
@@ -39,7 +56,7 @@ Defaults per type are:
 
 
 At top level, globals are declared with `:=`.
-Typed declarations such as `x: int` are for local variables inside functions.
+Typed declarations such as `x: int` and `x: int = 3` are for local variables inside functions.
 
 ### 6.2 Local scope and redeclaration rules
 

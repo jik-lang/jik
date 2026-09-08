@@ -531,6 +531,26 @@ end
         "type mismatch: required int, got String")
 end
 
+func test_compile_fail_34(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    number: int = "wrong"
+end
+""",
+        "type mismatch: required int, got String")
+end
+
+func test_compile_fail_35(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main(r: Region):
+    name: String[r] = "name"
+end
+""",
+        "allocation suffix belongs on initializer")
+end
+
 func run_tests(ts):
     test_compile_fail_01(ts)
     test_compile_fail_02(ts)
@@ -565,4 +585,6 @@ func run_tests(ts):
     test_compile_fail_31(ts)
     test_compile_fail_32(ts)
     test_compile_fail_33(ts)
+    test_compile_fail_34(ts)
+    test_compile_fail_35(ts)
 end
