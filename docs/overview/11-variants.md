@@ -37,28 +37,34 @@ v5 := Value.EOF{}
 Use `is` to check which variant tag is active. Following up on the declarations above:
 
 ```jik
-assert(v1 is Value.INT)
-assert(v2 is Value.INT)
-assert(v3 is Value.TEXT)
-assert(v4 is Value.NUMS)
-assert(v5 is Value.EOF)
+assert(v1 is INT)
+assert(v2 is INT)
+assert(v3 is TEXT)
+assert(v4 is NUMS)
+assert(v5 is EOF)
 ```
 
-Payload extraction is done with an index-like syntax:
+The variant type is inferred from the value on the left of `is`. Payloads use
+checked member access:
 
 ```jik
-nums := v4[Value.NUMS]
+nums := v4.NUMS
 assert(nums[0] == 0)
 ```
 
-This reads as "treat this value as the `Value.NUMS` case and give me its payload".
-In the translated C code, it is checked if the active tag is accessed or not. In the latter case, a runtime error is thrown.
+This reads as "give me the `NUMS` payload of this `Value`". The generated code
+checks that `NUMS` is active and reports a runtime error otherwise. A payload
+may be updated through the same checked access without changing the active tag:
+
+```jik
+v1.INT = 8
+```
 
 We can modify a variant instance by setting another tag as active:
 
 ```jik
 v3 = Value.INT{2}
-assert(v3 is Value.INT)
+assert(v3 is INT)
 ```
 
 ### 11.4 Pattern matching on variants
@@ -69,13 +75,13 @@ patterns and can bind payloads:
 ```jik
 func handle(val):
     match val:
-        case Value.INT{v}:
+        case INT{v}:
             print("INT: ", v)
-        case Value.TEXT{msg}:
+        case TEXT{msg}:
             print("TEXT: ", msg)
-        case Value.NUMS{vec}:
+        case NUMS{vec}:
             print("NUMS: ", vec)
-        case Value.EOF:
+        case EOF:
             print("end of input")
     end
 end
@@ -86,9 +92,11 @@ Each `case`:
 - Tests the tag
 - **Binds** the payload to a local name (`v`, `msg`, `vec`).
 
-Tags may omit their payload type. Construct those tags with empty braces, as with
-`Value.EOF{}`, and match them without braces, as with `case Value.EOF:`. If every tag has no
-payload, declare an `enum` instead of a `variant`.
+The matched expression determines the variant or enum type, so case tags do not
+need qualification. A payload-bearing tag may omit `{name}` when its payload is
+not needed. Construct payloadless tags with empty braces, as with `Value.EOF{}`,
+and match them without braces, as with `case EOF:`. If every tag has no payload,
+declare an `enum` instead of a `variant`.
 
 When printed, variants show their type, active tag, and payload when present: for example,
 `<Value INT=7>` and `<Value EOF>`.
@@ -102,7 +110,7 @@ requirement applies.
 
 ```jik
 match val:
-    case Value.INT{v}:
+    case INT{v}:
         print("integer: ", v)
     other:
         print("another value")
@@ -122,7 +130,7 @@ variant type:
 
 ```jik
 func is_text(value: Value) -> bool:
-    return value is Value.TEXT
+    return value is TEXT
 end
 
 v := Value.TEXT{"hello"}

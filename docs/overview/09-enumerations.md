@@ -44,16 +44,15 @@ compile time until they are updated.
 ```jik
 func signal_name(s: State, r: Region) -> String:
     match s:
-        case State.ON:
+        case ON:
             return "on"[r]
-        case State.OFF:
+        case OFF:
             return "off"[r]
     end
 end
 ```
 
-Enum cases must be qualified, including for imported enums. `case State.ON:` is valid; bare
-`case ON:` is not.
+Enum cases are contextual: the matched expression determines their enum type.
 
 An `other:` arm may be placed last to handle every member not covered by an explicit case. A match
 with `other:` does not need to be exhaustive. Use it when the remaining members need to share
@@ -61,7 +60,7 @@ the same behavior.
 
 ```jik
 match s:
-    case State.ON:
+    case ON:
         return "on"[r]
     other:
         return "off"[r]

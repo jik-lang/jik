@@ -84,57 +84,57 @@ func test_variant_interop(ts):
     dv := BytesVariant.LOOKUP{}
 
     match bv_explicit:
-        case BytesVariant.BYTES{b}:
+        case BYTES{b}:
             test::suite_assert(ts, bytes::len(b) == 0, site())
-        case BytesVariant.MAYBE{m}:
+        case MAYBE{m}:
             test::suite_assert(ts, false, site())
-        case BytesVariant.VALUES{v}:
+        case VALUES{v}:
             test::suite_assert(ts, false, site())
-        case BytesVariant.LOOKUP{d}:
+        case LOOKUP{d}:
             test::suite_assert(ts, false, site())
     end
 
     match bv_default:
-        case BytesVariant.BYTES{b}:
+        case BYTES{b}:
             test::suite_assert(ts, bytes::len(b) == 0, site())
-        case BytesVariant.MAYBE{m}:
+        case MAYBE{m}:
             test::suite_assert(ts, false, site())
-        case BytesVariant.VALUES{v}:
+        case VALUES{v}:
             test::suite_assert(ts, false, site())
-        case BytesVariant.LOOKUP{d}:
+        case LOOKUP{d}:
             test::suite_assert(ts, false, site())
     end
 
     match mv:
-        case BytesVariant.BYTES{b}:
+        case BYTES{b}:
             test::suite_assert(ts, false, site())
-        case BytesVariant.MAYBE{m}:
+        case MAYBE{m}:
             test::suite_assert(ts, m is None, site())
-        case BytesVariant.VALUES{v}:
+        case VALUES{v}:
             test::suite_assert(ts, false, site())
-        case BytesVariant.LOOKUP{d}:
+        case LOOKUP{d}:
             test::suite_assert(ts, false, site())
     end
 
     match vv:
-        case BytesVariant.BYTES{b}:
+        case BYTES{b}:
             test::suite_assert(ts, false, site())
-        case BytesVariant.MAYBE{m}:
+        case MAYBE{m}:
             test::suite_assert(ts, false, site())
-        case BytesVariant.VALUES{v}:
+        case VALUES{v}:
             test::suite_assert(ts, len(v) == 0, site())
-        case BytesVariant.LOOKUP{d}:
+        case LOOKUP{d}:
             test::suite_assert(ts, false, site())
     end
 
     match dv:
-        case BytesVariant.BYTES{b}:
+        case BYTES{b}:
             test::suite_assert(ts, false, site())
-        case BytesVariant.MAYBE{m}:
+        case MAYBE{m}:
             test::suite_assert(ts, false, site())
-        case BytesVariant.VALUES{v}:
+        case VALUES{v}:
             test::suite_assert(ts, false, site())
-        case BytesVariant.LOOKUP{d}:
+        case LOOKUP{d}:
             test::suite_assert(ts, len(d) == 0, site())
     end
 end

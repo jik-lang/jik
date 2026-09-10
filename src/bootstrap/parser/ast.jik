@@ -49,7 +49,7 @@ end
 
 
 func as_import(nd: Node) -> Import:
-    return nd.kind[NodeKind.IMPORT]
+    return nd.kind.IMPORT
 end
 
 
@@ -65,7 +65,7 @@ struct Ast:
 end
 
 func get_root_module(ast: Ast):
-    return ast.nodes[ast.root].kind[NodeKind.MODULE]
+    return ast.nodes[ast.root].kind.MODULE
 end
 
 

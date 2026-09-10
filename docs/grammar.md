@@ -13,7 +13,7 @@ are resolved later during semantic analysis.
 - This grammar describes syntax, not full typing or region semantics.
 - Some constructs are context-sensitive. In particular:
   - `Type.Member` may denote enum values or variant tags.
-  - `x[Tag]` may denote variant payload access only after semantic resolution.
+  - `value.Member` denotes a variant payload unwrap when `value` has a variant type.
   - allocation suffixes such as `[r]`, `[.x]`, and `@` are syntactically regular, but
     semantically restricted.
 - Newlines are significant between statements and after block headers.
@@ -377,16 +377,16 @@ match_stmt ::= "match" expr ":" newline
 case_clause ::= "case" variant_pattern ":" newline block
               | "case" enum_pattern ":" newline block
 other_clause ::= "other" ":" newline block
-variant_pattern ::= qualified_identifier "." identifier
-                  | qualified_identifier "." identifier "{" identifier "}"
-enum_pattern ::= qualified_identifier "." identifier
+variant_pattern ::= identifier
+                  | identifier "{" identifier "}"
+enum_pattern ::= identifier
 ```
 
 Current implementation note:
 
-- `case Value.TAG{x}:` binds a variant payload, while `case Value.TAG:` matches a payloadless
-  variant tag or an enum member.
-- The matched value determines whether a qualified case denotes a variant tag or enum member.
+- `case TAG{x}:` binds a variant payload, while `case TAG:` ignores a payload or matches a
+  payloadless variant tag or enum member.
+- The matched value determines the owner and whether a case denotes a variant tag or enum member.
   Enum matches require every member exactly once and do not permit payload bindings.
 - `other:` is optional, may appear only once as the final match arm, and handles every tag not
   covered by an explicit case. A match with `other:` need not be exhaustive.
@@ -422,6 +422,7 @@ logical_and ::= is_expr { "and" is_expr }
 is_expr ::= comparison [ "is" is_target ]
 is_target ::= "Some"
             | "None"
+            | identifier
             | qualified_identifier "." identifier
 ```
 
@@ -430,7 +431,7 @@ Examples:
 ```jik
 x is Some
 x is None
-v is Value.INT
+v is INT
 ```
 
 ### Comparison and Arithmetic
@@ -465,7 +466,7 @@ values[1:]
 values[:]
 opt?
 load_config()!
-v[Value.INT]
+v.INT
 ```
 
 ### Atoms
@@ -568,8 +569,8 @@ These forms are parsed first and refined later:
   enum value during semantic analysis.
 - `VariantName.TAG` is initially parsed as member access, then rewritten as a variant tag marker
   during semantic analysis. Constructing a variant value always requires braces.
-- `value[VariantName.TAG]` is syntactically a subscript expression and becomes
-  variant payload access only after semantic resolution.
+- `value.TAG` remains member access and is resolved as checked payload access when
+  `value` has a variant type.
 
 ## Current Implementation Gaps and Constraints
 

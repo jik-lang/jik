@@ -51,6 +51,35 @@ jik_variant_tag_is_payloadless(JikNode *variant, char *tag)
     return TabBool_get(variant->val_variant.payloadless_tags, tag) != NULL;
 }
 
+static JikNode *
+jik_semantic_find_type_declaration(JikSemanticAnalyzer *sa, JikType *type)
+{
+    VecJikNode *declarations = type->name == TYPE_VARIANT ? sa->ctx->ast->val_program.variants
+                                                          : sa->ctx->ast->val_program.enums;
+    for (size_t i = 0; i < VecJikNode_size(declarations); i++) {
+        JikNode *declaration = VecJikNode_get(declarations, i);
+        if (declaration->jik_type == type) {
+            return declaration;
+        }
+    }
+    return NULL;
+}
+
+static void
+jik_semantic_resolve_match_pattern_owners(JikSemanticAnalyzer *sa, JikNode *match)
+{
+    JikType *match_type = match->val_match.expr->jik_type;
+    if (match_type->name != TYPE_VARIANT && match_type->name != TYPE_ENUM) {
+        return;
+    }
+    JikNode *match_declaration = jik_semantic_find_type_declaration(sa, match_type);
+    assert(match_declaration);
+    for (size_t i = 0; i < VecJikNode_size(match->val_match.cases); i++) {
+        JikNode *pattern = VecJikNode_get(match->val_match.cases, i)->val_case.variant;
+        pattern->val_variant_new.variant_node = match_declaration;
+    }
+}
+
 void
 jik_semantic_init(JikSemanticAnalyzer *sa, JikContext *ctx)
 {
@@ -129,13 +158,16 @@ void
 jik_ensure_valid_variant_tag(JikNode *nd)
 {
     assert(nd->type == NODE_EXPR_VARIANT_NEW);
-    JikNode *s = jik_scope_get_symbol(nd->context,
-                                      nd->val_variant_new.name->val_id.name,
-                                      nd->val_variant_new.name->val_id.module_id,
-                                      nd->token->module_id);
+    JikNode *s = nd->val_variant_new.variant_node;
+    if (!s && nd->val_variant_new.name) {
+        s = jik_scope_get_symbol(nd->context,
+                                 nd->val_variant_new.name->val_id.name,
+                                 nd->val_variant_new.name->val_id.module_id,
+                                 nd->token->module_id);
+    }
     jik_diag_fatal_error_if(
         !s,
-        JIK_STRING_NCAT("variant \"", nd->val_variant_new.name->val_id.name, "\" not defined"),
+        "variant type could not be resolved",
         jik_token_to_text(nd->token));
     nd->val_variant_new.variant_node = s;
     JikNode **res = TabJikNode_get(s->val_variant.type_descs, nd->val_variant_new.tag);
@@ -658,30 +690,6 @@ jik_semantic_resolve_symbols(JikSemanticAnalyzer *sa)
                                     jik_token_to_text(nd->token));
             if (!nd->val_variant_new.name->val_id.module_id) {
                 nd->val_variant_new.name->val_id.module_id = nd->token->module_id;
-            }
-        }
-        else if ((nd->type == NODE_EXPR_SUBSCRIPT_GET &&
-                  nd->val_subscript_get.expr->type == NODE_EXPR_MEMBER_ACCESS &&
-                  nd->val_subscript_get.expr->val_member_access.node->type ==
-                      NODE_EXPR_IDENTIFIER) ||
-                 (nd->type == NODE_STMNT_SUBSCRIPT_SET &&
-                  nd->val_subscript_set.sub_expr->type == NODE_EXPR_MEMBER_ACCESS &&
-                  nd->val_subscript_set.sub_expr->val_member_access.node->type ==
-                      NODE_EXPR_IDENTIFIER)) {
-            JikNode *member = nd->type == NODE_EXPR_SUBSCRIPT_GET
-                                  ? nd->val_subscript_get.expr
-                                  : nd->val_subscript_set.sub_expr;
-            char    *module_id = member->val_member_access.node->val_id.module_id
-                                     ? member->val_member_access.node->val_id.module_id
-                                     : member->val_member_access.node->token->module_id;
-            JikNode *variant = jik_scope_get_global_symbol(
-                member->val_member_access.node->val_id.name, module_id);
-            if (variant && variant->type == NODE_VARIANT) {
-                JikNode *tag = jik_node_new_variant_tag(member->val_member_access.node,
-                                                        member->val_member_access.member_name,
-                                                        nd->context,
-                                                        member->token);
-                *member = *tag;
             }
         }
         else if (nd->type == NODE_EXPR_MEMBER_ACCESS) {
@@ -1345,6 +1353,24 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
         }
     }
     else if (nd->type == NODE_EXPR_VARIANT_TAG_CHECK) {
+        jik_semantic_infer_type(sa, nd->val_variant_tag_check.inst_node);
+        if (!jik_node_is_type_inferred(nd->val_variant_tag_check.inst_node)) {
+            return;
+        }
+        JikType *instance_type = nd->val_variant_tag_check.inst_node->jik_type;
+        jik_diag_fatal_error_if(instance_type->name != TYPE_VARIANT,
+                                "expected variant instance",
+                                jik_token_to_text(nd->val_variant_tag_check.inst_node->token));
+        JikNode *variant = jik_semantic_find_type_declaration(sa, instance_type);
+        assert(variant && variant->type == NODE_VARIANT);
+        nd->val_variant_tag_check.variant_node = variant;
+        jik_diag_fatal_error_if(
+            !TabJikNode_get(variant->val_variant.init_vals,
+                            nd->val_variant_tag_check.tag) &&
+                !TabBool_get(variant->val_variant.payloadless_tags,
+                             nd->val_variant_tag_check.tag),
+            JIK_STRING_NCAT("unknown variant tag \"", nd->val_variant_tag_check.tag, "\""),
+            jik_token_to_text(nd->token));
         nd->jik_type = &JIK_TYPE_BOOL;
     }
     else if (nd->type == NODE_VARIANT_TAG) {
@@ -1364,6 +1390,27 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
                 //     return;
                 // }
                 nd->jik_type = *member_type;
+            }
+            else if (nd->val_member_access.node->jik_type->name == TYPE_VARIANT) {
+                JikNode *variant = jik_semantic_find_type_declaration(
+                    sa, nd->val_member_access.node->jik_type);
+                assert(variant && variant->type == NODE_VARIANT);
+                JikType **payload_type = TabJikType_get(
+                    nd->val_member_access.node->jik_type->val_variant.variant_types,
+                    nd->val_member_access.member_name);
+                jik_diag_fatal_error_if(
+                    !payload_type &&
+                        TabBool_get(variant->val_variant.payloadless_tags,
+                                    nd->val_member_access.member_name),
+                    "variant tag has no payload",
+                    jik_token_to_text(nd->token));
+                jik_diag_fatal_error_if(
+                    !payload_type,
+                    JIK_STRING_NCAT("unknown variant tag \"",
+                                    nd->val_member_access.member_name,
+                                    "\""),
+                    jik_token_to_text(nd->token));
+                nd->jik_type = *payload_type;
             }
             else {
                 jik_diag_fatal_error("member access not supported on this type",
@@ -1387,35 +1434,6 @@ jik_semantic_infer_type(JikSemanticAnalyzer *sa, JikNode *nd)
             else if (nd->val_subscript_get.node->jik_type->name == TYPE_DICT) {
                 nd->jik_type =
                     jik_type_new_option(nd->val_subscript_get.node->jik_type->val_dict.elem_type);
-            }
-            else if (nd->val_subscript_get.expr->type == NODE_VARIANT_TAG) {
-                assert(nd->val_subscript_get.node->jik_type->name == TYPE_VARIANT);
-                JikNode *variant_nd = jik_scope_get_symbol(
-                    nd->context,
-                    nd->val_subscript_get.expr->val_variant_tag.name->val_id.name,
-                    nd->val_subscript_get.expr->val_variant_tag.name->val_id.module_id,
-                    nd->token->module_id);
-                jik_diag_fatal_error_if(
-                    !variant_nd,
-                    JIK_STRING_NCAT("variant \"",
-                                    nd->val_subscript_get.expr->val_variant_tag.name->val_id.name,
-                                    "\" not defined"),
-                    jik_token_to_text(nd->val_subscript_get.expr->token));
-                assert(variant_nd->jik_type->val_variant.variant_types);
-                JikType **t = TabJikType_get(variant_nd->jik_type->val_variant.variant_types,
-                                             nd->val_subscript_get.expr->val_variant_tag.tag);
-                jik_diag_fatal_error_if(
-                    jik_variant_tag_is_payloadless(
-                        variant_nd, nd->val_subscript_get.expr->val_variant_tag.tag),
-                    "variant tag has no payload",
-                    jik_token_to_text(nd->val_subscript_get.expr->token));
-                jik_diag_fatal_error_if(
-                    !t,
-                    JIK_STRING_NCAT("unknown variant tag \"",
-                                    nd->val_subscript_get.expr->val_variant_tag.tag,
-                                    "\""),
-                    jik_token_to_text(nd->val_subscript_get.expr->token));
-                nd->jik_type = *t;
             }
             else {
                 jik_diag_fatal_error("internal error: unhandled subscriptable type", "");
@@ -1542,6 +1560,7 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
             jik_diag_fatal_error_if(match_type->name != TYPE_VARIANT && match_type->name != TYPE_ENUM,
                                     "expected enum or variant instance",
                                     jik_token_to_text(nd->val_match.expr->token));
+            jik_semantic_resolve_match_pattern_owners(sa, nd);
             if (match_type->name == TYPE_ENUM) {
                 VecJikNode_iter enum_case_it = VecJikNode_iter_new(nd->val_match.cases);
                 JikNode        *enum_case_nd;
@@ -1557,20 +1576,25 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
             JikNode        *case_nd;
             while (VecJikNode_iter_next(&case_it, &case_nd)) {
                 JikNode *pattern = case_nd->val_case.variant;
-                JikNode *s = jik_scope_get_symbol(
-                    nd->context,
-                    pattern->val_variant_new.name->val_id.name,
-                    pattern->val_variant_new.name->val_id.module_id,
-                    nd->token->module_id);
-                jik_diag_fatal_error_if(!s || !jik_type_equal(s->jik_type, match_type),
-                                        JIK_STRING_NCAT("wrong variant type: expected ",
-                                                        jik_type_pretty_name(match_type)),
-                                        jik_token_to_text(pattern->token));
                 assert(match_type->val_variant.variant_types);
                 JikType **expr_type =
                     TabJikType_get(match_type->val_variant.variant_types,
                                    pattern->val_variant_new.tag);
                 if (!expr_type) {
+                    bool payloadless = TabBool_get(
+                                           pattern->val_variant_new.variant_node
+                                               ->val_variant.payloadless_tags,
+                                           pattern->val_variant_new.tag) != NULL;
+                    jik_diag_fatal_error_if(
+                        payloadless && pattern->val_variant_new.has_initializer_syntax,
+                        "variant tag has no payload",
+                        jik_token_to_text(pattern->token));
+                    jik_diag_fatal_error_if(
+                        !payloadless,
+                        JIK_STRING_NCAT("unknown variant tag \"",
+                                        pattern->val_variant_new.tag,
+                                        "\""),
+                        jik_token_to_text(pattern->token));
                     continue;
                 }
                 // jik_diag_fatal_error_if(!expr_type, JIK_STRING_NCAT("wrong variant type: expected
@@ -1701,11 +1725,18 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
         }
         else if (nd->type == NODE_STMNT_MEMBER_SET) {
             JikNode *node = nd->val_member_set.node;
-            if (!jik_node_is_type_inferred(node) || node->jik_type->name != TYPE_STRUCT) {
+            if (!jik_node_is_type_inferred(node)) {
                 continue;
             }
-            JikType **field_type = TabJikType_get(node->jik_type->val_struct.field_types,
-                                                  nd->val_member_set.member_name);
+            JikType **field_type = NULL;
+            if (node->jik_type->name == TYPE_STRUCT) {
+                field_type = TabJikType_get(node->jik_type->val_struct.field_types,
+                                            nd->val_member_set.member_name);
+            }
+            else if (node->jik_type->name == TYPE_VARIANT) {
+                field_type = TabJikType_get(node->jik_type->val_variant.variant_types,
+                                            nd->val_member_set.member_name);
+            }
             if (field_type) {
                 jik_semantic_apply_option_context(nd->val_member_set.expr, *field_type);
             }
@@ -1722,15 +1753,6 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
             else if (node->jik_type->name == TYPE_DICT) {
                 jik_semantic_apply_option_context(nd->val_subscript_set.expr,
                                                   node->jik_type->val_dict.elem_type);
-            }
-            else if (node->jik_type->name == TYPE_VARIANT &&
-                     nd->val_subscript_set.sub_expr->type == NODE_VARIANT_TAG) {
-                JikType **active_type =
-                    TabJikType_get(node->jik_type->val_variant.variant_types,
-                                   nd->val_subscript_set.sub_expr->val_variant_tag.tag);
-                if (active_type) {
-                    jik_semantic_apply_option_context(nd->val_subscript_set.expr, *active_type);
-                }
             }
         }
     }
@@ -2495,6 +2517,12 @@ jik_semantic_post_infer_actions(JikSemanticAnalyzer *sa)
                 VecString_push(nd->val_variant.enum_nd->val_enum.enumerator_order,
                                VecString_get(nd->val_variant.member_order, i));
             }
+        }
+    }
+    it = VecJikNode_iter_new(sa->nodes);
+    while (VecJikNode_iter_next(&it, &nd)) {
+        if (nd->type == NODE_STMNT_MATCH) {
+            jik_semantic_resolve_match_pattern_owners(sa, nd);
         }
     }
 }

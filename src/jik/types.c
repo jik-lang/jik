@@ -361,7 +361,7 @@ bool
 jik_type_is_subscriptable(JikType *t)
 {
     return jik_type_is_one_of(
-        t, (JikTypeName[]){TYPE_VECTOR, TYPE_STRING, TYPE_DICT, TYPE_VARIANT, TYPE_NOTYPE});
+        t, (JikTypeName[]){TYPE_VECTOR, TYPE_STRING, TYPE_DICT, TYPE_NOTYPE});
 }
 
 bool

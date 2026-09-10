@@ -39,23 +39,23 @@ func test_imports_and_function(ts):
     test::suite_assert(ts, second_import.alias is None, site())
 
     function_nd := parsed.ast.nodes[module.declarations[0]]
-    test::suite_assert(ts, function_nd.kind is ast::NodeKind.FUNCTION_DECL, site())
-    function := function_nd.kind[ast::NodeKind.FUNCTION_DECL]
+    test::suite_assert(ts, function_nd.kind is FUNCTION_DECL, site())
+    function := function_nd.kind.FUNCTION_DECL
     test::suite_assert(ts, function.name == "main", site())
     test::suite_assert(ts, len(function.body) == 1, site())
 
     declaration_nd := parsed.ast.nodes[function.body[0]]
-    test::suite_assert(ts, declaration_nd.kind is ast::NodeKind.LOCAL_DECL, site())
-    declaration := declaration_nd.kind[ast::NodeKind.LOCAL_DECL]
+    test::suite_assert(ts, declaration_nd.kind is LOCAL_DECL, site())
+    declaration := declaration_nd.kind.LOCAL_DECL
     test::suite_assert(ts, declaration.name == "answer", site())
 
-    outer := parsed.ast.nodes[declaration.initializer].kind[ast::NodeKind.BINARY]
+    outer := parsed.ast.nodes[declaration.initializer].kind.BINARY
     test::suite_assert(ts, outer.op == ast::BinaryOp.PLUS, site())
-    test::suite_assert(ts, parsed.ast.nodes[outer.right].kind is ast::NodeKind.INTEGER_LITERAL, site())
-    inner := parsed.ast.nodes[outer.left].kind[ast::NodeKind.BINARY]
+    test::suite_assert(ts, parsed.ast.nodes[outer.right].kind is INTEGER_LITERAL, site())
+    inner := parsed.ast.nodes[outer.left].kind.BINARY
     test::suite_assert(ts, inner.op == ast::BinaryOp.PLUS, site())
-    test::suite_assert(ts, parsed.ast.nodes[inner.left].kind is ast::NodeKind.INTEGER_LITERAL, site())
-    test::suite_assert(ts, parsed.ast.nodes[inner.right].kind is ast::NodeKind.INTEGER_LITERAL, site())
+    test::suite_assert(ts, parsed.ast.nodes[inner.left].kind is INTEGER_LITERAL, site())
+    test::suite_assert(ts, parsed.ast.nodes[inner.right].kind is INTEGER_LITERAL, site())
 end
 
 
@@ -65,11 +65,11 @@ func test_statement_recovery(ts):
 
     module := ast::get_root_module(parsed.ast)
     test::suite_assert(ts, len(module.declarations) == 1, site())
-    function := parsed.ast.nodes[module.declarations[0]].kind[ast::NodeKind.FUNCTION_DECL]
+    function := parsed.ast.nodes[module.declarations[0]].kind.FUNCTION_DECL
     test::suite_assert(ts, len(function.body) == 2, site())
 
-    first := parsed.ast.nodes[function.body[0]].kind[ast::NodeKind.LOCAL_DECL]
-    second := parsed.ast.nodes[function.body[1]].kind[ast::NodeKind.LOCAL_DECL]
+    first := parsed.ast.nodes[function.body[0]].kind.LOCAL_DECL
+    second := parsed.ast.nodes[function.body[1]].kind.LOCAL_DECL
     test::suite_assert(ts, first.name == "first", site())
     test::suite_assert(ts, second.name == "second", site())
 end

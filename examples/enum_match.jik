@@ -8,11 +8,11 @@ end
 
 func wait_seconds(light: TrafficLight) -> int:
     match light:
-        case TrafficLight.RED:
+        case RED:
             return 30
-        case TrafficLight.YELLOW:
+        case YELLOW:
             return 3
-        case TrafficLight.GREEN:
+        case GREEN:
             return 0
     end
 end

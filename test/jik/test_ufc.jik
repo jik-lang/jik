@@ -32,14 +32,14 @@ func advance(t: shapes::Token, amount: int) -> shapes::Token:
 end
 
 func increment(n: Number, amount: int) -> Number:
-    if n is Number.VALUE:
-        n[Number.VALUE] += amount
+    if n is VALUE:
+        n.VALUE += amount
     end
     return n
 end
 
 func number_value(n: Number) -> int:
-    return n[Number.VALUE]
+    return n.VALUE
 end
 
 func increase(r: shapes::Reading, amount: int) -> shapes::Reading:

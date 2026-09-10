@@ -123,10 +123,10 @@ end
 func test_copy_variant_simple_payloads(ts):
     msg := make_copied_variant(true, _)
     ok := make_copied_variant(false, _)
-    test::suite_assert(ts, msg is CopyResult.MSG, site())
-    test::suite_assert(ts, msg[CopyResult.MSG] == "message", site())
-    test::suite_assert(ts, ok is CopyResult.OK, site())
-    test::suite_assert(ts, ok[CopyResult.OK] == 7, site())
+    test::suite_assert(ts, msg is MSG, site())
+    test::suite_assert(ts, msg.MSG == "message", site())
+    test::suite_assert(ts, ok is OK, site())
+    test::suite_assert(ts, ok.OK == 7, site())
 end
 
 func test_copy_struct_simple_fields(ts):

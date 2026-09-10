@@ -512,15 +512,9 @@ jik_parser_parse_is(JikParser *p)
         jik_parser_eat_token(p, TOK_KWD_NONE);
         return jik_node_new_option_is(left, false, jik_parser_current_context(p), tok);
     }
-    // JikToken *id_tok = jik_parser_eat_token(p, TOK_ID);
-    JikNode *nd_id = jik_parser_parse_atom(p);
-    jik_diag_fatal_error_if(nd_id->type != NODE_EXPR_IDENTIFIER,
-                            "expected identifier",
-                            jik_token_to_text(nd_id->token));
-    jik_parser_eat_token(p, TOK_DOT);
-    JikToken *id_tok = jik_parser_eat_token(p, TOK_ID);
+    JikToken *tag_tok = jik_parser_eat_token(p, TOK_ID);
     return jik_node_new_variant_tag_check(
-        left, nd_id, id_tok->lexeme, jik_parser_current_context(p), tok);
+        left, tag_tok->lexeme, jik_parser_current_context(p), tok);
 }
 
 static JikNode *
@@ -911,25 +905,26 @@ jik_parser_parse_match(JikParser *p)
     JikNode    *match = jik_node_new_match(NULL, NULL, jik_parser_current_context(p), tok);
     while (curr->type == TOK_KWD_CASE) {
         jik_parser_eat_token(p, TOK_KWD_CASE);
-        JikNode *var_tag = jik_parser_parse_atom(p);
-        if (var_tag->type == NODE_EXPR_IDENTIFIER &&
-            jik_parser_current_token(p)->type == TOK_DOT) {
-            jik_parser_eat_token(p, TOK_DOT);
-            JikToken *tag_tok = jik_parser_eat_token(p, TOK_ID);
-            var_tag = jik_node_new_variant_new(var_tag,
-                                               NULL,
-                                               tag_tok->lexeme,
-                                               jik_parser_current_context(p),
-                                               tag_tok);
+        JikToken *tag_tok = jik_parser_eat_token(p, TOK_ID);
+        JikNode *binding = NULL;
+        bool     has_initializer_syntax = false;
+        if (jik_parser_current_token(p)->type == TOK_LCURL) {
+            has_initializer_syntax = true;
+            jik_parser_eat_token(p, TOK_LCURL);
+            if (jik_parser_current_token(p)->type != TOK_RCURL) {
+                binding = jik_parser_parse_expr(p);
+            }
+            jik_parser_eat_token(p, TOK_RCURL);
         }
-        jik_diag_fatal_error_if(
-            var_tag->type != NODE_EXPR_VARIANT_NEW,
-            "expected qualified enum or variant case",
-            jik_token_to_text(curr));
-        if (var_tag->val_variant_new.init_expr &&
-            var_tag->val_variant_new.init_expr->type != NODE_EXPR_IDENTIFIER) {
+        JikNode *var_tag = jik_node_new_variant_new(NULL,
+                                                    binding,
+                                                    tag_tok->lexeme,
+                                                    jik_parser_current_context(p),
+                                                    tag_tok);
+        var_tag->val_variant_new.has_initializer_syntax = has_initializer_syntax;
+        if (binding && binding->type != NODE_EXPR_IDENTIFIER) {
             jik_diag_fatal_error("expected identifier",
-                                 jik_token_to_text(var_tag->val_variant_new.init_expr->token));
+                                 jik_token_to_text(binding->token));
         }
         jik_parser_eat_token(p, TOK_COLON);
         jik_parser_eat_newlines(p);

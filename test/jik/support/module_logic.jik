@@ -10,11 +10,11 @@ end
 
 func message_name(msg: defs::Message, r: Region) -> String:
     match msg:
-        case defs::Message.PERSON{p}:
+        case PERSON{p}:
             return p.name
-        case defs::Message.TEXT{text}:
+        case TEXT{text}:
             return text
-        case defs::Message.NONE{}:
+        case NONE{}:
             return defs::fallback_name(r)
     end
 end

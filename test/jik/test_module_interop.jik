@@ -30,7 +30,7 @@ func test_module_interop_variant(ts):
     text := shapes::Message.TEXT{"hello"}
     empty := shapes::Message.NONE{}
 
-    test::suite_assert(ts, msg is shapes::Message.PERSON, site())
+    test::suite_assert(ts, msg is PERSON, site())
     test::suite_assert(ts, logic::message_name(msg, _) == "foo", site())
     test::suite_assert(ts, logic::message_name(text, _) == "hello", site())
     test::suite_assert(ts, logic::message_name(empty, _) == shapes::fallback_name(_), site())

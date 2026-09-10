@@ -293,7 +293,6 @@ typedef struct JikNode {
         struct {
             char           *tag;
             struct JikNode *inst_node;
-            struct JikNode *id_node;
             // metadata
             struct JikNode *variant_node;
         } val_variant_tag_check;
@@ -630,11 +629,7 @@ jik_node_new_variant_new(JikNode  *name,
                          JikScope *ctx,
                          JikToken *tok);
 JikNode *
-jik_node_new_variant_tag_check(JikNode  *inst_node,
-                               JikNode  *id_node,
-                               char     *tag,
-                               JikScope *ctx,
-                               JikToken *tok);
+jik_node_new_variant_tag_check(JikNode *inst_node, char *tag, JikScope *ctx, JikToken *tok);
 JikNode *
 jik_node_new_case(JikNode *variant, JikNode *body, JikNode *match, JikScope *ctx, JikToken *tok);
 JikNode *

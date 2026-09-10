@@ -31,7 +31,7 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
     kind := node.kind
     append_indent(sb, depth)
 
-    if kind is ast::NodeKind.MODULE:
+    if kind is MODULE:
         sb.append("MODULE #")
         append_int(sb, id)
         sb.append(" [")
@@ -39,15 +39,15 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         sb.append("..")
         append_int(sb, node.span.stop)
         sb.append(")\n")
-        module := kind[ast::NodeKind.MODULE]
+        module := kind.MODULE
         for import in module.imports:
             format_node(ast, import, depth + 1, sb)
         end
         for declaration in module.declarations:
             format_node(ast, declaration, depth + 1, sb)
         end
-    elif kind is ast::NodeKind.IMPORT:
-        import := kind[ast::NodeKind.IMPORT]
+    elif kind is IMPORT:
+        import := kind.IMPORT
         sb.append("IMPORT #")
         append_int(sb, id)
         sb.append(" path=\"")
@@ -59,8 +59,8 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
             sb.append("\"")
         end
         sb.append("\n")
-    elif kind is ast::NodeKind.FUNCTION_DECL:
-        function := kind[ast::NodeKind.FUNCTION_DECL]
+    elif kind is FUNCTION_DECL:
+        function := kind.FUNCTION_DECL
         sb.append("FUNCTION #")
         append_int(sb, id)
         sb.append(" name=")
@@ -69,15 +69,15 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         for statement in function.body:
             format_node(ast, statement, depth + 1, sb)
         end
-    elif kind is ast::NodeKind.LOCAL_DECL:
-        declaration := kind[ast::NodeKind.LOCAL_DECL]
+    elif kind is LOCAL_DECL:
+        declaration := kind.LOCAL_DECL
         sb.append("DECLARE #")
         append_int(sb, id)
         sb.append(" name=")
         sb.append(declaration.name)
         sb.append("\n")
         format_node(ast, declaration.initializer, depth + 1, sb)
-    elif kind is ast::NodeKind.INTEGER_LITERAL:
+    elif kind is INTEGER_LITERAL:
         sb.append("INTEGER #")
         append_int(sb, id)
         sb.append(" [")
@@ -85,8 +85,8 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         sb.append("..")
         append_int(sb, node.span.stop)
         sb.append(")\n")
-    elif kind is ast::NodeKind.BINARY:
-        binary := kind[ast::NodeKind.BINARY]
+    elif kind is BINARY:
+        binary := kind.BINARY
         sb.append("BINOP #")
         append_int(sb, id)
         sb.append(" ")

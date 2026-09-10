@@ -98,13 +98,13 @@ end
 
 
 func add_import(p: Parser, id: int) -> void:
-    module := p.ast.nodes[p.ast.root].kind[ast::NodeKind.MODULE]
+    module := p.ast.nodes[p.ast.root].kind.MODULE
     module.imports.push(id)
 end
 
 
 func add_function(p: Parser, id: int) -> void:
-    module := p.ast.nodes[p.ast.root].kind[ast::NodeKind.MODULE]
+    module := p.ast.nodes[p.ast.root].kind.MODULE
     module.declarations.push(id)
 end
 

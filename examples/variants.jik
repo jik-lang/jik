@@ -22,17 +22,17 @@ func compute(op, x, y, r):
 end
 
 func is_done(res: CalcResult) -> bool:
-    return res is CalcResult.END
+    return res is END
 end
 
 func show_result(res):
     match res:
-        case CalcResult.OK{v}:
+        case OK{v}:
             print("ok: ", v, "\n")
-        case CalcResult.ERR{msg}:
+        case ERR{msg}:
             print("error: ", msg)
             print("\n")
-        case CalcResult.END:
+        case END:
             println("calculation finished")
     end
 end

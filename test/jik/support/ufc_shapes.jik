@@ -17,12 +17,12 @@ variant Reading:
 end
 
 func increase(r: Reading, amount: int) -> Reading:
-    if r is Reading.VALUE:
-        r[Reading.VALUE] += amount
+    if r is VALUE:
+        r.VALUE += amount
     end
     return r
 end
 
 func reading_value(r: Reading) -> int:
-    return r[Reading.VALUE]
+    return r.VALUE
 end

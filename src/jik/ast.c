@@ -692,17 +692,12 @@ jik_node_new_variant_new(JikNode *name, JikNode *init_expr, char *tag, JikScope 
 }
 
 JikNode *
-jik_node_new_variant_tag_check(JikNode  *inst_node,
-                               JikNode  *id_node,
-                               char     *tag,
-                               JikScope *ctx,
-                               JikToken *tok)
+jik_node_new_variant_tag_check(JikNode *inst_node, char *tag, JikScope *ctx, JikToken *tok)
 {
     JikNode *nd                         = (JikNode *)jik_alloc(sizeof(JikNode));
     nd->jik_type                        = jik_type_new(TYPE_UNKNOWN);
     nd->type                            = NODE_EXPR_VARIANT_TAG_CHECK;
     nd->val_variant_tag_check.tag       = tag;
-    nd->val_variant_tag_check.id_node   = id_node;
     nd->val_variant_tag_check.inst_node = inst_node;
     nd->context                         = ctx;
     nd->token                           = tok;
@@ -1076,7 +1071,9 @@ jik_node_print(JikNode *nd, size_t level)
     else if (nd->type == NODE_EXPR_VARIANT_NEW) {
         printf("<%s, type=", NODE_STRINGS[nd->type]);
         jik_type_print(nd->jik_type);
-        jik_node_print(nd->val_variant_new.name, level + 1);
+        if (nd->val_variant_new.name) {
+            jik_node_print(nd->val_variant_new.name, level + 1);
+        }
         if (nd->val_variant_new.init_expr) {
             jik_node_print(nd->val_variant_new.init_expr, level + 1);
         }

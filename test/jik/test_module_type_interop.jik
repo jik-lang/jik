@@ -29,11 +29,11 @@ func test_cross_module_variant_payloads(ts):
     maybe_view := logic::make_view(3, _)
     payload_view := logic::make_view(4, _)
 
-    test::suite_assert(ts, rec_view is records::RecordView.RECORD, site())
-    test::suite_assert(ts, pts_view is records::RecordView.POINTS, site())
-    test::suite_assert(ts, idx_view is records::RecordView.INDEX, site())
-    test::suite_assert(ts, maybe_view is records::RecordView.MAYBE_POINT, site())
-    test::suite_assert(ts, payload_view is records::RecordView.PAYLOAD, site())
+    test::suite_assert(ts, rec_view is RECORD, site())
+    test::suite_assert(ts, pts_view is POINTS, site())
+    test::suite_assert(ts, idx_view is INDEX, site())
+    test::suite_assert(ts, maybe_view is MAYBE_POINT, site())
+    test::suite_assert(ts, payload_view is PAYLOAD, site())
 
     test::suite_assert(ts, logic::view_score(rec_view) == 27, site())
     test::suite_assert(ts, logic::view_score(pts_view) == 7, site())
@@ -53,8 +53,8 @@ func test_cross_module_type_construction(ts):
         payload=label
     }
 
-    test::suite_assert(ts, rec.payload is base::Payload.LABEL, site())
-    test::suite_assert(ts, rec.payload[base::Payload.LABEL] == "done", site())
+    test::suite_assert(ts, rec.payload is LABEL, site())
+    test::suite_assert(ts, rec.payload.LABEL == "done", site())
     test::suite_assert(ts, rec.backup is None, site())
     test::suite_assert(ts, rec.trail[0].y == 34, site())
     test::suite_assert(ts, rec.by_name["main"]?.x == 21, site())

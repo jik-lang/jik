@@ -331,6 +331,21 @@ jik_check_types(VecJikNode *nodes)
                                     jik_type_pretty_name(nd->val_member_set.expr->jik_type)),
                     jik_token_to_text(nd->token));
             }
+            else if (node_type->name == TYPE_VARIANT) {
+                JikType **req_type = TabJikType_get(node_type->val_variant.variant_types,
+                                                    member_name);
+                jik_diag_fatal_error_if(
+                    req_type == NULL,
+                    "variant tag has no payload",
+                    jik_token_to_text(nd->token));
+                jik_diag_fatal_error_if(
+                    !jik_type_equal(*req_type, nd->val_member_set.expr->jik_type),
+                    JIK_STRING_NCAT("type mismatch: required ",
+                                    jik_type_pretty_name(*req_type),
+                                    ", got ",
+                                    jik_type_pretty_name(nd->val_member_set.expr->jik_type)),
+                    jik_token_to_text(nd->token));
+            }
         }
         else if (nd->type == NODE_EXPR_CALL) {
             bool reg_inject          = call_requires_region_injection(nd);
@@ -642,10 +657,9 @@ jik_check_types(VecJikNode *nodes)
                 JikNode *case_nd = VecJikNode_get(nd->val_match.cases, i);
                 JikNode *pattern = case_nd->val_case.variant;
                 char    *tag     = pattern->val_variant_new.tag;
+                JikNode *owner   = pattern->val_variant_new.variant_node;
                 if (match_type->name == TYPE_ENUM) {
-                    JikNode *owner = pattern->val_variant_new.name;
-                    JikNode *enum_nd = jik_scope_get_symbol(
-                        nd->context, owner->val_id.name, owner->val_id.module_id, nd->token->module_id);
+                    JikNode *enum_nd = owner;
                     jik_diag_fatal_error_if(!enum_nd || enum_nd->type != NODE_ENUM,
                                             JIK_STRING_NCAT("expected enum case for ", type_name),
                                             jik_token_to_text(pattern->token));
@@ -661,6 +675,28 @@ jik_check_types(VecJikNode *nodes)
                     jik_diag_fatal_error_if(
                         !TabBool_get(enum_nd->val_enum.enumerators, tag),
                         JIK_STRING_NCAT("unknown enum member in match for ", type_name, ": ", tag),
+                        jik_token_to_text(pattern->token));
+                }
+                else {
+                    jik_diag_fatal_error_if(!owner || owner->type != NODE_VARIANT,
+                                            JIK_STRING_NCAT("expected variant case for ", type_name),
+                                            jik_token_to_text(pattern->token));
+                    jik_diag_fatal_error_if(!jik_type_equal(owner->jik_type, match_type),
+                                            JIK_STRING_NCAT("wrong variant type: expected ",
+                                                            type_name,
+                                                            ", got ",
+                                                            jik_type_pretty_name(owner->jik_type)),
+                                            jik_token_to_text(pattern->token));
+                    bool payloadless =
+                        TabBool_get(owner->val_variant.payloadless_tags, tag) != NULL;
+                    jik_diag_fatal_error_if(
+                        payloadless && pattern->val_variant_new.has_initializer_syntax,
+                        "variant tag has no payload",
+                        jik_token_to_text(pattern->token));
+                    jik_diag_fatal_error_if(
+                        !payloadless &&
+                            !TabJikNode_get(owner->val_variant.init_vals, tag),
+                        JIK_STRING_NCAT("unknown variant tag \"", tag, "\""),
                         jik_token_to_text(pattern->token));
                 }
                 bool *res = TabBool_get(seen_tags, tag);
@@ -679,9 +715,7 @@ jik_check_types(VecJikNode *nodes)
                     continue;
                 }
                 JikNode *first_case = VecJikNode_get(nd->val_match.cases, 0);
-                JikNode *owner      = first_case->val_case.variant->val_variant_new.name;
-                JikNode *enum_nd = jik_scope_get_symbol(
-                    nd->context, owner->val_id.name, owner->val_id.module_id, nd->token->module_id);
+                JikNode *enum_nd = first_case->val_case.variant->val_variant_new.variant_node;
                 assert(enum_nd && enum_nd->type == NODE_ENUM);
                 jik_check_match_exhaustiveness("enum",
                                                 type_name,
@@ -695,9 +729,7 @@ jik_check_types(VecJikNode *nodes)
             }
             JikNode *first_case = VecJikNode_get(nd->val_match.cases, 0);
             JikNode *pattern    = first_case->val_case.variant;
-            JikNode *owner      = pattern->val_variant_new.name;
-            JikNode *variant_nd = jik_scope_get_symbol(
-                nd->context, owner->val_id.name, owner->val_id.module_id, nd->token->module_id);
+            JikNode *variant_nd = pattern->val_variant_new.variant_node;
             assert(variant_nd && variant_nd->type == NODE_VARIANT);
             jik_check_match_exhaustiveness("variant",
                                             type_name,
@@ -711,25 +743,16 @@ jik_check_types(VecJikNode *nodes)
             }
         }
         else if (nd->type == NODE_EXPR_VARIANT_TAG_CHECK) {
-            JikNode *s = jik_scope_get_symbol(nd->context,
-                                              nd->val_variant_tag_check.id_node->val_id.name,
-                                              nd->val_variant_tag_check.id_node->val_id.module_id,
-                                              nd->token->module_id);
-            jik_diag_fatal_error_if(s->type != NODE_VARIANT,
-                                    JIK_STRING_NCAT("expected variant"),
+            JikNode *s = nd->val_variant_tag_check.variant_node;
+            jik_diag_fatal_error_if(!s || s->type != NODE_VARIANT,
+                                    "expected variant",
                                     jik_token_to_text(nd->token));
-            jik_diag_fatal_error_if(!s,
-                                    JIK_STRING_NCAT("variant \"",
-                                                    nd->val_variant_tag_check.id_node->val_id.name,
-                                                    "\" not defined"),
-                                    jik_token_to_text(nd->val_variant_tag_check.id_node->token));
-            nd->val_variant_tag_check.variant_node = s;
             JikNode **res = TabJikNode_get(s->val_variant.init_vals, nd->val_variant_tag_check.tag);
             jik_diag_fatal_error_if(
                 !res && !TabBool_get(s->val_variant.payloadless_tags,
                                      nd->val_variant_tag_check.tag),
                 JIK_STRING_NCAT("unknown variant tag \"", nd->val_variant_tag_check.tag, "\""),
-                jik_token_to_text(nd->val_variant_tag_check.id_node->token));
+                jik_token_to_text(nd->token));
         }
         else if (nd->type == NODE_STMNT_RETURN && nd->val_return.expr) {
             jik_diag_fatal_error_if(nd->val_return.expr->jik_type == &JIK_TYPE_VOID,

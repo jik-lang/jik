@@ -17,9 +17,9 @@ end
 func _test_match_01(ts, x, y):
     t := foo(x, y, ts)
     match t:
-        case Result.OK{v}:
+        case OK{v}:
             test::suite_assert(ts, v == x, site())
-        case Result.ERR{v}:
+        case ERR{v}:
             test::suite_assert(ts, false, site())
     end
 end
@@ -28,9 +28,9 @@ end
 func _test_match_02(ts, x, y):
     t := foo(x, y, ts)
     match t:
-        case Result.OK{v}:
+        case OK{v}:
             test::suite_assert(ts, false, site())
-        case Result.ERR{v}:
+        case ERR{v}:
             test::suite_assert(ts, v == "foo by 0", site())
     end
 end
@@ -46,7 +46,7 @@ func test_var_other(ts):
     result := foo(1, 0, ts)
     handled := false
     match result:
-        case Result.OK{value}:
+        case OK{value}:
             test::suite_assert(ts, false, site())
         other:
             handled = true
@@ -64,48 +64,48 @@ end
 
 func test_var_02(ts):
     n1 := Node.INTEGER{1}
-    test::suite_assert(ts, n1 is Node.INTEGER, site())
-    test::suite_assert(ts, n1[Node.INTEGER] == 1, site())
+    test::suite_assert(ts, n1 is INTEGER, site())
+    test::suite_assert(ts, n1.INTEGER == 1, site())
 
     n1 = Node.INTEGER{2}
-    test::suite_assert(ts, n1 is Node.INTEGER, site())
-    test::suite_assert(ts, n1[Node.INTEGER] == 2, site())
+    test::suite_assert(ts, n1 is INTEGER, site())
+    test::suite_assert(ts, n1.INTEGER == 2, site())
 
     n1 = Node.NUMS{[3 of 5]}
-    test::suite_assert(ts, n1 is Node.NUMS, site())
-    test::suite_assert(ts, len(n1[Node.NUMS]) == 3, site())
-    test::suite_assert(ts, n1[Node.NUMS][0] == 5, site())
-    test::suite_assert(ts, n1[Node.NUMS][1] == 5, site())
-    test::suite_assert(ts, n1[Node.NUMS][2] == 5, site())
+    test::suite_assert(ts, n1 is NUMS, site())
+    test::suite_assert(ts, len(n1.NUMS) == 3, site())
+    test::suite_assert(ts, n1.NUMS[0] == 5, site())
+    test::suite_assert(ts, n1.NUMS[1] == 5, site())
+    test::suite_assert(ts, n1.NUMS[2] == 5, site())
 end
 
 
 func test_var_03(ts):
     nodes := [Node.NUMS{[1 of 1]}, Node.INTEGER{2}, Node.STRING{"foo"}]
-    test::suite_assert(ts, nodes[0] is Node.NUMS, site())
-    test::suite_assert(ts, nodes[0][Node.NUMS][0] == 1, site())
-    test::suite_assert(ts, nodes[1] is Node.INTEGER, site())
-    test::suite_assert(ts, nodes[1][Node.INTEGER] == 2, site())
-    test::suite_assert(ts, nodes[2][Node.STRING] == "foo", site())
+    test::suite_assert(ts, nodes[0] is NUMS, site())
+    test::suite_assert(ts, nodes[0].NUMS[0] == 1, site())
+    test::suite_assert(ts, nodes[1] is INTEGER, site())
+    test::suite_assert(ts, nodes[1].INTEGER == 2, site())
+    test::suite_assert(ts, nodes[2].STRING == "foo", site())
 end
 
 
 func test_var_04(ts):
     n := Node.INTEGER{}
-    test::suite_assert(ts, n is Node.INTEGER, site())
-    test::suite_assert(ts, n[Node.INTEGER] == 0, site())
-    n[Node.INTEGER] = 1
-    test::suite_assert(ts, n[Node.INTEGER] == 1, site())
+    test::suite_assert(ts, n is INTEGER, site())
+    test::suite_assert(ts, n.INTEGER == 0, site())
+    n.INTEGER = 1
+    test::suite_assert(ts, n.INTEGER == 1, site())
 
     n = Node.NUMS{}
-    test::suite_assert(ts, n is Node.NUMS, site())
-    test::suite_assert(ts, len(n[Node.NUMS]) == 0, site())
-    n[Node.NUMS] = [1, 2]
-    push(n[Node.NUMS], 3)
-    test::suite_assert(ts, len(n[Node.NUMS]) == 3, site())
+    test::suite_assert(ts, n is NUMS, site())
+    test::suite_assert(ts, len(n.NUMS) == 0, site())
+    n.NUMS = [1, 2]
+    push(n.NUMS, 3)
+    test::suite_assert(ts, len(n.NUMS) == 3, site())
 
     n = Node.RESULT{}
-    test::suite_assert(ts, n[Node.RESULT] is Result.OK, site())
+    test::suite_assert(ts, n.RESULT is OK, site())
 
 end
 
@@ -119,17 +119,17 @@ end
 
 func test_var_05(ts):
     t1 := Fubar{x=Node.NUMS{}}
-    test::suite_assert(ts, t1.x is Node.NUMS, site())
-    test::suite_assert(ts, len(t1.x[Node.NUMS]) == 0, site())
-    t1.x[Node.NUMS] = [1, 2, 3]
-    test::suite_assert(ts, len(t1.x[Node.NUMS]) == 3, site())
-    test::suite_assert(ts, t1.x[Node.NUMS][0] == 1, site())
-    test::suite_assert(ts, t1.x[Node.NUMS][1] == 2, site())
-    test::suite_assert(ts, t1.x[Node.NUMS][2] == 3, site())
+    test::suite_assert(ts, t1.x is NUMS, site())
+    test::suite_assert(ts, len(t1.x.NUMS) == 0, site())
+    t1.x.NUMS = [1, 2, 3]
+    test::suite_assert(ts, len(t1.x.NUMS) == 3, site())
+    test::suite_assert(ts, t1.x.NUMS[0] == 1, site())
+    test::suite_assert(ts, t1.x.NUMS[1] == 2, site())
+    test::suite_assert(ts, t1.x.NUMS[2] == 3, site())
 
     t1.x = Node.RESULT{Result.ERR{"error"}}
-    test::suite_assert(ts, t1.x is Node.RESULT, site())
-    test::suite_assert(ts, t1.x[Node.RESULT][Result.ERR] == "error", site())
+    test::suite_assert(ts, t1.x is RESULT, site())
+    test::suite_assert(ts, t1.x.RESULT.ERR == "error", site())
 
 end
 
@@ -146,18 +146,18 @@ end
 
 func test_var_06(ts):
     e := Expr.BINOP{Binop{left=Some{Expr.INTEGER{}}, right=Some{Expr.INTEGER{}}}}
-    test::suite_assert(ts, e is Expr.BINOP, site())
-    test::suite_assert(ts, e[Expr.BINOP].left is Some, site())
-    test::suite_assert(ts, e[Expr.BINOP].right is Some, site())
-    test::suite_assert(ts, e[Expr.BINOP].left? is Expr.INTEGER, site())
-    test::suite_assert(ts, e[Expr.BINOP].right? is Expr.INTEGER, site())
-    test::suite_assert(ts, e[Expr.BINOP].left?[Expr.INTEGER] == 0, site())
-    test::suite_assert(ts, e[Expr.BINOP].right?[Expr.INTEGER] == 0, site())
+    test::suite_assert(ts, e is BINOP, site())
+    test::suite_assert(ts, e.BINOP.left is Some, site())
+    test::suite_assert(ts, e.BINOP.right is Some, site())
+    test::suite_assert(ts, e.BINOP.left? is INTEGER, site())
+    test::suite_assert(ts, e.BINOP.right? is INTEGER, site())
+    test::suite_assert(ts, e.BINOP.left?.INTEGER == 0, site())
+    test::suite_assert(ts, e.BINOP.right?.INTEGER == 0, site())
 
-    e[Expr.BINOP].left = Some{Expr.INTEGER{2}}
-    e[Expr.BINOP].right = Some{Expr.INTEGER{5}}
-    test::suite_assert(ts, e[Expr.BINOP].left?[Expr.INTEGER] == 2, site())
-    test::suite_assert(ts, e[Expr.BINOP].right?[Expr.INTEGER] == 5, site())
+    e.BINOP.left = Some{Expr.INTEGER{2}}
+    e.BINOP.right = Some{Expr.INTEGER{5}}
+    test::suite_assert(ts, e.BINOP.left?.INTEGER == 2, site())
+    test::suite_assert(ts, e.BINOP.right?.INTEGER == 5, site())
 end
 
 variant Token:
@@ -171,28 +171,73 @@ end
 
 func test_var_07(ts):
     eof := Token.EOF{}
-    test::suite_assert(ts, eof is Token.EOF, site())
+    test::suite_assert(ts, eof is EOF, site())
 
     match eof:
-        case Token.INTEGER{value}:
+        case INTEGER{value}:
             test::suite_assert(ts, false, site())
-        case Token.EOF:
+        case EOF:
             test::suite_assert(ts, true, site())
     end
 
     tokens := [Token.EOF{}, Token.INTEGER{42}]
-    test::suite_assert(ts, tokens[0] is Token.EOF, site())
-    test::suite_assert(ts, tokens[1][Token.INTEGER] == 42, site())
+    test::suite_assert(ts, tokens[0] is EOF, site())
+    test::suite_assert(ts, tokens[1].INTEGER == 42, site())
 
     holder := TokenHolder{}
     holder.token = Token.EOF{}[.holder]
-    test::suite_assert(ts, holder.token is Token.EOF, site())
+    test::suite_assert(ts, holder.token is EOF, site())
 
     holder.token = make_eof(.holder)
-    test::suite_assert(ts, holder.token is Token.EOF, site())
+    test::suite_assert(ts, holder.token is EOF, site())
 
     copied := copy(eof, _)
-    test::suite_assert(ts, copied is Token.EOF, site())
+    test::suite_assert(ts, copied is EOF, site())
+end
+
+
+variant OtherNode:
+    INTEGER: String
+end
+
+func test_contextual_variant_tags(ts):
+    n := Node.INTEGER{1}
+    test::suite_assert(ts, n is INTEGER, site())
+    test::suite_assert(ts, n.INTEGER == 1, site())
+    n.INTEGER = 2
+    test::suite_assert(ts, n.INTEGER == 2, site())
+
+    n = Node.NUMS{[3, 4]}
+    test::suite_assert(ts, n is NUMS, site())
+    test::suite_assert(ts, n.NUMS[0] == 3, site())
+    n.NUMS = [5, 6]
+    test::suite_assert(ts, n.NUMS[1] == 6, site())
+
+    alternate := OtherNode.INTEGER{"text"}
+    test::suite_assert(ts, alternate is INTEGER, site())
+    test::suite_assert(ts, alternate.INTEGER == "text", site())
+
+    matched := 0
+    match n:
+        case INTEGER{value}:
+            matched = value
+        case STRING:
+            matched = -1
+        case NUMS{values}:
+            matched = values[0]
+        case RESULT:
+            matched = -2
+    end
+    test::suite_assert(ts, matched == 5, site())
+
+    token := Token.INTEGER{9}
+    match token:
+        case INTEGER:
+            matched = 9
+        case EOF:
+            matched = -1
+    end
+    test::suite_assert(ts, matched == 9, site())
 end
 
 
@@ -205,5 +250,6 @@ func run_tests(ts):
     test_var_05(ts)
     test_var_06(ts)
     test_var_07(ts)
+    test_contextual_variant_tags(ts)
 
 end

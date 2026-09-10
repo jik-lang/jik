@@ -870,6 +870,22 @@ jik_codegen_emit_expr_member_access(JikCodeGenerator *cg, JikNode *nd)
     if (nd->val_member_access.node->jik_type->name == TYPE_STRUCT) {
         return JIK_STRING_NCAT(sobj, "->", member_name);
     }
+    else if (nd->val_member_access.node->jik_type->name == TYPE_VARIANT) {
+        JikType *variant_type = nd->val_member_access.node->jik_type;
+        char    *tag_name = jik_codegen_enum_value_name(variant_type->val_variant.enum_type->mangled_name,
+                                                     member_name);
+        char *accessor = JIK_STRING_NCAT(variant_type->mangled_name, "_access");
+        char *rte_txt  = jik_codegen_get_runtime_error_fmt(nd, "illegal variant payload access");
+        return JIK_STRING_NCAT(accessor,
+                               "(",
+                               sobj,
+                               ", ",
+                               tag_name,
+                               ", ",
+                               rte_txt,
+                               ")->val.",
+                               member_name);
+    }
     else {
         jik_diag_fatal_error("internal error: unsupported member access operand", "");
     }
@@ -1008,26 +1024,6 @@ jik_codegen_emit_expr_subscript_get(JikCodeGenerator *cg, JikNode *nd)
         char *get_expr = JIK_STRING_NCAT(getter_name, "(", node, ", ", expr, ", ", DEBUG_ARG, ")");
         return get_expr;
     }
-    else if (nd->val_subscript_get.expr->type == NODE_VARIANT_TAG) {
-        assert(nd->val_subscript_get.node->jik_type->name == TYPE_VARIANT);
-        JikNode *var_node          = nd->val_subscript_get.node;
-        char    *enum_mangled_name = var_node->jik_type->val_variant.enum_type->mangled_name;
-        char *tag_name = jik_codegen_enum_value_name(
-            enum_mangled_name, nd->val_subscript_get.expr->val_variant_tag.tag);
-        char *mn = nd->val_subscript_get.node->jik_type->mangled_name;
-        assert(mn);
-        char *accessor = JIK_STRING_NCAT(mn, "_access");
-        char *rte_txt  = jik_codegen_get_runtime_error_fmt(nd, "illegal variant payload access");
-        return JIK_STRING_NCAT(accessor,
-                               "(",
-                               node,
-                               ", ",
-                               tag_name,
-                               ", ",
-                               rte_txt,
-                               ")->val.",
-                               nd->val_subscript_get.expr->val_variant_tag.tag);
-    }
     else {
         jik_diag_fatal_error("internal error: unsupported subscript get operand", "");
     }
@@ -1084,9 +1080,7 @@ jik_codegen_emit_stmnt_subscript_set(JikCodeGenerator *cg, JikNode *nd)
 {
     char *expr = jik_codegen_emit_assignment_expr(cg, nd->val_subscript_set.expr);
     char *node = jik_codegen_emit_expression(cg, nd->val_subscript_set.node);
-    char *sub  = nd->val_subscript_set.sub_expr->type == NODE_VARIANT_TAG
-                     ? NULL
-                     : jik_codegen_emit_expression(cg, nd->val_subscript_set.sub_expr);
+    char *sub  = jik_codegen_emit_expression(cg, nd->val_subscript_set.sub_expr);
     if (nd->val_subscript_set.node->jik_type->name == TYPE_VECTOR) {
         if (!nd->val_subscript_set.node->jik_type->mangled_name) {
             nd->val_subscript_set.node->jik_type->mangled_name =
@@ -1106,29 +1100,6 @@ jik_codegen_emit_stmnt_subscript_set(JikCodeGenerator *cg, JikNode *nd)
         jik_writer_write_line(
             &cg->cw,
             JIK_STRING_NCAT(setter_name, "(", node, ", ", sub, ", ", expr, ", ", DEBUG_ARG, ");"));
-    }
-    else if (nd->val_subscript_set.node->jik_type->name == TYPE_VARIANT) {
-        JikNode *var_node          = nd->val_subscript_set.node;
-        char    *enum_mangled_name = var_node->jik_type->val_variant.enum_type->mangled_name;
-        char *tag_name = jik_codegen_enum_value_name(
-            enum_mangled_name, nd->val_subscript_set.sub_expr->val_variant_tag.tag);
-        char *mn = nd->val_subscript_set.node->jik_type->mangled_name;
-        assert(mn);
-        char *accessor = JIK_STRING_NCAT(mn, "_access");
-        char *rte_txt  = jik_codegen_get_runtime_error_fmt(nd, "illegal variant payload access");
-        jik_writer_write_line(&cg->cw,
-                              JIK_STRING_NCAT(accessor,
-                                              "(",
-                                              node,
-                                              ", ",
-                                              tag_name,
-                                              ", ",
-                                              rte_txt,
-                                              ")->val.",
-                                              nd->val_subscript_set.sub_expr->val_variant_tag.tag,
-                                              " = ",
-                                              expr,
-                                              ";"));
     }
     else {
         jik_diag_fatal_error("internal error: unsupported subscript set operand", "");
@@ -1732,7 +1703,30 @@ jik_codegen_emit_stmnt_member_set(JikCodeGenerator *cg, JikNode *nd)
     char *expr           = jik_codegen_emit_assignment_expr(cg, nd->val_member_set.expr);
     char *sobj           = jik_codegen_emit_expression(cg, nd->val_member_set.node);
 
-    jik_writer_write_line(&cg->cw, JIK_STRING_NCAT(sobj, "->", field_accessor, " = ", expr, ";"));
+    if (nd->val_member_set.node->jik_type->name == TYPE_STRUCT) {
+        jik_writer_write_line(
+            &cg->cw, JIK_STRING_NCAT(sobj, "->", field_accessor, " = ", expr, ";"));
+        return;
+    }
+    assert(nd->val_member_set.node->jik_type->name == TYPE_VARIANT);
+    JikType *variant_type = nd->val_member_set.node->jik_type;
+    char    *tag_name = jik_codegen_enum_value_name(variant_type->val_variant.enum_type->mangled_name,
+                                                 field_accessor);
+    char *accessor = JIK_STRING_NCAT(variant_type->mangled_name, "_access");
+    char *rte_txt  = jik_codegen_get_runtime_error_fmt(nd, "illegal variant payload access");
+    jik_writer_write_line(&cg->cw,
+                          JIK_STRING_NCAT(accessor,
+                                          "(",
+                                          sobj,
+                                          ", ",
+                                          tag_name,
+                                          ", ",
+                                          rte_txt,
+                                          ")->val.",
+                                          field_accessor,
+                                          " = ",
+                                          expr,
+                                          ";"));
 }
 
 static void

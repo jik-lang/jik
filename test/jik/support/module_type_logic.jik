@@ -49,24 +49,24 @@ end
 
 func payload_score(payload: base::Payload) -> int:
     match payload:
-        case base::Payload.POINT{pt}:
+        case POINT{pt}:
             return pt.x + pt.y
-        case base::Payload.LABEL{text}:
+        case LABEL{text}:
             return len(text)
     end
 end
 
 func view_score(view: records::RecordView) -> int:
     match view:
-        case records::RecordView.RECORD{rec}:
+        case RECORD{rec}:
             return rec.point.x + rec.point.y
-        case records::RecordView.POINTS{pts}:
+        case POINTS{pts}:
             return pts[0].x + pts[1].y
-        case records::RecordView.INDEX{d}:
+        case INDEX{d}:
             return d["entry"]?.x + d["entry"]?.y
-        case records::RecordView.MAYBE_POINT{pt}:
+        case MAYBE_POINT{pt}:
             return pt?.x + pt?.y
-        case records::RecordView.PAYLOAD{payload}:
+        case PAYLOAD{payload}:
             return payload_score(payload)
     end
 end
