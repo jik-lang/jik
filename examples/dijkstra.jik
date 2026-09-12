@@ -3,12 +3,13 @@
 INF := 1_000_000_000
 
 
-func dijkstra_calc(w, src):
+func dijkstra_calc(w: Vec[Vec[int]], src: int):
     n := len(w)
 
-    // We allocate what we need in the region of "w"
-    dist := [n of INF][.w]
-    used := [n of false][.w]
+    // The returned distances live in w's region (@ is equivalent to [.w]).
+    dist := [n of INF]@
+    // Scratch storage stays local and is reclaimed when this function returns.
+    used := [n of false]
 
     dist[src] = 0
 

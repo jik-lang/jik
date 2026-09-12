@@ -21,13 +21,14 @@ struct ForthMachine:
     words: Dict[Vec[String]]    
 end
 
-struct Result:
-    failed: bool
-    msg: String
+throws func require_stack(fm: ForthMachine, count: int):
+    if len(fm.stack) < count:
+        fail("Stack underflow")
+    end
 end
 
 
-func eval_tokens(fm, tokens):
+throws func eval_tokens(fm, tokens):
     n := len(tokens)
     ip := 0
     compile_mode := false
@@ -41,7 +42,7 @@ func eval_tokens(fm, tokens):
             ip = ip + 1
             continue
         elif compile_mode and tok == ":":
-            return Result{failed=true, msg="Cannot re-enter compile mode"}[.fm]
+            fail("Cannot re-enter compile mode")
         elif compile_mode:
             push(word, tok)
             ip = ip + 1
@@ -53,61 +54,69 @@ func eval_tokens(fm, tokens):
             ip = ip + 1
             continue
         elif char::isdigit(tok[0]):
-            res := must string::to_int(tok)
+            res := try string::to_int(tok)
             push(fm.stack, res)          
         elif tok == ".":
             print(fm.stack)
         elif tok == "?":
             print(fm.words)
         elif tok == "+":
+            try require_stack(fm, 2)
             rhs := pop(fm.stack)
             lhs := pop(fm.stack)
             push(fm.stack, lhs + rhs)
         elif tok == "*":
+            try require_stack(fm, 2)
             rhs := pop(fm.stack)
             lhs := pop(fm.stack)
             push(fm.stack, lhs * rhs)
         elif tok == "dup":
+            try require_stack(fm, 1)
             push(fm.stack, fm.stack[len(fm.stack) - 1])
         elif tok == "drop":
+            try require_stack(fm, 1)
             pop(fm.stack)
         elif tok == ":":
             compile_mode = true
             word = [0 of ""][.fm]
             ip = ip + 1
+            // split preserves empty fields, so allow spaces before the name.
+            while ip < n and tokens[ip] == "":
+                ip += 1
+            end
+            if ip >= n:
+                fail("Expected a word name after ':'")
+            end
             word_name = tokens[ip]
             if word_name == ":":
-                return Result{failed=true, msg="Cannot re-enter compile mode"}[.fm]
+                fail("Cannot re-enter compile mode")
+            elif word_name == ";":
+                fail("Expected a word name after ':'")
             end
         else:
             w := fm.words[tok]
             if w is None:
-                return Result{failed=true, msg="Unknown word"}[.fm]
+                fail("Unknown word")
             else:
-                res := eval_tokens(fm, w?)
-                if res.failed:
-                    return res
-                end
-                
+                // Propagate failures from user-defined words to the REPL.
+                try eval_tokens(fm, w?)
             end
         end        
         ip = ip + 1
     end
-    return Result{}[.fm]
 end
 
 
-func run(fm, code):
+throws func run(fm, code):
     tokens := string::split(code, " ", .fm)
-    return eval_tokens(fm, tokens)
+    try eval_tokens(fm, tokens)
 end
 
 
 func main():
     fm := ForthMachine{}
     print("Welcome! Type quit to quit, help for help.")
-    res := Result{}
-    while not res.failed:
+    while true:
         print("\n> ")
         code := std::input(_)
         if code == "quit":
@@ -116,9 +125,10 @@ func main():
             print(HELP_TEXT)
             continue
         end
-        res = run(fm, code)
-    end
-    if res.failed:
-        print("Error: ", res.msg)
+        try run(fm, code):
+        except:
+            println("Error: ", error_msg())
+            break
+        end
     end
 end

@@ -22,16 +22,14 @@ end
 
 
 func newton_cos_minus_x(x0: double, tol: double, max_steps: int, r: Region) -> NewtonResult:
-    xs := [0 of 0.0][r]
+    xs: Vec[double][r]
     x := x0
     push(xs, x)
 
-    converged := false
     step := 0
     while step < max_steps:
         fx := f(x)
         if math::abs(fx) <= tol:
-            converged = true
             break
         end
 
@@ -46,11 +44,13 @@ func newton_cos_minus_x(x0: double, tol: double, max_steps: int, r: Region) -> N
         step = step + 1
     end
 
+    // Check the returned estimate, including the final permitted update.
+    converged := math::abs(f(x)) <= tol
     return NewtonResult{
         root = x,
         steps = len(xs) - 1,
-        converged = converged,
-        xs = xs
+        converged,
+        xs
     }[r]
 end
 
@@ -65,10 +65,7 @@ func main():
     print("\n")
     print("iteration history:", "\n")
 
-    i := 0
-    while i < len(res.xs):
-        x := res.xs[i]
-        print("  ", i, ": x = ", x, ", f(x) = ", f(x), "\n")
-        i = i + 1
-    end
+    for i, x in res.xs:
+        println("  ", i, ": x = ", x, ", f(x) = ", f(x))
+    end    
 end

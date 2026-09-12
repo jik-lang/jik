@@ -24,7 +24,7 @@ func main():
     n := 100
     res := sieve(n, _)
     println("Primes up to ", n, ":")
-    for i = 2, n:
+    for i = 2, n + 1:
         if res[i]:
             print(i, ", ")
         end

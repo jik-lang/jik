@@ -8,13 +8,13 @@ standard library.
 1. `hello.jik` - the smallest complete Jik program
 2. `fib.jik` - functions, loops, recursion, and region-based allocation
 3. `regions_copy.jik` - returning copied composite values in a caller-chosen region
-4. `region_ergonomics.jik` - inferred regions for returned, nested, and stored literals
+4. `region_ergonomics.jik` - inferred regions for literals and implicit-region allocation with `@`
 5. `primes.jik` - loops and vectors
 6. `word_count.jik` - structs, file I/O, and standard library use
 7. `text_processing.jik` - string/vector slices, indexed iteration, and comparisons
 8. `modules/main.jik` - multi-file programs, modules, and imports
 9. `enum_match.jik` - exhaustive matching over enum values
-10. `variants.jik` - enums, payload-less variants, `match`, and UFCS
+10. `variants.jik` - input events, enum and string payloads, payloadless tags, `match`, `other:`, checked payload access, and UFCS
 11. `tables.jik` - exhaustive enum lookup tables and table-driven transitions
 12. `error_handling.jik` - `throws`, recovery, propagation, `must`, and postfix `!`
 13. `ffi_demo.jik` - calling C functions and opaque C structs through Jik's FFI

@@ -22,22 +22,18 @@ func count_text(s: String, r: Region) -> Counts:
         c := s[i]
 
         if c == '\n':
-            lines = lines + 1
+            lines += 1
         end
 
         if char::isspace(c):
             in_word = false
         elif not in_word:
-            words = words + 1
+            words += 1
             in_word = true
         end
     end
 
-    return Counts{
-        lines = lines,
-        words = words,
-        bytes = bytes
-    }[r]
+    return Counts{lines, words, bytes}[r] 
 end
 
 

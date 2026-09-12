@@ -1,14 +1,14 @@
 // Example: Conway's Game of Life in the terminal.
 
 // Note (terminal rendering):
-// This program uses ANSI escape sequences (cursor home / hide cursor) to redraw in-place and avoid
-// calling `cls`/`clear`. This works in most Unix-like terminals and in ANSI-capable Windows terminals
+// This program clears the screen once with `cls`/`clear`, then uses ANSI cursor-home
+// sequences to redraw in-place. This works in most Unix-like terminals and in ANSI-capable Windows terminals
 // (e.g., Windows Terminal). If your terminal prints the escape codes literally, it does not support
 // ANSI sequences.
 
 use "jik/sys" as sys
 use "jik/rand" as rand
-use "jik/string" as string
+use "jik/strbuf"
 
 
 W := 80
@@ -61,18 +61,17 @@ end
 
 func render(g: Vec[Vec[bool]], step: int, w: int, h: int):
     print("\x1b[HGame of Life (step ", step, ")\n")
-    
+
+    // Reuse the buffer for each row; clear retains its allocated capacity.
+    line := strbuf::new("")
     for y = 0, h:
         row := g[y]
-        line := ""
+        line.clear()
         for x = 0, w:
-            if row[x]:
-                line = string::concat(line, "#", _)
-            else:
-                line = string::concat(line, ".", _)
-            end
+            line.append_char('#' if row[x] else '.')
         end
-        print(line, "\n")
+        line.append_char('\n')
+        line.print()
     end   
     
     print("\x1b[?25h")
