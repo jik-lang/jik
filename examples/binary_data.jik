@@ -1,0 +1,19 @@
+// Example: build and inspect data that can contain any byte value.
+
+use "jik/bytes"
+
+
+func main():
+    packet := bytes::buf_from_string("JIK")
+    must bytes::buf_push_int(packet, 0)
+    bytes::buf_push(packet, '!')
+    must bytes::buf_push_int(packet, 255)
+
+    data := bytes::to_bytes(packet)
+    header := bytes::slice(data, 0, 3)
+
+    println("header: ", must bytes::to_string_ascii(header))
+    println("packet bytes: ", bytes::len(data))
+    println("contains NUL: ", bytes::get(data, 3) == '\0')
+    println("hex: ", bytes::to_hex(data))
+end

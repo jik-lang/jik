@@ -135,10 +135,9 @@ To start programming in Jik:
 - (optional) add the extracted directory to `PATH`
 - if you plan to use `jik run` or `jik build`, either pass the compiler name with `--cc` or set `JIK_CC`, for example to `gcc` or `clang`
     - Windows: For a simple GCC setup, download from [WinLibs](https://winlibs.com/), and add its `bin` directory to `PATH`
-- save a copy of [the example](#hello-regions) as `hello.jik`
-- run it: `jik run hello.jik`
-- generate C output: `jik tran hello.jik`
-- build an executable: `jik build hello.jik`
+- run the included hello example: `jik run examples/hello.jik`
+- generate C output: `jik tran examples/hello.jik`
+- build an executable: `jik build examples/hello.jik`
 
 Only `gcc` and `clang` host compilers were tested. MSVC was not tested.
 

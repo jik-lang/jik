@@ -1,0 +1,22 @@
+// Example: efficiently build a string from many small pieces.
+
+use "jik/strbuf"
+use "jik/string"
+
+
+func main():
+    scores := [7, 9, 10]
+    line := strbuf::new("scores: ")
+
+    for index, score in scores:
+        if index > 0:
+            strbuf::append(line, ", ")
+        end
+        strbuf::append(line, string::from_int(score))
+    end
+    strbuf::append_char(line, '.')
+
+    result := strbuf::to_string(line)
+    println(result)
+    println("bytes: ", strbuf::len(line))
+end

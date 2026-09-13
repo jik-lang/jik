@@ -1,0 +1,22 @@
+// Example: functions and type inference through temperature conversion.
+
+// Calls and arithmetic determine the types of this local helper.
+func fahrenheit(celsius):
+    return celsius * 9.0 / 5.0 + 32.0
+end
+
+// An explicit signature describes the contract without inspecting callers.
+func celsius(fahrenheit_value: double) -> double:
+    return (fahrenheit_value - 32.0) * 5.0 / 9.0
+end
+
+func show_temperature(degrees):
+    println(degrees, " C = ", fahrenheit(degrees), " F")
+end
+
+func main():
+    show_temperature(0.0)
+    show_temperature(20.0)
+    println("boiling point in C: ", celsius(212.0))
+    println("round trip: ", celsius(fahrenheit(20.0)))
+end

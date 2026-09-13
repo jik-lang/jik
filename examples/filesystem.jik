@@ -1,0 +1,22 @@
+// Example: inspect a file using filesystem, path, and I/O utilities.
+
+use "jik/fs"
+use "jik/io"
+use "jik/path"
+use "jik/sys"
+
+
+func main():
+    examples_dir := path::join([sys::cwd(), "examples"])
+    readme := path::join([examples_dir, "README.md"])
+
+    entries := must fs::read_dir(examples_dir)
+    contents := must io::read_file(readme)
+
+    println("directory exists: ", fs::is_dir(examples_dir))
+    println("README is a file: ", fs::is_file(readme))
+    println("name: ", path::basename(readme))
+    println("extension: ", path::extname(readme))
+    println("directory entries: ", len(entries))
+    println("README bytes: ", len(contents))
+end

@@ -1,0 +1,23 @@
+// Example: tracking stock with string keys. See options.jik for option basics.
+
+func main():
+    stock := {"notebooks": 4, "pens": 12}
+    stock["notebooks"] = 6
+    stock["folders"] = 3
+
+    // Lookup returns Option[int]; a missing key has no payload to extract.
+    notebooks := stock["notebooks"]
+    if notebooks is Some:
+        println("notebooks available: ", notebooks?)
+    end
+    if stock["erasers"] is None:
+        println("erasers are not listed")
+    end
+
+    // Aggregate without making the output depend on dictionary iteration order.
+    total := 0
+    for name, count in stock:
+        total += count
+    end
+    println("product kinds: ", len(stock), ", total items: ", total)
+end

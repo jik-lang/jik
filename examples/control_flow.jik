@@ -1,0 +1,27 @@
+// Example: filling a delivery van, then counting down to departure.
+
+func main():
+    capacity := 10
+    loaded := 0
+
+    // Numeric ranges exclude the upper bound: weights are 1 through 6.
+    for weight = 1, 7:
+        if weight == 2:
+            println("skip parcel awaiting an address")
+            continue
+        elif loaded + weight > capacity:
+            println("next parcel will not fit")
+            break
+        else:
+            loaded += weight
+            println("loaded weight: ", loaded)
+        end
+    end
+
+    remaining := 3
+    while remaining > 0:
+        println("departing in ", remaining)
+        remaining -= 1
+    end
+    println("departed with ", loaded, " of ", capacity)
+end

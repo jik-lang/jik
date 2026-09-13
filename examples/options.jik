@@ -1,0 +1,25 @@
+// Example: a search result that may be absent.
+
+func find_index(values: Vec[int], target: int) -> Option[int]:
+    for index, value in values:
+        if value == target:
+            // The returned option is allocated in the input vector's region.
+            return Some{index}
+        end
+    end
+    return None
+end
+
+func main():
+    values := [12, 25, 38]
+    found := find_index(values, 25)
+    if found is Some:
+        // ? extracts the payload; check presence before using it.
+        println("25 found at index ", found?)
+    end
+
+    missing := find_index(values, 99)
+    if missing is None:
+        println("99 was not found")
+    end
+end

@@ -1,51 +1,57 @@
 # Examples
 
-This directory contains small Jik programs that demonstrate different parts of the language and
-standard library.
+Small, runnable Jik programs to explore, copy, and modify. Browse by topic or
+start with the first few language examples; each program has its own purpose.
+For detailed explanations, see the [language overview](../docs/overview.md).
 
-## Suggested reading order
+## Language examples
 
-1. `hello.jik` - the smallest complete Jik program
-2. `fib.jik` - functions, loops, recursion, and region-based allocation
-3. `regions_copy.jik` - returning copied composite values in a caller-chosen region
-4. `region_ergonomics.jik` - inferred regions for literals and implicit-region allocation with `@`
-5. `primes.jik` - loops and vectors
-6. `word_count.jik` - structs, file I/O, and standard library use
-7. `text_processing.jik` - string/vector slices, indexed iteration, and comparisons
-8. `modules/main.jik` - multi-file programs, modules, and imports
-9. `enum_match.jik` - exhaustive matching over enum values
-10. `variants.jik` - input events, enum and string payloads, payloadless tags, `match`, `other:`, checked payload access, and UFCS
-11. `tables.jik` - exhaustive enum lookup tables and table-driven transitions
-12. `error_handling.jik` - `throws`, recovery, propagation, `must`, and postfix `!`
-13. `ffi_demo.jik` - calling C functions and opaque C structs through Jik's FFI
-14. `testing_demo.jik` - basic use of `jik/testing`
-15. `cl_args.jik` - raw command-line argument handling
-16. `argparse_demo.jik` - parsed arguments, generated help, and path normalization
-17. `process_capture.jik` - capture a process and inspect stdout/stderr
+- [hello.jik](hello.jik) — the smallest complete program.
+- [values.jik](values.jik) — values, inferred and explicit declarations, default initialization, operators, and assignment.
+- [functions.jik](functions.jik) — inferred helpers, explicit signatures, and nested calls.
+- [control_flow.jik](control_flow.jik) — branches, numeric ranges, `while`, `break`, and `continue`.
+- [cl_args.jik](cl_args.jik) — raw command-line arguments passed to `main`.
+- [strings.jik](strings.jik) — trimming, searching, and byte-based indexing and slicing.
+- [vectors.jik](vectors.jik) — construction, mutation, filtering, indexed iteration, and slices.
+- [structs.jik](structs.jik) — defaults, named fields, initializer shorthand, and uniform function calls (UFCS).
+- [options.jik](options.jik) — search results with `Some`, `None`, and checked payload extraction.
+- [dictionaries.jik](dictionaries.jik) — string-keyed stock counts, safe lookup, and iteration.
+- [enum_match.jik](enum_match.jik) — exhaustive enum matching.
+- [variants.jik](variants.jik) — input events, payload bindings, `other:`, and checked payload access.
+- [tables.jik](tables.jik) — exhaustive, immutable enum mappings and state transitions; dictionaries instead support dynamic string keys.
+- [region_ergonomics.jik](region_ergonomics.jik) — caller-selected storage, literal retargeting, and `@`.
+- [regions_copy.jik](regions_copy.jik) — `foreign` inputs and copying into a caller-selected region.
+- [error_handling.jik](error_handling.jik) — validation, recovery, propagation, `must`, and postfix `!`.
+- [modules/main.jik](modules/main.jik) — local imports with [modules/stats.jik](modules/stats.jik).
+- [testing_demo.jik](testing_demo.jik) — assertions with `jik/testing`.
+- [ffi_demo.jik](ffi_demo.jik) — advanced C interop with embedded C, opaque structs, and region allocation.
 
-The remaining examples are larger demonstrations:
+## Standard-library examples
 
-- `dijkstra.jik` - shortest paths on a graph
-- `newton.jik` - numeric code using `jik/math`
-- `game_of_life.jik` - terminal animation with randomness and system calls
-- `forth.jik` - a minimal Forth interpreter
+- [filesystem.jik](filesystem.jik) — read-only filesystem inspection with path and file I/O utilities.
+- [binary_data.jik](binary_data.jik) — binary-safe immutable bytes and a growable byte buffer.
+- [strbuf_demo.jik](strbuf_demo.jik) — efficient string construction from many small pieces.
+- [text_processing.jik](text_processing.jik) — splitting text, string/vector slices, and comparisons.
+- [argparse_demo.jik](argparse_demo.jik) — generated help, parsed arguments, and normalized paths.
+- [process_capture.jik](process_capture.jik) — child-process exit status, stdout, and stderr bytes.
+
+## Algorithms and larger programs
+
+- [fib.jik](fib.jik) — recursive and iterative Fibonacci, with inferred function types.
+- [primes.jik](primes.jik) — prime numbers with loops and vectors.
+- [word_count.jik](word_count.jik) — line, word, and byte counts from an input file.
+- [newton.jik](newton.jik) — numeric code using `jik/math`.
+- [dijkstra.jik](dijkstra.jik) — shortest paths on a graph.
+- [game_of_life.jik](game_of_life.jik) — terminal animation using randomness and system calls.
+- [forth.jik](forth.jik) — a small interactive Forth interpreter.
 
 ## Running examples
 
-From the repository root:
+Examples are included in compiler release archives. From the repository root
+after building Jik, or from the extracted archive directory:
 
 ```text
 jik run examples/hello.jik
-jik run examples/fib.jik
-jik run examples/modules/main.jik
-```
-
-`argparse_demo.jik` prints its generated help with no arguments. To pass arguments to it, build it
-first and run the resulting executable:
-
-```text
-jik build examples/argparse_demo.jik
-examples/argparse_demo.exe source.txt out/../target.txt --verbose
 ```
 
 Some examples are interactive or terminal-dependent:
@@ -55,3 +61,7 @@ Some examples are interactive or terminal-dependent:
 
 Most examples are self-contained. The `modules/` example contains multiple files to show
 how Jik modules are organized and imported.
+
+`run` and `build` require a compatible host C compiler such as GCC or Clang.
+Select it by setting `JIK_CC` to the preferred C compiler, or with the flag `--cc`.
+See the [CLI reference](../docs/cli.md) for further info.

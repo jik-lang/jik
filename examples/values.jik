@@ -1,0 +1,23 @@
+// Example: values, inferred and explicit types, and assignment.
+
+func main():
+    item := "notebook"
+    aisle: char = 'B'
+    quantity := 3
+    unit_price: double = 2.5
+    in_stock: bool = true
+    reserved: int // Without an initializer, a type's default value is used.
+
+    quantity += 1
+    reserved += 1
+    total := quantity * unit_price
+    eligible := in_stock and quantity >= 4
+    discount := 1.0 if eligible else 0.0
+    total = total - discount
+
+    println(item, " in aisle ", aisle)
+    println("quantity: ", quantity)
+    println("available: ", quantity - reserved)
+    println("discount applied: ", eligible)
+    println("total: ", total)
+end

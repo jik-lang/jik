@@ -1,0 +1,24 @@
+// Example: struct construction, fields, and a uniform function call.
+
+struct Task:
+    title: String
+    done: bool
+end
+
+func complete(task: Task):
+    task.done = true
+end
+
+func main():
+    draft := Task{}
+    draft.title = "Draft a proposal"
+    review := Task{title = "Review the proposal"}
+    title := "Publish the proposal"
+    publish := Task{title}
+
+    // This is shorthand for the ordinary function call complete(draft).
+    draft.complete()
+    println(draft.title, ": done = ", draft.done)
+    println(review.title, ": done = ", review.done)
+    println(publish.title, ": done = ", publish.done)
+end

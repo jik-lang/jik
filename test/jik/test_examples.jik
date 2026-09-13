@@ -1,5 +1,6 @@
 use "jik/bytes" as bytes
 use "jik/process"
+use "jik/string"
 use "jik/testing" as test
 use "utils"
 
@@ -21,21 +22,35 @@ end
 func test_examples_check(ts):
     examples := [
         "examples/argparse_demo.jik",
+        "examples/binary_data.jik",
         "examples/cl_args.jik",
+        "examples/control_flow.jik",
+        "examples/dictionaries.jik",
         "examples/dijkstra.jik",
+        "examples/enum_match.jik",
         "examples/error_handling.jik",
         "examples/ffi_demo.jik",
         "examples/fib.jik",
+        "examples/filesystem.jik",
         "examples/forth.jik",
+        "examples/functions.jik",
         "examples/game_of_life.jik",
         "examples/hello.jik",
         "examples/newton.jik",
+        "examples/options.jik",
         "examples/primes.jik",
         "examples/process_capture.jik",
+        "examples/region_ergonomics.jik",
         "examples/regions_copy.jik",
+        "examples/strings.jik",
+        "examples/strbuf_demo.jik",
+        "examples/structs.jik",
+        "examples/tables.jik",
         "examples/testing_demo.jik",
         "examples/text_processing.jik",
+        "examples/values.jik",
         "examples/variants.jik",
+        "examples/vectors.jik",
         "examples/word_count.jik",
         "examples/modules/main.jik"
     ]
@@ -45,6 +60,31 @@ func test_examples_check(ts):
     end
 end
 
+func _run_example(ts, foreign path: String, expected: Vec[String]):
+    res := must process::capture(utils::compiler_command(_), ["run", path], _)
+    if res.code != 0:
+        println("example run failed: ", path)
+        println(must bytes::to_string_ascii(res.err))
+    end
+    test::suite_assert(ts, res.code == 0, site())
+    output := must bytes::to_string_ascii(res.out)
+    for line in expected:
+        present := string::find(output, line) >= 0
+        if not present:
+            println("missing example output in ", path, ": ", line)
+        end
+        test::suite_assert(ts, present, site())
+    end
+end
+
 func run_tests(ts):
     test_examples_check(ts)
+    _run_example(ts, "examples/options.jik", ["25 found at index 1", "99 was not found"])
+    _run_example(ts, "examples/vectors.jik", ["passing count: 3"])
+    _run_example(ts, "examples/dictionaries.jik", ["notebooks available: 6", "total items: 21"])
+    _run_example(ts, "examples/error_handling.jik", [
+        "accepted count: 42",
+        "count exceeds the batch limit",
+        "propagated failure: count must not be negative"
+    ])
 end

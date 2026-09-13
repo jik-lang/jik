@@ -1,41 +1,41 @@
 // Example: throwing functions, recovery, propagation, must, and postfix !
 
-throws func parse_count(s):
-    if s == "many":
-        fail("expected digits, got 'many'")
+throws func validate_count(count):
+    if count < 0:
+        fail("count must not be negative")
     end
-    if s == "bad-code":
-        fail("custom parse failure", 17)
+    if count > 100:
+        fail("count exceeds the batch limit", 17)
     end
-    return 42
+    return count
 end
 
-func show_parse(s):
-    try value := parse_count(s):
-        println("parsed ", s, " as ", value)
+func show_count(count):
+    try value := validate_count(count):
+        println("accepted count: ", value)
     except:
-        println("failed to parse ", s)
+        println("rejected count: ", count)
         println("  msg:  ", error_msg())
         println("  code: ", error_code())
     end
 end
 
-throws func half_count(s):
+throws func half_count(count):
     // A declaration with try propagates a failure to half_count's caller.
-    count := try parse_count(s)
-    return count / 2
+    valid := try validate_count(count)
+    return valid / 2
 end
 
 func main():
-    show_parse("ok")
-    show_parse("many")
-    show_parse("bad-code")
+    show_count(42)
+    show_count(-1)
+    show_count(101)
 
-    value := must parse_count("ok")
+    value := must validate_count(42)
     println("must succeeded with value ", value)
-    println("postfix ! succeeded with value ", parse_count("ok")!)
+    println("postfix ! succeeded with value ", validate_count(42)!)
 
-    try half := half_count("many"):
+    try half := half_count(-1):
         println("half: ", half)
     except:
         println("propagated failure: ", error_msg())

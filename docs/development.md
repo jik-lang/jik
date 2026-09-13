@@ -18,6 +18,12 @@
 Build the C seed compiler from the repository root with `make`. Build the Jik
 bootstrap compiler as `jik1` with `make boot`. Run the test suite with `make test`.
 
+## Release archives
+
+Run `make release-archive VERSION=<version>` to create a compiler archive in
+`artifacts/`. Archives include the complete `examples/` directory alongside the
+compiler, standard library, support files, and documentation.
+
 ## Roadmap
 
 ### 0.1.0-alpha.x — implementation stabilisation and bootstrapping

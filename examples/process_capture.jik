@@ -5,7 +5,7 @@ use "jik/process"
 use "jik/sys"
 
 
-COMPILER := "jik.exe" if sys::platform() == "windows" else "./jik"
+COMPILER := ".\\jik.exe" if sys::platform() == "windows" else "./jik"
 
 func main():
     res := must process::capture(COMPILER, ["version"], _)

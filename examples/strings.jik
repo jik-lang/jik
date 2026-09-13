@@ -1,0 +1,17 @@
+// Example: cleaning a label and inspecting its text.
+
+use "jik/string"
+
+func main():
+    raw := "  Jik language  "
+    label := string::trim(raw)
+
+    // Strings store UTF-8 bytes. Length, indexing, and slicing count bytes;
+    // ASCII input makes each byte here a complete character.
+    println("label: ", label)
+    println("bytes: ", len(label))
+    println("first character: ", label[0])
+    println("prefix: ", label[:3])
+    println("description starts at: ", string::find(label, "language"))
+    println("starts with Jik: ", string::starts_with(label, "Jik"))
+end

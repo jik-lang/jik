@@ -1,0 +1,22 @@
+// Example: correcting scores and collecting the passing results.
+
+func main():
+    scores := [42, 68, 91]
+    scores[0] = 55
+    push(scores, 73)
+    push(scores, 0)
+    println("removed accidental entry: ", pop(scores))
+
+    passed: Vec[int]
+    for score in scores:
+        if score >= 60:
+            push(passed, score)
+        end
+    end
+
+    for index, score in scores:
+        println("score ", index + 1, ": ", score)
+    end
+    println("passing count: ", len(passed))
+    println("first two passing scores: ", passed[:2])
+end

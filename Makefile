@@ -1,5 +1,4 @@
 CC = clang
-PYTHON ?= python
 CFLAGS = -Wall -Wextra -Wno-unused-parameter -std=c11 \
          -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_WARNINGS
 RELEASE_CFLAGS = -O3
@@ -113,17 +112,20 @@ ifeq ($(OS),Windows_NT)
 	@rmdir /S /Q "$(BIN_DIR)\jiklib" 2>nul || exit /B 0
 	@rmdir /S /Q "$(BIN_DIR)\support" 2>nul || exit /B 0
 	@rmdir /S /Q "$(BIN_DIR)\docs" 2>nul || exit /B 0
+	@rmdir /S /Q "$(BIN_DIR)\examples" 2>nul || exit /B 0
 	@xcopy /E /I /Y "jiklib"  "$(BIN_DIR)\jiklib\"  >nul
 	@xcopy /E /I /Y "support" "$(BIN_DIR)\support\" >nul
 	@xcopy /E /I /Y "docs"    "$(BIN_DIR)\docs\"    >nul
+	@xcopy /E /I /Y "examples" "$(BIN_DIR)\examples\" >nul
 else
 	@mkdir -p "$(BIN_DIR)"
 	@cp -f "$(TARGET)" "$(BIN_DIR)/"
 	@cp -f "LICENSE" "$(BIN_DIR)/"
-	@rm -rf "$(BIN_DIR)/jiklib" "$(BIN_DIR)/support" "$(BIN_DIR)/docs"
+	@rm -rf "$(BIN_DIR)/jiklib" "$(BIN_DIR)/support" "$(BIN_DIR)/docs" "$(BIN_DIR)/examples"
 	@cp -R "jiklib"  "$(BIN_DIR)/"
 	@cp -R "support" "$(BIN_DIR)/"
 	@cp -R "docs"    "$(BIN_DIR)/"
+	@cp -R "examples" "$(BIN_DIR)/"
 endif
 
 release-archive: $(if $(strip $(VERSION)),,force-version) release
