@@ -211,26 +211,6 @@ const JikCommand JIK_COMMANDS[] = {
                 JIK_OPT_VERBOSE,
             },
     },
-    // COMMAND: memchk
-    {
-        .name      = "memchk",
-        .help_desc = "Translate a Jik source code file to C, build it with debug flags, and run "
-                     "valgrind memcheck.",
-        .help_desc_short = "build and run valgrind memcheck",
-        .help_notes = "Compiler selection order: --cc, then JIK_CC, then a host default compiler "
-                      "when available.\n"
-                      "Builds with debug flags and then runs valgrind memcheck.",
-        .num_args   = 1,
-        .args =
-            {
-                JIK_ARG_INPUT_FILE,
-            },
-        .num_options = 1,
-        .options =
-            {
-                JIK_OPT_CC,
-            },
-    },
     // COMMAND: help
     {
         .name            = "help",

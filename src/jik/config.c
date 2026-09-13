@@ -197,11 +197,6 @@ jik_config_make(int argc, char **argv)
                 conf.input_file  = argv[++i];
                 conf.target_name = make_target_name(conf.input_file);
             }
-            else if (strcmp(argv[i], "memchk") == 0) {
-                conf.command     = argv[i];
-                conf.input_file  = argv[++i];
-                conf.target_name = make_target_name(conf.input_file);
-            }
             else if (strcmp(argv[i], "version") == 0) {
                 conf.command = argv[i];
             }

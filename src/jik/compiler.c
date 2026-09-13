@@ -984,49 +984,6 @@ jik_compiler_build(JikContext *ctx, bool run)
     }
 }
 
-static void
-jik_compiler_memchk(JikContext *ctx)
-{
-    jik_diag_fatal_error_if(!system_has_tool("valgrind", "--version"), "valgrind not found", "");
-    char *compiler = jik_get_compiler_from_conf(&ctx->conf);
-    jik_diag_fatal_error_if(
-        !compiler, "no compiler found, either set using JIK_CC or with --cc flag", "");
-    JikBuildProfile profile = jik_compiler_validate_build_profiles(ctx, compiler);
-    char *out_bin        = jik_string_cat(ctx->conf.target_name, OUT_EXT);
-    char *quoted_out_bin = shell_quote_arg(out_bin);
-    char *quoted_include = shell_quote_arg(ctx->conf.jik_core_include_path);
-    char *build_cc_args  = jik_build_get_compile_args(ctx, profile);
-    char *linker_args    = jik_build_get_linker_args(ctx, profile);
-    char *cmd            = JIK_STRING_NCAT(compiler,
-                                " -g -O0 -x c",
-                                build_cc_args,
-                                " -I ",
-                                quoted_include,
-                                " -o ",
-                                quoted_out_bin,
-                                " -",
-                                linker_args);
-    jik_compiler_verbose(&ctx->conf, "compile", cmd);
-    FILE *cc_pipe = POPEN(cmd, "w");
-    jik_diag_fatal_error_if(cc_pipe == NULL, "error opening CC", "");
-    fputs(ctx->translation, cc_pipe);
-    int ret = PCLOSE(cc_pipe);
-    jik_diag_fatal_error_if(ret != 0, "CC compilation failed", "");
-    jik_build_copy_files(ctx, out_bin, profile);
-    char *vlgr_cmd = JIK_STRING_NCAT("valgrind "
-                                     "--tool=memcheck "
-                                     "--leak-check=full "
-                                     "--show-leak-kinds=all "
-                                     "--track-origins=yes "
-                                     "--errors-for-leak-kinds=all "
-                                     "--track-fds=yes ",
-                                     quoted_out_bin);
-    jik_compiler_verbose(&ctx->conf, "memchk", vlgr_cmd);
-    // TODO: redirect valgrind out to buffer?
-    int status = system(vlgr_cmd);
-    jik_diag_fatal_error_if(status != 0, "valgrind failed", "");
-}
-
 void
 jik_compiler_run(JikConfig conf)
 {
@@ -1098,8 +1055,5 @@ jik_compiler_run(JikConfig conf)
     }
     else if (strcmp(conf.command, "build") == 0) {
         jik_compiler_build(&ctx, false);
-    }
-    else if (strcmp(conf.command, "memchk") == 0) {
-        jik_compiler_memchk(&ctx);
     }
 }

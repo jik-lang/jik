@@ -124,21 +124,6 @@ Example:
 jik check hello.jik
 ```
 
-### `jik memchk <filepath>`
-
-Translate a Jik source file to C, compile it with debug flags, and run
-`valgrind` memcheck.
-
-Options:
-
-- `--cc <compiler_name>`: C compiler to use.
-
-Example:
-
-```sh
-jik memchk hello.jik --cc gcc
-```
-
 ### `jik env`
 
 Print resolved Jik configuration values as `key=value` lines, including the Jik
@@ -188,8 +173,7 @@ Commands that compile generated C select the host C compiler in this order:
 2. The `JIK_CC` environment variable.
 3. The host default compiler, when available.
 
-If no compiler is found, `jik run`, `jik build`, and `jik memchk` fail before
-compilation.
+If no compiler is found, `jik run` and `jik build` fail before compilation.
 
 ## Package Imports
 
