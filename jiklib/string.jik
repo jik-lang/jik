@@ -219,7 +219,7 @@ end
 func split(foreign s: String, foreign delim: String, r: Region) -> Vec[String]:
     ns := len(s)
     nd := len(delim)
-    toks := [0 of ""][r]
+    toks: Vec[String][r]
     if nd == 0:
         push(toks, must slice(s, 0, ns, r))
         return toks

@@ -127,7 +127,7 @@ extern throws func jik_impl_fs_read_dir_close as
 /// @returns Directory entry names.
 throws func read_dir(foreign path: String, region: Region) -> Vec[String]:
     dir := try _read_dir_open(path, region)
-    entries := [0 of ""][region]
+    entries: Vec[String][region]
     while true:
         try name := _read_dir_next(dir, region):
             if name == "":

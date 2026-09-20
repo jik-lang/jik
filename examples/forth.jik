@@ -32,7 +32,7 @@ throws func eval_tokens(fm, tokens):
     n := len(tokens)
     ip := 0
     compile_mode := false
-    word := [0 of ""][.fm]
+    word: Vec[String][.fm]
     word_name := ""[.fm]
     while ip < n:
         tok := tokens[ip]

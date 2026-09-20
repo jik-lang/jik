@@ -132,7 +132,7 @@ func normalize(foreign path: String, r: Region) -> String:
         end
     end
 
-    parts := [0 of ""][r]
+    parts: Vec[String][r]
     i := start
     while i < n:
         while i < n and _is_sep(path[i], windows):
