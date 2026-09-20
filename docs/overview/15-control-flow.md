@@ -48,7 +48,7 @@ as in other iteration constructs.
 
 ### 15.3 `for` loops
 
-Jik has two `for` patterns: numeric ranges and vector / dictionary iteration.
+Jik has two `for` patterns: numeric ranges and string / vector / dictionary iteration.
 
 **Numeric `for`:**
 
@@ -74,6 +74,11 @@ config := {"foo": 12, "bar": 1}
 
 for key, value in config:
     print(key, ": ", value)
+end
+
+text := "Jik"
+for index, ch in text:
+    print(index, ": ", ch)
 end
 ```
 

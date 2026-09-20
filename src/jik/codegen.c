@@ -1196,7 +1196,8 @@ jik_codegen_emit_stmnt_loop_for_in_pair(JikCodeGenerator *cg, JikNode *nd)
     assert(container_elem_type);
     char *val_type_name = container_elem_type->C_name;
 
-    if (nd->val_for_in_pair.container_expr->jik_type->name == TYPE_VECTOR) {
+    if (nd->val_for_in_pair.container_expr->jik_type->name == TYPE_VECTOR ||
+        nd->val_for_in_pair.container_expr->jik_type->name == TYPE_STRING) {
         jik_writer_begin_block(&cg->cw,
                                JIK_STRING_NCAT("for (size_t ",
                                                jik_idx_name,

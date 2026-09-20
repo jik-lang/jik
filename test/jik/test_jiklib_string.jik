@@ -36,6 +36,29 @@ func test_string_from_primitives(ts):
     test::suite_assert(ts, string::from_char('x', _) == "x", site())
 end
 
+func test_string_indexed_iteration(ts):
+    text := "ABC"
+    count := 0
+    for index, ch in text:
+        test::suite_assert(ts, index == count, site())
+        if index == 0:
+            test::suite_assert(ts, ch == 'A', site())
+        elif index == 1:
+            test::suite_assert(ts, ch == 'B', site())
+        else:
+            test::suite_assert(ts, ch == 'C', site())
+        end
+        count = count + 1
+    end
+    test::suite_assert(ts, count == 3, site())
+
+    empty := ""
+    for index, ch in empty:
+        count = count + 1
+    end
+    test::suite_assert(ts, count == 3, site())
+end
+
 
 func test_string_split(ts):
     s := "foo bar baz"
@@ -242,6 +265,7 @@ end
 func run_tests(ts):
     test_string(ts)
     test_string_from_primitives(ts)
+    test_string_indexed_iteration(ts)
     test_string_split(ts)
     test_string_join(ts)
     test_string_find(ts)

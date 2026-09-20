@@ -1545,8 +1545,9 @@ jik_semantic_traverse_ast(JikSemanticAnalyzer *sa)
             if (jik_node_is_type_inferred(nd->val_for_in_pair.container_expr)) {
                 JikType *container_type = nd->val_for_in_pair.container_expr->jik_type;
                 jik_diag_fatal_error_if(container_type->name != TYPE_DICT &&
-                                            container_type->name != TYPE_VECTOR,
-                                        "expected vector or dictionary",
+                                            container_type->name != TYPE_VECTOR &&
+                                            container_type->name != TYPE_STRING,
+                                        "expected string, vector, or dictionary",
                                         jik_token_to_text(nd->val_for_in_pair.container_expr->token));
                 nd->val_for_in_pair.first_name->jik_type = container_type->name == TYPE_DICT
                                                             ? &JIK_TYPE_STRING
