@@ -43,20 +43,14 @@ BIN_DIR = release
 ARTIFACT_DIR = artifacts
 ARCH = x64
 
-TEST_DIR   = test/c
-TEST_SRCS  := $(notdir $(wildcard $(TEST_DIR)/*.c))
-TEST_OBJS  := $(patsubst %.c,$(OBJ_DIR)/test_%.o,$(TEST_SRCS))
-TEST_TARGET = testlang$(EXE)
-
-
 SRCS      := $(notdir $(wildcard $(SRC_DIR)/*.c))
 OBJS      := $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
 CORE_OBJS := $(filter-out $(OBJ_DIR)/jik.o,$(OBJS))
 
-DEPS = $(OBJS:.o=.d) $(TEST_OBJS:.o=.d)
+DEPS = $(OBJS:.o=.d)
 ARCHIVE_BASENAME = jik-$(VERSION)-$(PLATFORM)-$(ARCH)
 
-.PHONY: all run test test-core test-boot boot clean ensuredirs testlang release release-archive force-version
+.PHONY: all run test test-core test-boot boot clean ensuredirs release release-archive force-version
 
 all: ensuredirs $(TARGET)
 
@@ -69,9 +63,6 @@ $(TARGET): $(OBJ_DIR)/jik.o $(CORE_OBJS)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -MMD -c $< -o $@
-
-$(OBJ_DIR)/test_%.o: $(TEST_DIR)/%.c
-	$(CC) $(CFLAGS) -Isrc -MMD -c $< -o $@
 
 -include $(DEPS)
 
@@ -89,14 +80,8 @@ test-core: $(TARGET)
 test-boot: $(TARGET)
 	$(RUN) run test/bootstrap/tests.jik
 
-testlang: ensuredirs $(TEST_TARGET)
-
-$(TEST_TARGET): $(CORE_OBJS) $(TEST_OBJS)
-	$(CC) $(CFLAGS) -o $@ $^
-
-
 clean:
-	$(RM) $(OBJ_DIR)/* $(TARGET) $(BOOTSTRAP_TARGET) $(TEST_TARGET)
+	$(RM) $(OBJ_DIR)/* $(TARGET) $(BOOTSTRAP_TARGET)
 	$(RMDIR) $(OBJ_DIR)
 	$(RMDIR) $(BIN_DIR)
 	$(RMDIR) $(ARTIFACT_DIR)
