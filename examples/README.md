@@ -19,8 +19,9 @@ For detailed explanations, see the [language overview](../docs/overview.md).
 - [enum_match.jik](enum_match.jik) — exhaustive enum matching.
 - [variants.jik](variants.jik) — input events, payload bindings, `other:`, and checked payload access.
 - [tables.jik](tables.jik) — exhaustive, immutable enum mappings and state transitions; dictionaries instead support dynamic string keys.
-- [region_ergonomics.jik](region_ergonomics.jik) — caller-selected storage, literal retargeting, and `@`.
-- [regions_copy.jik](regions_copy.jik) — `foreign` inputs and copying into a caller-selected region.
+- [regions_basic.jik](regions_basic.jik) — basic local regions, explicit and implicit region arguments, anchored allocation, and `@`
+- [region_ergonomics.jik](region_ergonomics.jik) — automatic literal allocation, shared argument regions, and `@`.
+- [regions_copy.jik](regions_copy.jik) — retaining selected temporary data with `foreign` and copying, and which types support copying.
 - [error_handling.jik](error_handling.jik) — validation, recovery, propagation, `must`, and postfix `!`.
 - [modules/main.jik](modules/main.jik) — local imports with [modules/stats.jik](modules/stats.jik).
 - [testing_demo.jik](testing_demo.jik) — assertions with `jik/testing`.

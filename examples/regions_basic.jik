@@ -1,0 +1,66 @@
+// Basic regions: choosing where composite values live.
+
+struct Notebook:
+    notes: Vec[String]
+end
+
+
+func new_notebook(r: Region) -> Notebook:
+    // Allocate in the region supplied by the caller.
+    // The nested vector and string also belong to r.
+    return Notebook{notes = ["first note"]}[r]
+end
+
+
+func add_notes(book: Notebook):
+    // No allocation specifier: this belongs to this function's local region.
+    scratch := ["temporary"]
+    println("local scratch: ", scratch)
+
+    // [.book] means "allocate in the region of book".
+    // This string survives this helper returning.
+    note := "anchored note"[.book]
+    push(book.notes, note)
+
+    // .book can also be passed as a Region argument.
+    // The new notebook shares book's region; objects do not have separate regions.
+    another := new_notebook(.book)
+    push(book.notes, another.notes[0])
+
+    // A literal stored directly is automatically allocated in book's region.
+    push(book.notes, "automatic note")
+
+    // push(book.notes, scratch[0]) would fail:
+    // scratch belongs to this helper's local region.
+end
+
+
+func notes_for(book: Notebook) -> Vec[String]:
+    // @ selects the region determined by this function's parameters.
+    // Here it means the same thing as [.book], not this helper's local region.
+    notes := ["extra note"]@
+    return notes
+end
+
+
+func main():
+    // Composite literals allocate locally by default.
+    local_notes := ["local note"]
+
+    // _ passes this function's local region explicitly.
+    first := new_notebook(_)
+
+    // Omitting the final Region argument also passes the local region.
+    second := new_notebook()
+
+    add_notes(first)
+
+    extras := notes_for(first)
+    push(first.notes, extras[0])
+
+    println("local: ", local_notes)
+    println("first: ", first.notes)
+    println("second: ", second.notes)
+
+    // This function's local region is released when it returns.
+end

@@ -41,6 +41,7 @@ func test_examples_check(ts):
         "examples/primes.jik",
         "examples/process_capture.jik",
         "examples/region_ergonomics.jik",
+        "examples/regions_basic.jik",
         "examples/regions_copy.jik",
         "examples/strings.jik",
         "examples/strbuf_demo.jik",

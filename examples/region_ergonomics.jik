@@ -6,12 +6,11 @@ struct User:
 end
 
 
-func new_user(foreign name: String, r: Region) -> User:
+func new_user(name: String) -> User:
     // The returned struct and its composite field `labels` are automatically
-    // allocated in r, since this is the only possible valid allocation destination.
-    // Since `name` is marked as a foreign parameter, we still need to copy it to `r`.
+    // allocated in name's region. The existing name is stored directly.
     return User{
-        name = copy(name, r),
+        name = name,
         labels = ["new", "active"]
     }
 end
@@ -45,11 +44,12 @@ end
 
 
 func main():
-    // An omitted final Region argument automatically passes the current
-    // function's local region `_`.
     user := new_user("Ada")
+    anonymous := new_user("")
 
     add_default_label(user)
     println(display_name(user), ": ", user.labels)
+    println(display_name(anonymous), ": ", anonymous.labels)
+    // Omitting default_labels' final Region argument passes main's local region.
     println("default labels: ", default_labels())
 end
