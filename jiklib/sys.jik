@@ -58,12 +58,6 @@ extern throws func jik_impl_sys_executable_path as
 extern func jik_impl_sys_cwd as
     cwd(region: Region) -> String
 
-/// Sleep for a number of milliseconds (approximate).
-///
-/// @param ms Milliseconds.
-extern func jik_impl_sys_sleep as
-    sleep(ms: int) -> void
-
 /// Return a short platform identifier string.
 ///
 /// @param region Allocation region for the returned string.
@@ -82,7 +76,6 @@ extern func jik_impl_sys_platform as
 #include <windows.h>
 #include <direct.h>
 #elif defined(__linux__)
-#include <time.h>
 #include <sys/types.h>
 #include <unistd.h>
 extern ssize_t readlink(const char *path, char *buf, size_t size);
@@ -184,22 +177,6 @@ jik_impl_sys_cwd(JikRegion *r)
         return jik_string_new("", r);
     }
     return jik_string_new(buf, r);
-#endif
-}
-
-void
-jik_impl_sys_sleep(int ms)
-{
-    if (ms <= 0) {
-        return;
-    }
-#ifdef _WIN32
-    Sleep(ms);
-#else
-    struct timespec ts;
-    ts.tv_sec = ms / 1000;
-    ts.tv_nsec = (long)(ms % 1000) * 1000000L;
-    nanosleep(&ts, NULL);
 #endif
 }
 

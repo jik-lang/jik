@@ -3372,6 +3372,16 @@ jik_codegen_register_print_functions(JikCodeGenerator *cg)
 }
 
 static void
+jik_codegen_emit_feature_test_macros(JikCodeGenerator *cg)
+{
+    // Ask Unix system headers to declare Jik's POSIX functions.
+    // This must come before any system header is included.
+    jik_writer_write_line(&cg->cw, "#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)");
+    jik_writer_write_line(&cg->cw, "#define _POSIX_C_SOURCE 200809L");
+    jik_writer_write_line(&cg->cw, "#endif");
+}
+
+static void
 jik_codegen_emit_jik_version(JikCodeGenerator *cg)
 {
     jik_writer_write_line(&cg->cw,
@@ -3405,6 +3415,7 @@ jik_codegen_run(JikCodeGenerator *cg)
 {
     jik_codegen_prepare_C_names(cg);
     jik_codegen_register_print_functions(cg);
+    jik_codegen_emit_feature_test_macros(cg);
     jik_codegen_emit_jik_version(cg);
     jik_codegen_emit_support_library(cg);
     jik_codegen_emit_embedded_code(cg);

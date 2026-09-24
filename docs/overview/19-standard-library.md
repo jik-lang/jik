@@ -15,6 +15,7 @@ strings, input/output, math, randomness, and testing.
 - [jik::region](../jiklib/region.md) - region allocator diagnostics
 - [jik::rand](../jiklib/rand.md) - pseudo-random number generation
 - [jik::sys](../jiklib/sys.md) - system-level utilities
+- [jik::time](../jiklib/time.md) - elapsed-time measurement and timestamps
 - [jik::process](../jiklib/process.md) - shell-free process execution
 - [jik::argparse](../jiklib/argparse.md) - command-line argument parsing
 - [jik::path](../jiklib/path.md) - lexical path utilities

@@ -429,7 +429,7 @@
         "name": "write_stderr",
         "kind": "function",
         "signature": "write_stderr(text: String) -> void",
-        "doc": "Write a string to standard error.\n\nThis is best-effort diagnostic output: errors while writing are ignored.",
+        "doc": "Write a string to standard error.\n\nWrite errors are ignored.",
         "throws": false
       },
       {
@@ -1027,13 +1027,6 @@
         "throws": false
       },
       {
-        "name": "sleep",
-        "kind": "function",
-        "signature": "sleep(ms: int) -> void",
-        "doc": "Sleep for a number of milliseconds (approximate).",
-        "throws": false
-      },
-      {
         "name": "platform",
         "kind": "function",
         "signature": "platform(region: Region) -> String",
@@ -1071,6 +1064,33 @@
         "kind": "function",
         "signature": "suite_assert(suite: TestSuite, cond: bool, s: Site) -> void",
         "doc": "Test suite assertion function.",
+        "throws": false
+      }
+    ]
+  },
+  "time": {
+    "module": "time",
+    "doc": "Time utilities for elapsed-time measurement and basic log timestamps.",
+    "symbols": [
+      {
+        "name": "monotonic_ms",
+        "kind": "function",
+        "signature": "monotonic_ms() -> int",
+        "doc": "Return milliseconds elapsed since the first call in this process.\n\nUse this for benchmarking and measuring durations. The returned value is\nprocess-relative and saturates at the largest Jik `int` value.",
+        "throws": false
+      },
+      {
+        "name": "unix_seconds",
+        "kind": "function",
+        "signature": "unix_seconds() -> int",
+        "doc": "Return the current Unix timestamp in seconds.\n\nUse this for basic log timestamps. The function returns `0` if the current\ntime cannot be represented by Jik's `int` type.",
+        "throws": false
+      },
+      {
+        "name": "sleep",
+        "kind": "function",
+        "signature": "sleep(ms: int) -> void",
+        "doc": "Sleep for approximately `ms` milliseconds.\n\nNon-positive durations return immediately.",
         "throws": false
       }
     ]

@@ -1,0 +1,135 @@
+//! Time utilities for elapsed-time measurement and basic log timestamps.
+
+/// Return milliseconds elapsed since the first call in this process.
+///
+/// Use this for benchmarking and measuring durations. The returned value is
+/// process-relative and saturates at the largest Jik `int` value.
+extern func jik_time_monotonic_ms as
+    monotonic_ms() -> int
+
+/// Return the current Unix timestamp in seconds.
+///
+/// Use this for basic log timestamps. The function returns `0` if the current
+/// time cannot be represented by Jik's `int` type.
+extern func jik_time_unix_seconds as
+    unix_seconds() -> int
+
+/// Sleep for approximately `ms` milliseconds.
+///
+/// Non-positive durations return immediately.
+extern func jik_time_sleep as
+    sleep(ms: int) -> void
+
+
+@embed{C_END}
+
+#include <stdint.h>
+#include <time.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+void
+jik_time_sleep(int32_t ms)
+{
+    if (ms <= 0) {
+        return;
+    }
+#ifdef _WIN32
+    Sleep((DWORD)ms);
+#else
+    struct timespec ts;
+    ts.tv_sec = ms / 1000;
+    ts.tv_nsec = (long)(ms % 1000) * 1000000L;
+    nanosleep(&ts, NULL);
+#endif
+}
+
+int32_t
+jik_time_unix_seconds(void)
+{
+    time_t now = time(NULL);
+    if (now == (time_t)-1) {
+        return 0;
+    }
+
+    int64_t seconds = (int64_t)now;
+    if (seconds < INT32_MIN || seconds > INT32_MAX) {
+        return 0;
+    }
+    return (int32_t)seconds;
+}
+
+#ifdef _WIN32
+
+int32_t
+jik_time_monotonic_ms(void)
+{
+    static LARGE_INTEGER base;
+    static LARGE_INTEGER frequency;
+    static bool          initialized = false;
+
+    LARGE_INTEGER now;
+    if (!QueryPerformanceCounter(&now)) {
+        return 0;
+    }
+    if (!initialized) {
+        if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0) {
+            return 0;
+        }
+        base        = now;
+        initialized = true;
+        return 0;
+    }
+
+    int64_t ticks = now.QuadPart - base.QuadPart;
+    if (ticks < 0) {
+        return 0;
+    }
+
+    int64_t seconds   = ticks / frequency.QuadPart;
+    int64_t remainder = ticks % frequency.QuadPart;
+    if (seconds > INT32_MAX / 1000) {
+        return INT32_MAX;
+    }
+
+    int64_t milliseconds = seconds * 1000 + (remainder * 1000) / frequency.QuadPart;
+    return milliseconds > INT32_MAX ? INT32_MAX : (int32_t)milliseconds;
+}
+
+#else
+
+int32_t
+jik_time_monotonic_ms(void)
+{
+    static struct timespec base;
+    static bool            initialized = false;
+
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+        return 0;
+    }
+    if (!initialized) {
+        base        = now;
+        initialized = true;
+        return 0;
+    }
+
+    int64_t seconds     = (int64_t)now.tv_sec - (int64_t)base.tv_sec;
+    int64_t nanoseconds = (int64_t)now.tv_nsec - (int64_t)base.tv_nsec;
+    if (nanoseconds < 0) {
+        seconds--;
+        nanoseconds += 1000000000LL;
+    }
+    if (seconds < 0 || seconds > INT32_MAX / 1000) {
+        return seconds < 0 ? 0 : INT32_MAX;
+    }
+
+    int64_t milliseconds = seconds * 1000 + nanoseconds / 1000000LL;
+    return milliseconds > INT32_MAX ? INT32_MAX : (int32_t)milliseconds;
+}
+
+#endif
+
+C_END

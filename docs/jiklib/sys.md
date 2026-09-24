@@ -71,15 +71,6 @@ Return a short platform identifier string.
 
 ---
 
-### `sleep(ms: int) -> void`
-
-Sleep for a number of milliseconds (approximate).
-
-**Parameters**
-1. `ms: int` - Milliseconds.
-
----
-
 ### `system(cmd: String) -> int`
 
 Execute a command using the host system shell.

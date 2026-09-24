@@ -1,0 +1,34 @@
+use "jik/testing" as test
+use "jik/time"
+
+
+func test_time(ts):
+    seconds := time::unix_seconds()
+    test::suite_assert(ts, seconds > 1700000000, site())
+
+    before := time::monotonic_ms()
+    after := time::monotonic_ms()
+    test::suite_assert(ts, after >= before, site())
+
+    time::sleep(1)
+    after_sleep := time::monotonic_ms()
+    test::suite_assert(ts, after_sleep >= after, site())
+
+    start := time::monotonic_ms()
+    elapsed := 0
+    attempts := 0
+    while attempts < 20 and elapsed == 0:
+        time::sleep(10)
+        elapsed = time::monotonic_ms() - start
+        attempts += 1
+    end
+    test::suite_assert(ts, elapsed > 0, site())
+
+    time::sleep(0)
+    time::sleep(-1)
+end
+
+
+func run_tests(ts):
+    test_time(ts)
+end

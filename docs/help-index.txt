@@ -32,4 +32,5 @@ std, jik/std = jiklib/std.md
 strbuf, string-buffer, jik/strbuf = jiklib/strbuf.md
 string, strings, jik/string = jiklib/string.md
 sys, system, jik/sys = jiklib/sys.md
+time, timing, jik/time = jiklib/time.md
 testing, tests, test, jik/testing = jiklib/testing.md
