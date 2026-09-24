@@ -1,0 +1,37 @@
+enum SymbolKind:
+    FUNCTION
+    LOCAL
+end
+
+
+struct Symbol:
+    name: String
+    kind: SymbolKind
+    origin: int    // AST node ID
+end
+
+
+struct Scope:
+    parent: Option[Scope]
+    symbols: Dict[Symbol]
+end
+
+
+func has_symbol(sc: Scope, foreign name: String) -> bool:
+    if sc.symbols[name] is Some:
+        return true
+    end
+    if sc.parent is Some:
+        return has_symbol(sc.parent?, name)
+    end
+    return false
+end
+
+
+func add_symbol(sc: Scope, name: String, kind: SymbolKind, origin: int) -> bool:
+    if has_symbol(sc, name):
+        return false
+    end
+    sc.symbols[name] = Symbol{name, kind, origin}
+    return true
+end

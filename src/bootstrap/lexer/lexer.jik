@@ -65,6 +65,10 @@ func get_identifier_type(l: Lexer, start: int, stop: int) -> token::TokenType:
 	text := must string::slice(l.file.text, start, stop)
 	if text == "func":
 		return token::TokenType.KWD_FUNC
+	elif text == "if":
+		return token::TokenType.KWD_IF
+	elif text == "return":
+		return token::TokenType.KWD_RETURN
 	elif text == "end":
 		return token::TokenType.KWD_END
 	elif text == "use":
@@ -150,6 +154,9 @@ func next_token(l: Lexer, diag: diag::Diagnostics) -> token::Token:
 			return token::Token{type = token::TokenType.ASSIGN, span = l.span(start, l.pos)}
 		elif ch == ':':
 			l.advance()
+			if l.match_next(':'):
+				return token::Token{type = token::TokenType.DOUBLE_COLON, span = l.span(start, l.pos)}
+			end
 			if l.match_next('='):
 				return token::Token{type = token::TokenType.DECLARE, span = l.span(start, l.pos)}
 			end
@@ -166,6 +173,18 @@ func next_token(l: Lexer, diag: diag::Diagnostics) -> token::Token:
 		elif ch == '+':
 			l.advance()
 			return token::Token{type = token::TokenType.OP_PLUS, span = l.span(start, l.pos)}
+		elif ch == '-':
+			l.advance()
+			return token::Token{type = token::TokenType.OP_MINUS, span = l.span(start, l.pos)}
+		elif ch == '/':
+			l.advance()
+			if l.match_next('/'):
+				while not l.at_end() and l.current() != '\n':
+					l.advance()
+				end
+				continue
+			end
+			return l.error_token(diag, start, l.pos, "unexpected character", "")
 		elif ch == '"':
 			return l.scan_string(diag)
 		elif char::isdigit(ch):

@@ -77,6 +77,44 @@ func test_parentheses(ts):
 end
 
 
+func test_return_keyword(ts):
+    tokens := lex_source("return returning", 1, _)
+    test::suite_assert(ts, len(tokens) == 3, site())
+    test::suite_assert(ts, tokens[0].type == token::TokenType.KWD_RETURN, site())
+    test::suite_assert(ts, tokens[1].type == token::TokenType.IDENTIFIER, site())
+end
+
+
+func test_if_keyword(ts):
+    tokens := lex_source("if iff", 1, _)
+    test::suite_assert(ts, tokens[0].type == token::TokenType.KWD_IF, site())
+    test::suite_assert(ts, tokens[1].type == token::TokenType.IDENTIFIER, site())
+end
+
+
+func test_double_colon(ts):
+    tokens := lex_source("f::foo := :", 1, _)
+    test::suite_assert(ts, len(tokens) == 6, site())
+    test::suite_assert(ts, tokens[0].type == token::TokenType.IDENTIFIER, site())
+    test::suite_assert(ts, tokens[1].type == token::TokenType.DOUBLE_COLON, site())
+    test::suite_assert(ts, tokens[1].span.start == 1, site())
+    test::suite_assert(ts, tokens[1].span.stop == 3, site())
+    test::suite_assert(ts, tokens[2].type == token::TokenType.IDENTIFIER, site())
+    test::suite_assert(ts, tokens[3].type == token::TokenType.DECLARE, site())
+    test::suite_assert(ts, tokens[4].type == token::TokenType.COLON, site())
+end
+
+
+func test_minus_operator(ts):
+    tokens := lex_source("1-2+3", 1, _)
+    test::suite_assert(ts, len(tokens) == 6, site())
+    test::suite_assert(ts, tokens[1].type == token::TokenType.OP_MINUS, site())
+    test::suite_assert(ts, tokens[1].span.start == 1, site())
+    test::suite_assert(ts, tokens[1].span.stop == 2, site())
+    test::suite_assert(ts, tokens[3].type == token::TokenType.OP_PLUS, site())
+end
+
+
 func test_strings(ts):
     tokens := lex_source("\"hello\" \"a\\\"b\"", 1, _)
     test::suite_assert(ts, len(tokens) == 3, site())
@@ -117,6 +155,10 @@ func run_tests(ts):
 	test_integers_and_offsets(ts)
 	test_identifiers_and_keywords(ts)
 	test_parentheses(ts)
+	test_return_keyword(ts)
+	test_if_keyword(ts)
+	test_double_colon(ts)
+	test_minus_operator(ts)
 	test_strings(ts)
 	test_newline_and_error(ts)
 end

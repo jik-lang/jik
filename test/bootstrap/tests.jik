@@ -2,11 +2,13 @@ use "jik/testing" as test
 
 use "test_lexer"
 use "test_parser"
+use "test_semantic"
 
 
 func main():
     ts := test::suite_new()
     test_lexer::run_tests(ts)
     test_parser::run_tests(ts)
+    test_semantic::run_tests(ts)
     test::suite_finish(ts)
 end

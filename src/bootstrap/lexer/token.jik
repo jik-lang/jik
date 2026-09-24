@@ -8,12 +8,16 @@ enum TokenType:
 	ASSIGN
 	DECLARE
 	COLON
+	DOUBLE_COLON
 	NEWLINE
 	LPAREN
 	RPAREN
 	COMMA
 	OP_PLUS
+	OP_MINUS
 	KWD_FUNC
+	KWD_IF
+	KWD_RETURN
 	KWD_END
 	KWD_USE
 	KWD_AS
@@ -29,12 +33,16 @@ table TokenTypeNames[TokenType] -> String:
     ASSIGN: "="
     DECLARE: ":="
     COLON: ":"
+    DOUBLE_COLON: "::"
     NEWLINE: "newline"
     LPAREN: "("
     RPAREN: ")"
     COMMA: ","
     OP_PLUS: "+"
+    OP_MINUS: "-"
     KWD_FUNC: "func"
+    KWD_IF: "if"
+    KWD_RETURN: "return"
     KWD_END: "end"
     KWD_USE: "use"
     KWD_AS: "as"

@@ -1,0 +1,71 @@
+use "symbol"
+use "../parser/ast"
+use "../diag"
+use "../module"
+use "../parser/format"
+
+
+func quotify(foreign s: String, r: Region) -> String:
+    return concat("\"", s, "\"", r)
+end
+
+
+func collect_global_declarations(mod: module::Module, diagnostics: diag::Diagnostics):
+    root := mod.ast.get_root_module()
+    for id in root.declarations:
+        node := mod.ast.nodes[id]
+        if node.kind is FUNCTION_DECL:
+            function := node.kind.FUNCTION_DECL
+            if not symbol::add_symbol(mod.global_scope, function.name, symbol::SymbolKind.FUNCTION, id):
+                diag::error(diagnostics, "semantic analysis", concat("function ", quotify(function.name), " already defined"), Some{node.span})
+            end
+        end
+    end
+end
+
+
+func collect_block(mod: module::Module, block: ast::Block, parent: symbol::Scope, diagnostics: diag::Diagnostics):
+    scope := block.scope
+    assert(scope.parent is None)
+    scope.parent = Some{parent}
+    for nd_id in block.statements:
+        subnode := mod.ast.nodes[nd_id]
+        if subnode.kind is LOCAL_DECL:
+            local := subnode.kind.LOCAL_DECL
+            if not symbol::add_symbol(scope, local.name, symbol::SymbolKind.LOCAL, nd_id):
+                diag::error(diagnostics, "semantic analysis", concat("symbol ", quotify(local.name), " already declared"), Some{subnode.span})
+            end
+        elif subnode.kind is IF:
+            branch := subnode.kind.IF
+            collect_block(mod, branch.body, scope, diagnostics)
+        end
+    end
+end
+
+
+func collect_local_declarations(mod: module::Module, diagnostics: diag::Diagnostics):
+    root := mod.ast.get_root_module()
+    for id in root.declarations:
+        node := mod.ast.nodes[id]
+        if node.kind is FUNCTION_DECL:
+            function := node.kind.FUNCTION_DECL
+            collect_block(mod, function.body, mod.global_scope, diagnostics)
+        end
+    end
+end
+
+
+func analyze(modules: Vec[module::Module], diagnostics: diag::Diagnostics):
+    for mod in modules:
+        collect_global_declarations(mod, diagnostics)
+        if diagnostics.error_count > 0:
+            return
+        end        
+    end
+    for mod in modules:
+        collect_local_declarations(mod, diagnostics)
+        if diagnostics.error_count > 0:
+            return
+        end
+    end
+end

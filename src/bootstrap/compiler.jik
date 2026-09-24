@@ -6,6 +6,7 @@ use "lexer/token"
 use "parser/parser"
 use "parser/ast"
 use "parser/format"
+use "semantic/semantic"
 
 use "jik/path"
 
@@ -13,6 +14,7 @@ use "jik/path"
 struct Config:
     input_path: String
     output_path: String
+    dump_ast: bool
 end
 
 
@@ -96,7 +98,6 @@ throws func run(comp: Compiler):
             comp.print_diagnostics()
             return
         end
-        //println(format::format(ast, .comp))
         mod := module::Module{source_id = src.id, tokens, ast}@
         comp.modules.push(mod)
 
@@ -110,8 +111,18 @@ throws func run(comp: Compiler):
         end
     end
 
-    for mod in comp.modules:
-        println(mod)
+    if comp.config.dump_ast:
+        for mod in comp.modules:
+            println(concat("[AST: ", comp.src_mngr.sources[mod.source_id].path, "]"))
+            print(format::format(mod.ast))
+        end
+    end
+
+    semantic::analyze(comp.modules, comp.diagnostics)
+
+    if comp.diagnostics.error_count > 0:
+        comp.print_diagnostics()
+        return
     end
 
 end

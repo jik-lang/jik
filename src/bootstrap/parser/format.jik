@@ -17,7 +17,7 @@ func append_int(sb: strbuf::StrBuf, value: int) -> void:
 end
 
 
-func format(ast: ast::Ast, r: Region) -> String:
+func format(foreign ast: ast::Ast, r: Region) -> String:
     sb := strbuf::new("")
     if len(ast.nodes) > 0:
         format_node(ast, ast.root, 0, sb)
@@ -66,7 +66,7 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         sb.append(" name=")
         sb.append(function.name)
         sb.append("\n")
-        for statement in function.body:
+        for statement in function.body.statements:
             format_node(ast, statement, depth + 1, sb)
         end
     elif kind is LOCAL_DECL:
@@ -77,6 +77,23 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         sb.append(declaration.name)
         sb.append("\n")
         format_node(ast, declaration.initializer, depth + 1, sb)
+    elif kind is IF:
+        statement := kind.IF
+        sb.append("IF #")
+        append_int(sb, id)
+        sb.append("\n")
+        format_node(ast, statement.condition, depth + 1, sb)
+        for body_statement in statement.body.statements:
+            format_node(ast, body_statement, depth + 1, sb)
+        end
+    elif kind is RETURN:
+        statement := kind.RETURN
+        sb.append("RETURN #")
+        append_int(sb, id)
+        sb.append("\n")
+        if statement.value is Some:
+            format_node(ast, statement.value?, depth + 1, sb)
+        end
     elif kind is INTEGER_LITERAL:
         sb.append("INTEGER #")
         append_int(sb, id)
@@ -85,6 +102,23 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         sb.append("..")
         append_int(sb, node.span.stop)
         sb.append(")\n")
+    elif kind is IDENTIFIER_EXPR:
+        identifier := kind.IDENTIFIER_EXPR
+        sb.append("IDENTIFIER #")
+        append_int(sb, id)
+        sb.append(" name=")
+        if identifier.qualifier is Some:
+            sb.append(identifier.qualifier?)
+            sb.append("::")
+        end
+        sb.append(identifier.name)
+        sb.append("\n")
+    elif kind is CALL:
+        call := kind.CALL
+        sb.append("CALL #")
+        append_int(sb, id)
+        sb.append("\n")
+        format_node(ast, call.callee, depth + 1, sb)
     elif kind is BINARY:
         binary := kind.BINARY
         sb.append("BINOP #")

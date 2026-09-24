@@ -10,6 +10,7 @@ func make_parser(r: Region) -> ap::Parser:
     ap::add_positional(parser, "input", "Input file")
     opt_out := ap::add_option(parser, "--out", "-o", "Output file")
     ap::add_option_positional(opt_out, "file", "Output path.")
+    ap::add_option(parser, "--dump-ast", "", "Print the parsed AST for each module.")
     return parser
 end
 
@@ -19,7 +20,11 @@ throws func run(args: Vec[String]):
     res := try ap::parse(p, args)
     input_file := res.positionals["input"]?
     output_file := res.options["--out"]?["file"]? if res.options["--out"] is Some else ""
-    config := compiler::Config{input_path = input_file, output_path = output_file}
+    config := compiler::Config{
+        input_path = input_file,
+        output_path = output_file,
+        dump_ast = res.options["--dump-ast"] is Some
+    }
     comp := compiler::new(config)
     try comp.run()
 end

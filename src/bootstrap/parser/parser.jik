@@ -130,23 +130,58 @@ end
 
 
 throws func parse_primary(p: Parser) -> int:
-    tok := try p.expect(token::TokenType.INTEGER)
-    return p.ast.add(tok.span, ast::NodeKind.INTEGER_LITERAL{})
+    tok := p.current()
+    if tok.type == token::TokenType.INTEGER:
+        p.advance()
+        return p.ast.add(tok.span, ast::NodeKind.INTEGER_LITERAL{})
+    elif tok.type == token::TokenType.IDENTIFIER:
+        p.advance()
+        qualifier: Option[String] = None@
+        name := p.text(tok.span)
+        stop := tok.span.stop
+        if p.current_type() == token::TokenType.DOUBLE_COLON:
+            p.advance()
+            qualifier = Some{name}@
+            member := try p.expect(token::TokenType.IDENTIFIER)
+            name = p.text(member.span)
+            stop = member.span.stop
+        end
+        name_span := source::Span{source_id = tok.span.source_id, start = tok.span.start, stop}@
+        identifier_id := p.ast.add(name_span, ast::NodeKind.IDENTIFIER_EXPR{ast::IdentifierExpr{qualifier, name}})
+        if p.current_type() == token::TokenType.LPAREN:
+            p.advance()
+            close := try p.expect(token::TokenType.RPAREN)
+            call_span := source::Span{source_id = tok.span.source_id, start = tok.span.start, stop = close.span.stop}@
+            return p.ast.add(call_span, ast::NodeKind.CALL{ast::CallExpr{callee = identifier_id}})
+        end
+        return identifier_id
+    end
+    if tok.type == token::TokenType.ERROR:
+        p.advance()
+    else:
+        diag::error(p.diagnostics, "expected expression", "expected integer or identifier", Some{tok.span})
+    end
+    fail("parse error")
 end
 
 
 throws func parse_expression(p: Parser) -> int:
     left := try p.parse_primary()
-    while p.current_type() == token::TokenType.OP_PLUS:
+    while p.current_type() == token::TokenType.OP_PLUS or p.current_type() == token::TokenType.OP_MINUS:
+        op_type := p.current_type()
         p.advance()
         right := try p.parse_primary()
+        op := ast::BinaryOp.PLUS
+        if op_type == token::TokenType.OP_MINUS:
+            op = ast::BinaryOp.MINUS
+        end
         span := source::Span{
             source_id = p.ast.nodes[left].span.source_id,
             start = p.ast.nodes[left].span.start,
             stop = p.ast.nodes[right].span.stop
         }@
         left = p.ast.add(span, ast::NodeKind.BINARY{
-            ast::BinaryExpr{left, right, op = ast::BinaryOp.PLUS}
+            ast::BinaryExpr{left, right, op}
         })
     end
     return left
@@ -162,6 +197,63 @@ throws func parse_declaration(p: Parser) -> int:
     return p.ast.add(span, ast::NodeKind.LOCAL_DECL{
         ast::LocalDecl{name = p.text(name_tok.span), initializer = value}
     })
+end
+
+
+throws func parse_return(p: Parser) -> int:
+    start := try p.expect(token::TokenType.KWD_RETURN)
+    value: Option[int] = None@
+    stop := start.span.stop
+    if p.current_type() != token::TokenType.NEWLINE:
+        expression := try p.parse_expression()
+        value = Some{expression}@
+        stop = p.ast.nodes[expression].span.stop
+    end
+    try p.expect(token::TokenType.NEWLINE)
+    span := source::Span{source_id = start.span.source_id, start = start.span.start, stop}@
+    return p.ast.add(span, ast::NodeKind.RETURN{ast::ReturnStmt{value}})
+end
+
+
+throws func parse_if(p: Parser) -> int:
+    start := try p.expect(token::TokenType.KWD_IF)
+    condition := try p.parse_expression()
+    try p.expect(token::TokenType.COLON)
+    try p.expect(token::TokenType.NEWLINE)
+
+    statement := ast::IfStmt{condition}@
+    p.skip_newlines()
+    while p.current_type() != token::TokenType.KWD_END:
+        if p.at_end():
+            actual := p.current()
+            diag::error(p.diagnostics, "unterminated if", "expected end", Some{actual.span})
+            fail("unterminated if")
+        end
+        try body_statement := p.parse_statement():
+            statement.body.statements.push(body_statement)
+        except:
+            p.synchronize_statement()
+        end
+        p.skip_newlines()
+    end
+
+    end_tok := try p.expect(token::TokenType.KWD_END)
+    span := source::Span{source_id = start.span.source_id, start = start.span.start, stop = end_tok.span.stop}@
+    return p.ast.add(span, ast::NodeKind.IF{statement})
+end
+
+
+throws func parse_statement(p: Parser) -> int:
+    if p.current_type() == token::TokenType.KWD_IF:
+        if_id := try p.parse_if()
+        return if_id
+    end
+    if p.current_type() == token::TokenType.KWD_RETURN:
+        return_id := try p.parse_return()
+        return return_id
+    end
+    declaration_id := try p.parse_declaration()
+    return declaration_id
 end
 
 
@@ -181,8 +273,8 @@ throws func parse_function(p: Parser) -> int:
             diag::error(p.diagnostics, "unterminated function", "expected end", Some{actual.span})
             fail("unterminated function")
         end
-        try statement := p.parse_declaration():
-            function.body.push(statement)
+        try statement := p.parse_statement():
+            function.body.statements.push(statement)
         except:
             p.synchronize_statement()
         end

@@ -1,0 +1,102 @@
+use "jik/testing" as test
+
+use "../../src/bootstrap/diag"
+use "../../src/bootstrap/module"
+use "../../src/bootstrap/source"
+use "../../src/bootstrap/lexer/lexer"
+use "../../src/bootstrap/parser/parser"
+use "../../src/bootstrap/semantic/semantic"
+use "../../src/bootstrap/semantic/symbol"
+
+
+func parse_module(foreign text: String, r: Region) -> module::Module:
+    file := source::SourceFile{id = 0, path = "<test>", text = copy(text, r)}[r]
+    diagnostics := diag::Diagnostics{}[r]
+    tokens := lexer::tokenize(file, diagnostics)
+    ast := parser::parse(file, tokens, diagnostics)
+    return module::Module{source_id = file.id, tokens, ast}[r]
+end
+
+
+func test_function_scopes(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func first():\n    value := 1\nend\nfunc second():\n    value := 2\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    semantic::analyze(modules, diagnostics)
+
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    first := mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL
+    second := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    test::suite_assert(ts, first.body.scope.parent is Some, site())
+    test::suite_assert(ts, second.body.scope.parent is Some, site())
+    test::suite_assert(ts, first.body.scope.symbols["value"] is Some, site())
+    test::suite_assert(ts, second.body.scope.symbols["value"] is Some, site())
+    test::suite_assert(ts, first.body.scope.symbols["value"]?.origin == first.body.statements[0], site())
+    test::suite_assert(ts, mod.global_scope.symbols["value"] is None, site())
+end
+
+
+func test_local_conflicts(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func global():\nend\nfunc other():\n    global := 1\n    value := 2\n    value := 3\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    semantic::analyze(modules, diagnostics)
+
+    test::suite_assert(ts, diagnostics.error_count == 2, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    function := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    test::suite_assert(ts, function.body.scope.symbols["global"] is None, site())
+    test::suite_assert(ts, function.body.scope.symbols["value"]?.kind == symbol::SymbolKind.LOCAL, site())
+    test::suite_assert(ts, function.body.scope.symbols["value"]?.origin == function.body.statements[1], site())
+end
+
+
+func test_if_scopes(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func main():\n    if 1:\n        first := 1\n        if first:\n            second := 2\n        end\n    end\n    if 1:\n        first := 3\n    end\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    semantic::analyze(modules, diagnostics)
+
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    function := mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL
+    first_if := mod.ast.nodes[function.body.statements[0]].kind.IF
+    nested_if := mod.ast.nodes[first_if.body.statements[1]].kind.IF
+    second_if := mod.ast.nodes[function.body.statements[1]].kind.IF
+    test::suite_assert(ts, first_if.body.scope.parent is Some, site())
+    test::suite_assert(ts, nested_if.body.scope.parent is Some, site())
+    test::suite_assert(ts, first_if.body.scope.symbols["first"]?.origin == first_if.body.statements[0], site())
+    test::suite_assert(ts, nested_if.body.scope.symbols["second"]?.origin == nested_if.body.statements[0], site())
+    test::suite_assert(ts, second_if.body.scope.symbols["first"]?.origin == second_if.body.statements[0], site())
+    test::suite_assert(ts, function.body.scope.symbols["first"] is None, site())
+    test::suite_assert(ts, nested_if.body.scope.symbols["first"] is None, site())
+end
+
+
+func test_if_cannot_shadow(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func main():\n    value := 1\n    if value:\n        value := 2\n        inner := 3\n        if inner:\n            inner := 4\n        end\n    end\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    semantic::analyze(modules, diagnostics)
+
+    test::suite_assert(ts, diagnostics.error_count == 2, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    function := mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL
+    outer := mod.ast.nodes[function.body.statements[1]].kind.IF
+    inner := mod.ast.nodes[outer.body.statements[2]].kind.IF
+    test::suite_assert(ts, outer.body.scope.symbols["value"] is None, site())
+    test::suite_assert(ts, inner.body.scope.symbols["inner"] is None, site())
+end
+
+
+func run_tests(ts):
+    test_function_scopes(ts)
+    test_local_conflicts(ts)
+    test_if_scopes(ts)
+    test_if_cannot_shadow(ts)
+end

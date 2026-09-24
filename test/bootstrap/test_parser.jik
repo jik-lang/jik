@@ -42,9 +42,9 @@ func test_imports_and_function(ts):
     test::suite_assert(ts, function_nd.kind is FUNCTION_DECL, site())
     function := function_nd.kind.FUNCTION_DECL
     test::suite_assert(ts, function.name == "main", site())
-    test::suite_assert(ts, len(function.body) == 1, site())
+    test::suite_assert(ts, len(function.body.statements) == 1, site())
 
-    declaration_nd := parsed.ast.nodes[function.body[0]]
+    declaration_nd := parsed.ast.nodes[function.body.statements[0]]
     test::suite_assert(ts, declaration_nd.kind is LOCAL_DECL, site())
     declaration := declaration_nd.kind.LOCAL_DECL
     test::suite_assert(ts, declaration.name == "answer", site())
@@ -66,12 +66,124 @@ func test_statement_recovery(ts):
     module := ast::get_root_module(parsed.ast)
     test::suite_assert(ts, len(module.declarations) == 1, site())
     function := parsed.ast.nodes[module.declarations[0]].kind.FUNCTION_DECL
-    test::suite_assert(ts, len(function.body) == 2, site())
+    test::suite_assert(ts, len(function.body.statements) == 2, site())
 
-    first := parsed.ast.nodes[function.body[0]].kind.LOCAL_DECL
-    second := parsed.ast.nodes[function.body[1]].kind.LOCAL_DECL
+    first := parsed.ast.nodes[function.body.statements[0]].kind.LOCAL_DECL
+    second := parsed.ast.nodes[function.body.statements[1]].kind.LOCAL_DECL
     test::suite_assert(ts, first.name == "first", site())
     test::suite_assert(ts, second.name == "second", site())
+end
+
+
+func test_return_statements(ts):
+    parsed := parse_source("func answer():\n    return 1 + 2\n    return\nend\n", _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+
+    module := ast::get_root_module(parsed.ast)
+    function := parsed.ast.nodes[module.declarations[0]].kind.FUNCTION_DECL
+    test::suite_assert(ts, len(function.body.statements) == 2, site())
+
+    valued := parsed.ast.nodes[function.body.statements[0]]
+    bare := parsed.ast.nodes[function.body.statements[1]]
+    test::suite_assert(ts, valued.kind is RETURN, site())
+    test::suite_assert(ts, bare.kind is RETURN, site())
+    test::suite_assert(ts, valued.kind.RETURN.value is Some, site())
+    test::suite_assert(ts, parsed.ast.nodes[valued.kind.RETURN.value?].kind is BINARY, site())
+    test::suite_assert(ts, bare.kind.RETURN.value is None, site())
+
+    recovered := parse_source("func answer():\n    return +\n    return 3\nend\n", _)
+    test::suite_assert(ts, recovered.diagnostics.error_count == 1, site())
+    recovered_module := ast::get_root_module(recovered.ast)
+    recovered_function := recovered.ast.nodes[recovered_module.declarations[0]].kind.FUNCTION_DECL
+    test::suite_assert(ts, len(recovered_function.body.statements) == 1, site())
+    test::suite_assert(ts, recovered.ast.nodes[recovered_function.body.statements[0]].kind is RETURN, site())
+end
+
+
+func test_identifier_expressions(ts):
+    parsed := parse_source("func main():\n    t := 1\n    next := t + 1\n    return t\nend\n", _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+
+    module := ast::get_root_module(parsed.ast)
+    function := parsed.ast.nodes[module.declarations[0]].kind.FUNCTION_DECL
+    test::suite_assert(ts, len(function.body.statements) == 3, site())
+
+    next_decl := parsed.ast.nodes[function.body.statements[1]].kind.LOCAL_DECL
+    sum := parsed.ast.nodes[next_decl.initializer].kind.BINARY
+    left := parsed.ast.nodes[sum.left].kind.IDENTIFIER_EXPR
+    test::suite_assert(ts, left.name == "t", site())
+
+    return_stmt := parsed.ast.nodes[function.body.statements[2]].kind.RETURN
+    test::suite_assert(ts, return_stmt.value is Some, site())
+    identifier := parsed.ast.nodes[return_stmt.value?].kind.IDENTIFIER_EXPR
+    test::suite_assert(ts, identifier.name == "t", site())
+end
+
+
+func test_zero_argument_calls(ts):
+    parsed := parse_source("func main():\n    first := foo()\n    second := f::foo()\n    return f::value\nend\n", _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+
+    module := ast::get_root_module(parsed.ast)
+    function := parsed.ast.nodes[module.declarations[0]].kind.FUNCTION_DECL
+    first := parsed.ast.nodes[function.body.statements[0]].kind.LOCAL_DECL
+    second := parsed.ast.nodes[function.body.statements[1]].kind.LOCAL_DECL
+    first_call := parsed.ast.nodes[first.initializer].kind.CALL
+    second_call := parsed.ast.nodes[second.initializer].kind.CALL
+    first_name := parsed.ast.nodes[first_call.callee].kind.IDENTIFIER_EXPR
+    second_name := parsed.ast.nodes[second_call.callee].kind.IDENTIFIER_EXPR
+    test::suite_assert(ts, first_name.qualifier is None, site())
+    test::suite_assert(ts, first_name.name == "foo", site())
+    test::suite_assert(ts, second_name.qualifier is Some, site())
+    test::suite_assert(ts, second_name.qualifier? == "f", site())
+    test::suite_assert(ts, second_name.name == "foo", site())
+
+    return_stmt := parsed.ast.nodes[function.body.statements[2]].kind.RETURN
+    qualified := parsed.ast.nodes[return_stmt.value?].kind.IDENTIFIER_EXPR
+    test::suite_assert(ts, qualified.qualifier? == "f", site())
+    test::suite_assert(ts, qualified.name == "value", site())
+
+    invalid := parse_source("func main():\n    return foo(1)\n    return foo()\nend\n", _)
+    test::suite_assert(ts, invalid.diagnostics.error_count == 1, site())
+    invalid_module := ast::get_root_module(invalid.ast)
+    invalid_function := invalid.ast.nodes[invalid_module.declarations[0]].kind.FUNCTION_DECL
+    test::suite_assert(ts, len(invalid_function.body.statements) == 1, site())
+end
+
+
+func test_minus_expression(ts):
+    parsed := parse_source("func main():\n    return 10 - 3 + 2 - 1\nend\n", _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+
+    module := ast::get_root_module(parsed.ast)
+    function := parsed.ast.nodes[module.declarations[0]].kind.FUNCTION_DECL
+    return_stmt := parsed.ast.nodes[function.body.statements[0]].kind.RETURN
+    outer := parsed.ast.nodes[return_stmt.value?].kind.BINARY
+    test::suite_assert(ts, outer.op == ast::BinaryOp.MINUS, site())
+    sum := parsed.ast.nodes[outer.left].kind.BINARY
+    test::suite_assert(ts, sum.op == ast::BinaryOp.PLUS, site())
+    first_subtraction := parsed.ast.nodes[sum.left].kind.BINARY
+    test::suite_assert(ts, first_subtraction.op == ast::BinaryOp.MINUS, site())
+    test::suite_assert(ts, parsed.ast.nodes[outer.right].kind is INTEGER_LITERAL, site())
+end
+
+
+func test_nested_if_statements(ts):
+    parsed := parse_source("func main():\n    if flag:\n        x := 1\n        if x:\n            return x\n        end\n    end\n    return 0\nend\n", _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+
+    module := ast::get_root_module(parsed.ast)
+    function := parsed.ast.nodes[module.declarations[0]].kind.FUNCTION_DECL
+    test::suite_assert(ts, len(function.body.statements) == 2, site())
+    outer := parsed.ast.nodes[function.body.statements[0]].kind.IF
+    test::suite_assert(ts, parsed.ast.nodes[outer.condition].kind.IDENTIFIER_EXPR.name == "flag", site())
+    test::suite_assert(ts, len(outer.body.statements) == 2, site())
+    test::suite_assert(ts, parsed.ast.nodes[outer.body.statements[0]].kind is LOCAL_DECL, site())
+    inner := parsed.ast.nodes[outer.body.statements[1]].kind.IF
+    test::suite_assert(ts, parsed.ast.nodes[inner.condition].kind.IDENTIFIER_EXPR.name == "x", site())
+    test::suite_assert(ts, len(inner.body.statements) == 1, site())
+    test::suite_assert(ts, parsed.ast.nodes[inner.body.statements[0]].kind is RETURN, site())
+    test::suite_assert(ts, parsed.ast.nodes[function.body.statements[1]].kind is RETURN, site())
 end
 
 
@@ -92,5 +204,10 @@ end
 func run_tests(ts):
     test_imports_and_function(ts)
     test_statement_recovery(ts)
+    test_return_statements(ts)
+    test_identifier_expressions(ts)
+    test_zero_argument_calls(ts)
+    test_minus_expression(ts)
+    test_nested_if_statements(ts)
     test_top_level_errors(ts)
 end

@@ -1,4 +1,5 @@
 use "../source"
+use "../semantic/symbol"
 
 
 struct Node:
@@ -12,7 +13,11 @@ variant NodeKind:
     IMPORT: Import
     FUNCTION_DECL: FunctionDecl
     LOCAL_DECL: LocalDecl
+    IF: IfStmt
+    RETURN: ReturnStmt
     INTEGER_LITERAL
+    IDENTIFIER_EXPR: IdentifierExpr
+    CALL: CallExpr
     BINARY: BinaryExpr
 end
 
@@ -20,6 +25,34 @@ end
 struct LocalDecl:
     name: String
     initializer: int
+end
+
+
+struct Block:
+    statements: Vec[int]
+    scope: symbol::Scope
+end
+
+
+struct IfStmt:
+    condition: int
+    body: Block
+end
+
+
+struct ReturnStmt:
+    value: Option[int]
+end
+
+
+struct IdentifierExpr:
+    qualifier: Option[String]
+    name: String
+end
+
+
+struct CallExpr:
+    callee: int
 end
 
 
@@ -55,7 +88,7 @@ end
 
 struct FunctionDecl:
     name: String
-    body: Vec[int]
+    body: Block
 end
 
 // Represents entire program ast

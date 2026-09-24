@@ -1,10 +1,12 @@
 use "source"
 use "lexer/token"
 use "parser/ast"
+use "semantic/symbol"
 
 
 struct Module:
     source_id: int
     tokens: Vec[token::Token]
     ast: ast::Ast
+    global_scope: symbol::Scope
 end
