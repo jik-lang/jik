@@ -1028,6 +1028,11 @@ jik_check_region_integrity(JikNode *ast)
                     continue;
                 }
                 if (is_region_safe_function_call(nd)) {
+                    if (nd->val_call.auto_region &&
+                        nd->val_call.alloc_spec.kind == JIK_ALLOC_UNKNOWN) {
+                        nd->val_call.alloc_spec = (JikAllocSpec){.kind = JIK_ALLOC_LOCAL,
+                                                                 .src = JIK_ALLOC_SRC_LOCAL};
+                    }
                     continue;
                 }
                 mark_foreign_container_literal_args_specs(nd);
