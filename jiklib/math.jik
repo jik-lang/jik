@@ -81,6 +81,14 @@ end
 extern func jik_math_sqrt as
     sqrt(x: double) -> double
 
+/// Compute the length of a two-dimensional vector.
+///
+/// @param x First component.
+/// @param y Second component.
+/// @returns Distance from `(0, 0)` to `(x, y)`.
+extern func jik_math_hypot as
+    hypot(x: double, y: double) -> double
+
 /// Compute the sine of an angle in radians.
 ///
 /// @param x Angle in radians.
@@ -199,6 +207,12 @@ double
 jik_math_sqrt(double x)
 {
     return sqrt(x);
+}
+
+double
+jik_math_hypot(double x, double y)
+{
+    return hypot(x, y);
 }
 
 double

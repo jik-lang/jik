@@ -187,6 +187,19 @@ Compute the floating-point remainder (C `fmod`).
 
 ---
 
+### `hypot(x: double, y: double) -> double`
+
+Compute the length of a two-dimensional vector.
+
+**Parameters**
+1. `x: double` - First component.
+2. `y: double` - Second component.
+
+**Returns**
+- Distance from `(0, 0)` to `(x, y)`.
+
+---
+
 ### `is_finite(x: double) -> int`
 
 Test whether the value is finite.

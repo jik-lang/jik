@@ -25,6 +25,12 @@ func run_tests(ts):
     r := math::sqrt(2.0)
     test::suite_assert(ts, math::approx_eq(r * r, 2.0, 1e-10), site())
 
+    // hypot avoids overflow in the intermediate squares
+    test::suite_assert(ts, math::approx_eq(math::hypot(3.0, 4.0), 5.0, eps), site())
+    test::suite_assert(ts, math::approx_eq(math::hypot(-3.0, 4.0), 5.0, eps), site())
+    test::suite_assert(ts, math::is_finite(math::hypot(1.0e308, 1.0e308)) == 1, site())
+    test::suite_assert(ts, math::hypot(1.0e-308, 1.0e-308) > 0.0, site())
+
     // trig (radians)
     test::suite_assert(ts, math::approx_eq(math::sin(math::PI / 2.0), 1.0, 1e-10), site())
     test::suite_assert(ts, math::approx_eq(math::cos(0.0), 1.0, eps), site())
