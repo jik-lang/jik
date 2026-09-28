@@ -583,15 +583,25 @@ get_builtin_call_site_code(JikCodeGenerator *cg, JikNode *nd)
 char *
 get_builtin_call_fail(JikCodeGenerator *cg, JikNode *nd)
 {
-    JikNode *s       = VecJikNode_get(nd->val_call.args, 0);
-    char    *s_tr    = jik_codegen_emit_expression(cg, s);
-    char    *code_tr = "1";
-    if (VecJikNode_size(nd->val_call.args) == 2) {
+    JikNode *first = VecJikNode_get(nd->val_call.args, 0);
+    size_t   arg_count = VecJikNode_size(nd->val_call.args);
+    char    *msg_tr;
+    char    *code_tr;
+    if (arg_count == 2) {
         JikNode *code = VecJikNode_get(nd->val_call.args, 1);
-        code_tr       = jik_codegen_emit_expression(cg, code);
+        msg_tr  = JIK_STRING_NCAT(jik_codegen_emit_expression(cg, first), "->data");
+        code_tr = jik_codegen_emit_expression(cg, code);
+    }
+    else if (jik_type_equal(first->jik_type, &JIK_TYPE_INT)) {
+        msg_tr  = "\"\"";
+        code_tr = jik_codegen_emit_expression(cg, first);
+    }
+    else {
+        msg_tr  = JIK_STRING_NCAT(jik_codegen_emit_expression(cg, first), "->data");
+        code_tr = "1";
     }
     return JIK_STRING_NCAT(
-        "jik_error_set(jik_err_arg, ", code_tr, ", ", s_tr, "->data); goto ", JIK_CLEANUP_LABEL_NAME);
+        "jik_error_set(jik_err_arg, ", code_tr, ", ", msg_tr, "); goto ", JIK_CLEANUP_LABEL_NAME);
 }
 
 char *

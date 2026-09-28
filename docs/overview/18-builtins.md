@@ -199,8 +199,10 @@ v := [10 of 1]
 assert(len(v) == 10)
 ```
 
-#### `fail(String[, int]) -> void`
-Marks the current throwing function as failed. See [Error Handling](16-error-handling.md).
+#### `fail(...) -> void`
+Accepts `fail(String)`, `fail(int)`, or `fail(String, int)`.
+Marks the current throwing function as failed. Error descriptions and the meaning of codes are
+application-defined. Code-only failures have an empty message. See [Error Handling](16-error-handling.md).
 
 #### `error_msg([Region]) -> String`
 Returns the current error message. Most commonly used inside `except`. See [Error Handling](16-error-handling.md).

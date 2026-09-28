@@ -6,7 +6,7 @@ Jik uses **throwing functions** and structured handling at the call site.
 The current model is centered around four language constructs:
 
 - `throws func` marks a function as one which may fail
-- `fail(String[, int])` marks failure inside a throwing function
+- `fail(String)`, `fail(int)`, or `fail(String, int)` marks failure inside a throwing function
 - `try ... except ... end` handles a failure locally
 - `must f(...)` requires a throwing call to succeed
 
@@ -25,8 +25,10 @@ throws func div_safe(x, y):
 end
 ```
 
-Inside such a function, `fail(...)` marks the operation as failed. `fail(msg)` uses the default
-error code `1`, while `fail(msg, code)` lets you set an explicit integer error code.
+Inside such a function, calling `fail(...)` marks the operation as failed regardless of the
+error code. The code is application-defined: `fail(msg)` uses the default code `1`, while
+`fail(code)` and `fail(msg, code)` let you supply one. Code-only failures have an empty
+`error_msg()`.
 `fail(...)` also terminates the current control-flow path. Any statement that follows `fail(...)`
 in the same block is unreachable and is a compile error.
 

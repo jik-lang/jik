@@ -27,6 +27,18 @@ throws func div_safe_code(x, y):
     return x / y
 end
 
+throws func fail_code_only(code: int):
+    fail(code)
+end
+
+throws func fail_message_and_zero():
+    fail("zero code", 0)
+end
+
+throws func propagate_code_only():
+    try fail_code_only(0)
+end
+
 throws func propagated_div(x, y):
     value := try div_safe(x, y)
     return value
@@ -67,6 +79,33 @@ func test_error(ts):
         test::suite_assert(ts, true, site())
         test::suite_assert(ts, error_msg(_) == "division by 0", site())
         test::suite_assert(ts, error_code() == 14, site())
+    end
+
+    try fail_code_only(14):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg() == "", site())
+        test::suite_assert(ts, error_code() == 14, site())
+    end
+
+    try propagate_code_only():
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg() == "", site())
+        test::suite_assert(ts, error_code() == 0, site())
+    end
+
+    try fail_message_and_zero():
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg() == "zero code", site())
+        test::suite_assert(ts, error_code() == 0, site())
+    end
+
+    try fail_code_only(-7):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_code() == -7, site())
     end
 
     x := must div_safe(3, 1)

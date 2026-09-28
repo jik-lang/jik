@@ -695,7 +695,33 @@ end
         "variant tag has no payload")
 end
 
+func test_compile_fail_invalid_fail_arguments(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+throws func bad():
+    fail()
+end
+
+func main():
+    must bad()
+end
+""",
+        "expected 1 or 2 arguments")
+    utils::assert_compile_fail_source(ts,
+"""
+throws func bad():
+    fail(1, 2)
+end
+
+func main():
+    must bad()
+end
+""",
+        "fail expects a String followed by an int")
+end
+
 func run_tests(ts):
+    test_compile_fail_invalid_fail_arguments(ts)
     test_compile_fail_01(ts)
     test_compile_fail_02(ts)
     test_compile_fail_03(ts)

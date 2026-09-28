@@ -564,6 +564,7 @@ jik_string_slice(JikString *s,
 #define JIK_MAX_ERR_MSG 256
 
 typedef struct JikError {
+    bool       failed;
     int        code;
     char msg[JIK_MAX_ERR_MSG];
 } JikError;
@@ -571,13 +572,13 @@ typedef struct JikError {
 bool
 jik_error_failed(JikError *e)
 {
-    return e->code != 0;
+    return e->failed;
 }
 
 void
 jik_error_set(JikError *e, int code, char *msg)
 {
-    assert(code > 0);
+    e->failed = true;
     e->code = code;
     size_t n = strlen(msg);
     if (n >= JIK_MAX_ERR_MSG) {
@@ -590,6 +591,7 @@ jik_error_set(JikError *e, int code, char *msg)
 void
 jik_error_clear(JikError *e)
 {
+    e->failed = false;
     e->code = 0;
     e->msg[0] = '\0';
 }

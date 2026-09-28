@@ -169,13 +169,14 @@ jik_check_builtin_fail(JikNode *nd)
                             JIK_STRING_NCAT("expected 1 or 2 arguments, got ", size_t_to_string(n)),
                             jik_token_to_text(nd->val_call.name->token));
 
-    JikNode *msg = VecJikNode_get(nd->val_call.args, 0);
-    jik_diag_fatal_error_if(!jik_type_equal(msg->jik_type, &JIK_TYPE_STRING),
-                            JIK_STRING_NCAT("type mismatch: required ",
-                                            jik_type_pretty_name(&JIK_TYPE_STRING),
-                                            ", got ",
-                                            jik_type_pretty_name(msg->jik_type)),
-                            jik_token_to_text(msg->token));
+    JikNode *first = VecJikNode_get(nd->val_call.args, 0);
+    bool     first_is_string = jik_type_equal(first->jik_type, &JIK_TYPE_STRING);
+    bool     first_is_int = jik_type_equal(first->jik_type, &JIK_TYPE_INT);
+    bool     valid_first = first_is_string || (n == 1 && first_is_int);
+    jik_diag_fatal_error_if(!valid_first,
+                            n == 1 ? "fail expects a String or int"
+                                   : "fail expects a String followed by an int",
+                            jik_token_to_text(first->token));
 
     if (n == 2) {
         JikNode *code = VecJikNode_get(nd->val_call.args, 1);
