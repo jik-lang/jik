@@ -902,13 +902,6 @@
         "throws": true
       },
       {
-        "name": "concat",
-        "kind": "function",
-        "signature": "concat(left: String, right: String, region: Region) -> String",
-        "doc": "Concatenate two strings.",
-        "throws": false
-      },
-      {
         "name": "compare",
         "kind": "function",
         "signature": "compare(left: String, right: String) -> int",

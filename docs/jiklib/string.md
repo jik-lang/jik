@@ -63,20 +63,6 @@ Convert a character to a string.
 
 ---
 
-### `concat(foreign left: String, foreign right: String, region: Region) -> String`
-
-Concatenate two strings.
-
-**Parameters**
-1. `foreign left: String` - Left string.
-2. `foreign right: String` - Right string.
-3. `region: Region` - Allocation region for the result.
-
-**Returns**
-- Concatenated string.
-
----
-
 ### `compare(foreign left: String, foreign right: String) -> int`
 
 Compare two strings lexicographically by byte value.

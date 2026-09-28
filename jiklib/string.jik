@@ -66,15 +66,6 @@ extern throws func jik_impl_string_to_int as
 extern throws func jik_impl_string_to_double as
     to_double(s: String) -> double
 
-/// Concatenate two strings.
-///
-/// @param left Left string.
-/// @param right Right string.
-/// @param region Allocation region for the result.
-/// @returns Concatenated string.
-extern func jik_impl_string_concat as
-    concat(foreign left: String, foreign right: String, region: Region) -> String
-
 /// Compare two strings lexicographically by byte value.
 ///
 /// @param left Left string.
@@ -367,17 +358,6 @@ jik_impl_string_to_double(JikString *s, JikError *e)
     }
 
     return value;
-}
-
-JikString *
-jik_impl_string_concat(JikString *s1, JikString *s2, JikRegion *a)
-{
-    size_t req_size = s1->size + s2->size;
-    char *from = jik_region_alloc(a, req_size + 1);
-    memcpy(from,       s1->data, s1->size);
-    memcpy(from + s1->size,  s2->data, s2->size);
-    from[req_size] = '\0';
-    return jik_string_new(from, a);
 }
 
 JikString *
