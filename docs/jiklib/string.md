@@ -76,6 +76,22 @@ Compare two strings lexicographically by byte value.
 
 ---
 
+### `contains(foreign s: String, foreign needle: String) -> bool`
+
+Return whether `s` contains `needle` as a substring.
+
+**Parameters**
+1. `foreign s: String` - Source string.
+2. `foreign needle: String` - Substring to search for.
+
+**Returns**
+- `true` if `needle` occurs in `s`, otherwise `false`.
+
+**Notes**
+- An empty `needle` is contained in every string, including an empty string.
+
+---
+
 ### `ends_with(foreign s: String, foreign suffix: String) -> bool`
 
 Return whether `s` ends with `suffix`.

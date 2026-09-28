@@ -201,6 +201,17 @@ func find(s: String, needle: String) -> int:
     return -1
 end
 
+/// Return whether `s` contains `needle` as a substring.
+///
+/// An empty `needle` is contained in every string, including an empty string.
+///
+/// @param s Source string.
+/// @param needle Substring to search for.
+/// @returns `true` if `needle` occurs in `s`, otherwise `false`.
+func contains(s: String, needle: String) -> bool:
+    return find(s, needle) >= 0
+end
+
 /// Split a string by a delimiter.
 ///
 /// @param s Input string.

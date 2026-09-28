@@ -951,6 +951,13 @@
         "throws": false
       },
       {
+        "name": "contains",
+        "kind": "function",
+        "signature": "contains(s: String, needle: String) -> bool",
+        "doc": "Return whether `s` contains `needle` as a substring.\n\nAn empty `needle` is contained in every string, including an empty string.",
+        "throws": false
+      },
+      {
         "name": "split",
         "kind": "function",
         "signature": "split(s: String, delim: String, r: Region) -> Vec[String]",
