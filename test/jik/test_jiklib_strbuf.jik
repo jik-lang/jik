@@ -4,6 +4,11 @@ use "jik/strbuf"
 
 
 func run_tests(ts):
+    empty: strbuf::StrBuf
+    test::suite_assert(ts, strbuf::len(empty) == 0, site())
+    strbuf::append(empty, "ready")
+    test::suite_assert(ts, strbuf::to_string(empty, _) == "ready", site())
+
     sb := strbuf::new("", _)
     test::suite_assert(ts, strbuf::len(sb) == 0, site())
     strbuf::append(sb, "foo")

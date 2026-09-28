@@ -1,5 +1,6 @@
 enum SymbolKind:
     FUNCTION
+    PARAMETER
     LOCAL
 end
 

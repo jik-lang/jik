@@ -2,13 +2,16 @@ use "diag"
 use "source"
 use "module"
 use "lexer/lexer"
-use "lexer/token"
 use "parser/parser"
 use "parser/ast"
 use "parser/format"
 use "semantic/semantic"
+use "codegen/codegen"
 
-use "jik/path"
+use "jik/io"
+
+
+ERROR_REPORTED := 10000
 
 
 struct Config:
@@ -91,12 +94,12 @@ throws func run(comp: Compiler):
         tokens := lexer::tokenize(src, comp.diagnostics)
         if comp.diagnostics.error_count > 0:
             comp.print_diagnostics()
-            return
+            fail(ERROR_REPORTED)
         end
         ast := parser::parse(src, tokens, comp.diagnostics)
         if comp.diagnostics.error_count > 0:
             comp.print_diagnostics()
-            return
+            fail(ERROR_REPORTED)
         end
         mod := module::Module{source_id = src.id, tokens, ast}@
         comp.modules.push(mod)
@@ -104,7 +107,7 @@ throws func run(comp: Compiler):
         imports := resolve_imports(comp.src_mngr, ast, comp.diagnostics, src)
         if comp.diagnostics.error_count > 0:
             comp.print_diagnostics()
-            return
+            fail(ERROR_REPORTED)
         end
         for import in imports:
             sources.push(import)
@@ -122,7 +125,19 @@ throws func run(comp: Compiler):
 
     if comp.diagnostics.error_count > 0:
         comp.print_diagnostics()
-        return
+        fail(ERROR_REPORTED)
+    end
+
+    try translation := codegen::generate(comp.modules, comp.src_mngr, comp.diagnostics, sid, .comp):
+        try io::write_file(comp.config.output_path, translation)
+    except:
+        if comp.diagnostics.error_count > 0:
+            comp.print_diagnostics()
+            fail(ERROR_REPORTED)
+        end
+        msg := error_msg()
+        code := error_code()
+        fail(msg, code)
     end
 
 end

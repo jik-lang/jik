@@ -1,0 +1,279 @@
+use "writer"
+use "../diag"
+use "../module"
+use "../source"
+use "../parser/ast"
+use "jik/path"
+use "jik/string"
+
+
+struct Generator:
+    output: writer::Writer
+    modules: Vec[module::Module]
+    sources: source::SourceManager
+    diagnostics: diag::Diagnostics
+    main_source_id: int
+end
+
+
+func write_name(g: Generator, source_id: int, foreign name: String) -> void:
+    g.output.write("jik_m")
+    g.output.write(string::from_int(source_id))
+    g.output.write("_")
+    g.output.write(name)
+end
+
+
+func write_local(g: Generator, foreign name: String) -> void:
+    g.output.write("jik_v_")
+    g.output.write(name)
+end
+
+
+func has_function(g: Generator, source_id: int, foreign name: String) -> bool:
+    for mod in g.modules:
+        if mod.source_id == source_id:
+            return mod.global_scope.symbols[name] is Some
+        end
+    end
+    return false
+end
+
+
+throws func module_for_qualifier(g: Generator, mod: module::Module, foreign qualifier: String, span: source::Span) -> int:
+    root := mod.ast.get_root_module()
+    src := g.sources.sources[mod.source_id]
+    found := -1
+    for import_id in root.imports:
+        import := mod.ast.nodes[import_id].kind.IMPORT
+        alias := path::basename(import.path)
+        if import.alias is Some:
+            alias = copy(import.alias?, _)
+        end
+        if alias != qualifier:
+            continue
+        end
+        if found >= 0:
+            diag::error(g.diagnostics, "ambiguous import alias", qualifier, Some{span})
+            fail("code generation failed")
+        end
+        full_path := g.sources.construct_full_path(import.path, src)
+        source_id := g.sources.source_id_by_path[full_path]
+        if source_id is Some:
+            found = source_id?
+        end
+    end
+    if found < 0:
+        diag::error(g.diagnostics, "unknown import alias", qualifier, Some{span})
+        fail("code generation failed")
+    end
+    return found
+end
+
+
+throws func write_callee(g: Generator, mod: module::Module, id: int) -> void:
+    node := mod.ast.nodes[id]
+    if not (node.kind is IDENTIFIER_EXPR):
+        diag::error(g.diagnostics, "unsupported call target", "expected a function name", Some{node.span})
+        fail("code generation failed")
+    end
+    identifier := node.kind.IDENTIFIER_EXPR
+    target := mod.source_id
+    if identifier.qualifier is Some:
+        target = try module_for_qualifier(g, mod, identifier.qualifier?, node.span)
+    end
+    if not has_function(g, target, identifier.name):
+        diag::error(g.diagnostics, "unknown function", identifier.name, Some{node.span})
+        fail("code generation failed")
+    end
+    write_name(g, target, identifier.name)
+end
+
+
+throws func emit_expression(g: Generator, mod: module::Module, id: int) -> void:
+    node := mod.ast.nodes[id]
+    match node.kind:
+    case INTEGER_LITERAL:
+        src := g.sources.sources[node.span.source_id]
+        literal := try string::slice(src.text, node.span.start, node.span.stop)
+        g.output.write(literal)
+    case IDENTIFIER_EXPR{identifier}:
+        if identifier.qualifier is Some:
+            diag::error(g.diagnostics, "unsupported value", "qualified names must be called", Some{node.span})
+            fail("code generation failed")
+        end
+        write_local(g, identifier.name)
+    case CALL{call}:
+        try write_callee(g, mod, call.callee)
+        g.output.write("(")
+        first := true
+        for argument in call.arguments:
+            if not first:
+                g.output.write(", ")
+            end
+            try emit_expression(g, mod, argument)
+            first = false
+        end
+        g.output.write(")")
+    case BINARY{binary}:
+        g.output.write("(")
+        try emit_expression(g, mod, binary.left)
+        if binary.op == ast::BinaryOp.PLUS:
+            g.output.write(" + ")
+        elif binary.op == ast::BinaryOp.MINUS:
+            g.output.write(" - ")
+        else:
+            g.output.write(" < ")
+        end
+        try emit_expression(g, mod, binary.right)
+        g.output.write(")")
+    other:
+        diag::error(g.diagnostics, "unsupported expression", "expected a value", Some{node.span})
+        fail("code generation failed")
+    end
+end
+
+
+throws func emit_statement(g: Generator, mod: module::Module, id: int) -> void:
+    node := mod.ast.nodes[id]
+    match node.kind:
+    case LOCAL_DECL{local}:
+        g.output.start_line()
+        g.output.write("int32_t ")
+        write_local(g, local.name)
+        g.output.write(" = ")
+        try emit_expression(g, mod, local.initializer)
+        g.output.write(";")
+        g.output.end_line()
+    case IF{branch}:
+        g.output.start_line()
+        g.output.write("if (")
+        try emit_expression(g, mod, branch.condition)
+        g.output.write(") {")
+        g.output.end_line()
+        g.output.indent()
+        for statement in branch.body.statements:
+            try emit_statement(g, mod, statement)
+        end
+        g.output.dedent()
+        g.output.line("}")
+    case RETURN{statement}:
+        g.output.start_line()
+        g.output.write("return ")
+        if statement.value is Some:
+            try emit_expression(g, mod, statement.value?)
+        else:
+            g.output.write("0")
+        end
+        g.output.write(";")
+        g.output.end_line()
+    other:
+        diag::error(g.diagnostics, "unsupported statement", "expected a declaration, if, or return", Some{node.span})
+        fail("code generation failed")
+    end
+end
+
+
+throws func emit_signature(g: Generator, mod: module::Module, id: int) -> void:
+    node := mod.ast.nodes[id]
+    function := node.kind.FUNCTION_DECL
+    g.output.write("int32_t ")
+    write_name(g, mod.source_id, function.name)
+    g.output.write("(")
+    if len(function.parameters) == 0:
+        g.output.write("void")
+    end
+    first := true
+    for parameter_id in function.parameters:
+        parameter_node := mod.ast.nodes[parameter_id]
+        parameter := parameter_node.kind.PARAMETER
+        if parameter.annotation is Some:
+            type_node := mod.ast.nodes[parameter.annotation?]
+            type_name := type_node.kind.TYPE_NAME
+            if type_name.qualifier is Some or type_name.name != "int":
+                diag::error(g.diagnostics, "unsupported parameter type", "bootstrap tran currently supports int", Some{type_node.span})
+                fail("code generation failed")
+            end
+        end
+        if not first:
+            g.output.write(", ")
+        end
+        g.output.write("int32_t ")
+        write_local(g, parameter.name)
+        first = false
+    end
+    g.output.write(")")
+end
+
+
+throws func emit_function(g: Generator, mod: module::Module, id: int) -> void:
+    function := mod.ast.nodes[id].kind.FUNCTION_DECL
+    try emit_signature(g, mod, id)
+    g.output.write(" {")
+    g.output.end_line()
+    g.output.indent()
+    for statement in function.body.statements:
+        try emit_statement(g, mod, statement)
+    end
+    last := len(function.body.statements) - 1
+    if last < 0 or not (mod.ast.nodes[function.body.statements[last]].kind is RETURN):
+        g.output.line("return 0;")
+    end
+    g.output.dedent()
+    g.output.line("}")
+    g.output.line("")
+end
+
+
+throws func emit_program(g: Generator) -> void:
+    g.output.line("#include \"core.h\"")
+    g.output.line("")
+    for mod in g.modules:
+        root := mod.ast.get_root_module()
+        for id in root.declarations:
+            try emit_signature(g, mod, id)
+            g.output.write(";")
+            g.output.end_line()
+        end
+    end
+    g.output.line("")
+    for mod in g.modules:
+        root := mod.ast.get_root_module()
+        for id in root.declarations:
+            try emit_function(g, mod, id)
+        end
+    end
+    if not has_function(g, g.main_source_id, "main"):
+        diag::error(g.diagnostics, "missing main function", "the input module needs a main function", None)
+        fail("code generation failed")
+    end
+    for mod in g.modules:
+        if mod.source_id == g.main_source_id:
+            root := mod.ast.get_root_module()
+            for id in root.declarations:
+                function := mod.ast.nodes[id].kind.FUNCTION_DECL
+                if function.name == "main" and len(function.parameters) > 0:
+                    diag::error(g.diagnostics, "unsupported main signature", "bootstrap tran requires main()", Some{mod.ast.nodes[id].span})
+                    fail("code generation failed")
+                end
+            end
+        end
+    end
+    g.output.line("int main(void) {")
+    g.output.indent()
+    g.output.start_line()
+    g.output.write("return ")
+    write_name(g, g.main_source_id, "main")
+    g.output.write("();")
+    g.output.end_line()
+    g.output.dedent()
+    g.output.line("}")
+end
+
+
+throws func generate(modules: Vec[module::Module], sources: source::SourceManager, diagnostics: diag::Diagnostics, main_source_id: int, r: Region) -> String:
+    output := writer::new(r)
+    g := Generator{output, modules, sources, diagnostics, main_source_id}[r]
+    try emit_program(g)
+    return writer::finish(g.output, r)
+end

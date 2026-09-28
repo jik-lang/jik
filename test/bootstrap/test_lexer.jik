@@ -115,6 +115,16 @@ func test_minus_operator(ts):
 end
 
 
+func test_less_than_operator(ts):
+    tokens := lex_source("1<2", 1, _)
+    test::suite_assert(ts, len(tokens) == 4, site())
+    test::suite_assert(ts, tokens[1].type == token::TokenType.OP_LT, site())
+    test::suite_assert(ts, tokens[1].span.start == 1, site())
+    test::suite_assert(ts, tokens[1].span.stop == 2, site())
+end
+
+
+
 func test_strings(ts):
     tokens := lex_source("\"hello\" \"a\\\"b\"", 1, _)
     test::suite_assert(ts, len(tokens) == 3, site())
@@ -151,14 +161,15 @@ end
 
 
 func run_tests(ts):
-	test_empty_input(ts)
-	test_integers_and_offsets(ts)
-	test_identifiers_and_keywords(ts)
-	test_parentheses(ts)
-	test_return_keyword(ts)
-	test_if_keyword(ts)
-	test_double_colon(ts)
-	test_minus_operator(ts)
-	test_strings(ts)
-	test_newline_and_error(ts)
+    test_empty_input(ts)
+    test_integers_and_offsets(ts)
+    test_identifiers_and_keywords(ts)
+    test_parentheses(ts)
+    test_return_keyword(ts)
+    test_if_keyword(ts)
+    test_double_colon(ts)
+    test_minus_operator(ts)
+    test_less_than_operator(ts)
+    test_strings(ts)
+    test_newline_and_error(ts)
 end

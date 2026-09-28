@@ -12,6 +12,8 @@ variant NodeKind:
     MODULE: Module
     IMPORT: Import
     FUNCTION_DECL: FunctionDecl
+    PARAMETER: Parameter
+    TYPE_NAME: TypeName
     LOCAL_DECL: LocalDecl
     IF: IfStmt
     RETURN: ReturnStmt
@@ -53,12 +55,14 @@ end
 
 struct CallExpr:
     callee: int
+    arguments: Vec[int]
 end
 
 
 enum BinaryOp:
     PLUS
     MINUS
+    LT
 end
 
 
@@ -88,10 +92,26 @@ end
 
 struct FunctionDecl:
     name: String
+    parameters: Vec[int]
     body: Block
 end
 
-// Represents entire program ast
+
+
+struct Parameter:
+    name: String
+    annotation: Option[int]
+end
+
+
+
+struct TypeName:
+    qualifier: Option[String]
+    name: String
+end
+
+
+// Represents entire module ast
 struct Ast:    
     root: int
     nodes: Vec[Node]
@@ -108,3 +128,80 @@ func add(ast: Ast, span: source::Span, kind: NodeKind) -> int:
     return id
 end
 
+
+
+func add_module(ast: Ast, span: source::Span) -> int:
+    return ast.add(span, NodeKind.MODULE{Module{}})
+end
+
+
+
+func add_import(ast: Ast, span: source::Span, path: String, alias: Option[String]) -> int:
+    return ast.add(span, NodeKind.IMPORT{Import{path, alias}})
+end
+
+
+
+func add_function_decl(ast: Ast, span: source::Span, function: FunctionDecl) -> int:
+    return ast.add(span, NodeKind.FUNCTION_DECL{function})
+end
+
+
+
+func add_local_decl(ast: Ast, span: source::Span, name: String, initializer: int) -> int:
+    return ast.add(span, NodeKind.LOCAL_DECL{LocalDecl{name, initializer}})
+end
+
+
+
+func add_if(ast: Ast, span: source::Span, statement: IfStmt) -> int:
+    return ast.add(span, NodeKind.IF{statement})
+end
+
+
+
+func add_return(ast: Ast, span: source::Span, value: Option[int]) -> int:
+    return ast.add(span, NodeKind.RETURN{ReturnStmt{value}})
+end
+
+
+
+func add_integer(ast: Ast, span: source::Span) -> int:
+    return ast.add(span, NodeKind.INTEGER_LITERAL{})
+end
+
+
+func add_parameter(ast: Ast, span: source::Span, name: String, annotation: Option[int]) -> int:
+    return ast.add(span, NodeKind.PARAMETER{Parameter{name, annotation}})
+end
+
+
+
+func add_type_name(ast: Ast, first: source::Span, last: source::Span, qualifier: Option[String], name: String) -> int:
+    span := source::Span{source_id = first.source_id, start = first.start, stop = last.stop}@
+    return ast.add(span, NodeKind.TYPE_NAME{TypeName{qualifier, name}})
+end
+
+
+
+func add_identifier(ast: Ast, first: source::Span, last: source::Span, qualifier: Option[String], name: String) -> int:
+    span := source::Span{source_id = first.source_id, start = first.start, stop = last.stop}@
+    return ast.add(span, NodeKind.IDENTIFIER_EXPR{IdentifierExpr{qualifier, name}})
+end
+
+
+
+func add_call(ast: Ast, callee: int, arguments: Vec[int], close: source::Span) -> int:
+    callee_span := ast.nodes[callee].span
+    span := source::Span{source_id = callee_span.source_id, start = callee_span.start, stop = close.stop}@
+    return ast.add(span, NodeKind.CALL{CallExpr{callee, arguments}})
+end
+
+
+
+func add_binary(ast: Ast, left: int, right: int, op: BinaryOp) -> int:
+    left_span := ast.nodes[left].span
+    right_span := ast.nodes[right].span
+    span := source::Span{source_id = left_span.source_id, start = left_span.start, stop = right_span.stop}@
+    return ast.add(span, NodeKind.BINARY{BinaryExpr{left, right, op}})
+end

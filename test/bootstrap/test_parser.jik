@@ -120,7 +120,7 @@ func test_identifier_expressions(ts):
 end
 
 
-func test_zero_argument_calls(ts):
+func test_function_arguments(ts):
     parsed := parse_source("func main():\n    first := foo()\n    second := f::foo()\n    return f::value\nend\n", _)
     test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
 
@@ -130,6 +130,8 @@ func test_zero_argument_calls(ts):
     second := parsed.ast.nodes[function.body.statements[1]].kind.LOCAL_DECL
     first_call := parsed.ast.nodes[first.initializer].kind.CALL
     second_call := parsed.ast.nodes[second.initializer].kind.CALL
+    test::suite_assert(ts, len(first_call.arguments) == 0, site())
+    test::suite_assert(ts, len(second_call.arguments) == 0, site())
     first_name := parsed.ast.nodes[first_call.callee].kind.IDENTIFIER_EXPR
     second_name := parsed.ast.nodes[second_call.callee].kind.IDENTIFIER_EXPR
     test::suite_assert(ts, first_name.qualifier is None, site())
@@ -143,12 +145,60 @@ func test_zero_argument_calls(ts):
     test::suite_assert(ts, qualified.qualifier? == "f", site())
     test::suite_assert(ts, qualified.name == "value", site())
 
-    invalid := parse_source("func main():\n    return foo(1)\n    return foo()\nend\n", _)
+    with_arguments := parse_source("func add(left, right):\n    return left + right\nend\nfunc main():\n    return add(1, add(2, 3 + 4))\nend\n", _)
+    test::suite_assert(ts, with_arguments.diagnostics.error_count == 0, site())
+    with_arguments_module := ast::get_root_module(with_arguments.ast)
+    add_function := with_arguments.ast.nodes[with_arguments_module.declarations[0]].kind.FUNCTION_DECL
+    test::suite_assert(ts, len(add_function.parameters) == 2, site())
+    test::suite_assert(ts, with_arguments.ast.nodes[add_function.parameters[0]].kind.PARAMETER.name == "left", site())
+    test::suite_assert(ts, with_arguments.ast.nodes[add_function.parameters[1]].kind.PARAMETER.name == "right", site())
+    main_function := with_arguments.ast.nodes[with_arguments_module.declarations[1]].kind.FUNCTION_DECL
+    main_return := with_arguments.ast.nodes[main_function.body.statements[0]].kind.RETURN
+    outer_call := with_arguments.ast.nodes[main_return.value?].kind.CALL
+    test::suite_assert(ts, len(outer_call.arguments) == 2, site())
+    test::suite_assert(ts, with_arguments.ast.nodes[outer_call.arguments[0]].kind is INTEGER_LITERAL, site())
+    inner_call := with_arguments.ast.nodes[outer_call.arguments[1]].kind.CALL
+    test::suite_assert(ts, len(inner_call.arguments) == 2, site())
+    test::suite_assert(ts, with_arguments.ast.nodes[inner_call.arguments[1]].kind is BINARY, site())
+
+    invalid := parse_source("func main():\n    return foo(1,)\n    return foo()\nend\n", _)
     test::suite_assert(ts, invalid.diagnostics.error_count == 1, site())
     invalid_module := ast::get_root_module(invalid.ast)
     invalid_function := invalid.ast.nodes[invalid_module.declarations[0]].kind.FUNCTION_DECL
     test::suite_assert(ts, len(invalid_function.body.statements) == 1, site())
 end
+
+
+func test_parameter_type_names(ts):
+    parsed := parse_source("func fib(n: int, step, item: math::Count):\n    return n\nend\n", _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+    module := ast::get_root_module(parsed.ast)
+    function := parsed.ast.nodes[module.declarations[0]].kind.FUNCTION_DECL
+    test::suite_assert(ts, len(function.parameters) == 3, site())
+
+    first := parsed.ast.nodes[function.parameters[0]]
+    first_parameter := first.kind.PARAMETER
+    test::suite_assert(ts, first_parameter.annotation is Some, site())
+    first_type := parsed.ast.nodes[first_parameter.annotation?]
+    test::suite_assert(ts, first_type.kind is TYPE_NAME, site())
+    test::suite_assert(ts, first_type.kind.TYPE_NAME.qualifier is None, site())
+    test::suite_assert(ts, first_type.kind.TYPE_NAME.name == "int", site())
+    test::suite_assert(ts, first.span.stop == first_type.span.stop, site())
+
+    second := parsed.ast.nodes[function.parameters[1]].kind.PARAMETER
+    test::suite_assert(ts, second.annotation is None, site())
+
+    third := parsed.ast.nodes[function.parameters[2]].kind.PARAMETER
+    third_type := parsed.ast.nodes[third.annotation?].kind.TYPE_NAME
+    test::suite_assert(ts, third_type.qualifier? == "math", site())
+    test::suite_assert(ts, third_type.name == "Count", site())
+
+    invalid := parse_source("func bad(n:):\nend\n", _)
+    test::suite_assert(ts, invalid.diagnostics.error_count == 1, site())
+    invalid_module := ast::get_root_module(invalid.ast)
+    test::suite_assert(ts, len(invalid_module.declarations) == 0, site())
+end
+
 
 
 func test_minus_expression(ts):
@@ -166,6 +216,25 @@ func test_minus_expression(ts):
     test::suite_assert(ts, first_subtraction.op == ast::BinaryOp.MINUS, site())
     test::suite_assert(ts, parsed.ast.nodes[outer.right].kind is INTEGER_LITERAL, site())
 end
+
+
+func test_less_than_expression(ts):
+    parsed := parse_source("func main():\n    if 1 + 2 < 4 - 1:\n        return 2 < 3\n    end\nend\n", _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+
+    module := ast::get_root_module(parsed.ast)
+    function := parsed.ast.nodes[module.declarations[0]].kind.FUNCTION_DECL
+    branch := parsed.ast.nodes[function.body.statements[0]].kind.IF
+    comparison := parsed.ast.nodes[branch.condition].kind.BINARY
+    test::suite_assert(ts, comparison.op == ast::BinaryOp.LT, site())
+    test::suite_assert(ts, parsed.ast.nodes[comparison.left].kind.BINARY.op == ast::BinaryOp.PLUS, site())
+    test::suite_assert(ts, parsed.ast.nodes[comparison.right].kind.BINARY.op == ast::BinaryOp.MINUS, site())
+
+    return_stmt := parsed.ast.nodes[branch.body.statements[0]].kind.RETURN
+    returned := parsed.ast.nodes[return_stmt.value?].kind.BINARY
+    test::suite_assert(ts, returned.op == ast::BinaryOp.LT, site())
+end
+
 
 
 func test_nested_if_statements(ts):
@@ -206,8 +275,10 @@ func run_tests(ts):
     test_statement_recovery(ts)
     test_return_statements(ts)
     test_identifier_expressions(ts)
-    test_zero_argument_calls(ts)
+    test_function_arguments(ts)
+    test_parameter_type_names(ts)
     test_minus_expression(ts)
+    test_less_than_expression(ts)
     test_nested_if_statements(ts)
     test_top_level_errors(ts)
 end

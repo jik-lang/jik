@@ -1,0 +1,53 @@
+use "jik/strbuf"
+
+
+struct Writer:
+    buffer: strbuf::StrBuf
+    depth: int
+end
+
+
+func new(r: Region) -> Writer:
+    return Writer{}[r]
+end
+
+
+func write(w: Writer, foreign text: String) -> void:
+    strbuf::append(w.buffer, text)
+end
+
+
+func start_line(w: Writer) -> void:
+    i := 0
+    while i < w.depth:
+        w.write("    ")
+        i += 1
+    end
+end
+
+
+func end_line(w: Writer) -> void:
+    w.write("\n")
+end
+
+
+func line(w: Writer, foreign text: String) -> void:
+    w.start_line()
+    w.write(text)
+    w.end_line()
+end
+
+
+func indent(w: Writer) -> void:
+    w.depth += 1
+end
+
+
+func dedent(w: Writer) -> void:
+    w.depth -= 1
+end
+
+
+func finish(foreign w: Writer, r: Region) -> String:
+    return strbuf::to_string(w.buffer, r)
+end

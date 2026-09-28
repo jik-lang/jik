@@ -1,12 +1,15 @@
 use "cli/cli"
+use "compiler"
 use "jik/io"
 
 
 func main(args):
-	try cli::run(args):
-		return 0
-	except:
-		io::write_stderr(concat("jik error: ", error_msg(), "\n"))
-		return 1
-	end
+    try cli::run(args):
+        return 0
+    except:
+        if error_code() != compiler::ERROR_REPORTED:
+            io::write_stderr(concat("jik error: ", error_msg(), "\n"))
+        end
+        return 1
+    end
 end

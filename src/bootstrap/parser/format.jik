@@ -31,23 +31,22 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
     kind := node.kind
     append_indent(sb, depth)
 
-    if kind is MODULE:
+    match kind:
+    case MODULE{module}:
         sb.append("MODULE #")
         append_int(sb, id)
         sb.append(" [")
         append_int(sb, node.span.start)
         sb.append("..")
         append_int(sb, node.span.stop)
-        sb.append(")\n")
-        module := kind.MODULE
+        sb.append("]\n")
         for import in module.imports:
             format_node(ast, import, depth + 1, sb)
         end
         for declaration in module.declarations:
             format_node(ast, declaration, depth + 1, sb)
         end
-    elif kind is IMPORT:
-        import := kind.IMPORT
+    case IMPORT{import}:
         sb.append("IMPORT #")
         append_int(sb, id)
         sb.append(" path=\"")
@@ -59,26 +58,45 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
             sb.append("\"")
         end
         sb.append("\n")
-    elif kind is FUNCTION_DECL:
-        function := kind.FUNCTION_DECL
+    case FUNCTION_DECL{function}:
         sb.append("FUNCTION #")
         append_int(sb, id)
         sb.append(" name=")
         sb.append(function.name)
         sb.append("\n")
+        for parameter in function.parameters:
+            format_node(ast, parameter, depth + 1, sb)
+        end
         for statement in function.body.statements:
             format_node(ast, statement, depth + 1, sb)
         end
-    elif kind is LOCAL_DECL:
-        declaration := kind.LOCAL_DECL
+    case PARAMETER{parameter}:
+        sb.append("PARAMETER #")
+        append_int(sb, id)
+        sb.append(" name=")
+        sb.append(parameter.name)
+        sb.append("\n")
+        if parameter.annotation is Some:
+            format_node(ast, parameter.annotation?, depth + 1, sb)
+        end
+    case TYPE_NAME{type_name}:
+        sb.append("TYPE_NAME #")
+        append_int(sb, id)
+        sb.append(" name=")
+        if type_name.qualifier is Some:
+            sb.append(type_name.qualifier?)
+            sb.append("::")
+        end
+        sb.append(type_name.name)
+        sb.append("\n")
+    case LOCAL_DECL{declaration}:
         sb.append("DECLARE #")
         append_int(sb, id)
         sb.append(" name=")
         sb.append(declaration.name)
         sb.append("\n")
         format_node(ast, declaration.initializer, depth + 1, sb)
-    elif kind is IF:
-        statement := kind.IF
+    case IF{statement}:
         sb.append("IF #")
         append_int(sb, id)
         sb.append("\n")
@@ -86,15 +104,14 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         for body_statement in statement.body.statements:
             format_node(ast, body_statement, depth + 1, sb)
         end
-    elif kind is RETURN:
-        statement := kind.RETURN
+    case RETURN{statement}:
         sb.append("RETURN #")
         append_int(sb, id)
         sb.append("\n")
         if statement.value is Some:
             format_node(ast, statement.value?, depth + 1, sb)
         end
-    elif kind is INTEGER_LITERAL:
+    case INTEGER_LITERAL:
         sb.append("INTEGER #")
         append_int(sb, id)
         sb.append(" [")
@@ -102,8 +119,7 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         sb.append("..")
         append_int(sb, node.span.stop)
         sb.append(")\n")
-    elif kind is IDENTIFIER_EXPR:
-        identifier := kind.IDENTIFIER_EXPR
+    case IDENTIFIER_EXPR{identifier}:
         sb.append("IDENTIFIER #")
         append_int(sb, id)
         sb.append(" name=")
@@ -113,14 +129,15 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         end
         sb.append(identifier.name)
         sb.append("\n")
-    elif kind is CALL:
-        call := kind.CALL
+    case CALL{call}:
         sb.append("CALL #")
         append_int(sb, id)
         sb.append("\n")
         format_node(ast, call.callee, depth + 1, sb)
-    elif kind is BINARY:
-        binary := kind.BINARY
+        for argument in call.arguments:
+            format_node(ast, argument, depth + 1, sb)
+        end
+    case BINARY{binary}:
         sb.append("BINOP #")
         append_int(sb, id)
         sb.append(" ")
@@ -128,6 +145,8 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
             sb.append("PLUS\n")
         elif binary.op == ast::BinaryOp.MINUS:
             sb.append("MINUS\n")
+        elif binary.op == ast::BinaryOp.LT:
+            sb.append("LT\n")
         end
         format_node(ast, binary.left, depth + 1, sb)
         format_node(ast, binary.right, depth + 1, sb)

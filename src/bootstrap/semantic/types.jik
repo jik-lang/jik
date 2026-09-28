@@ -1,0 +1,16 @@
+struct Type:
+    kind: TypeKind
+end
+
+
+variant TypeKind:
+    INT
+    VOID
+    FUNCTION: FunctionType
+end
+
+
+struct FunctionType:
+    parameter_types: Vec[int]
+    return_type: int
+end

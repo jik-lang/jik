@@ -1,0 +1,70 @@
+use "jik/testing" as test
+use "jik/string"
+use "jik/path"
+
+use "../../src/bootstrap/codegen/codegen"
+use "../../src/bootstrap/diag"
+use "../../src/bootstrap/module"
+use "../../src/bootstrap/source"
+use "../../src/bootstrap/lexer/lexer"
+use "../../src/bootstrap/parser/parser"
+use "../../src/bootstrap/semantic/semantic"
+
+
+func add_module(sources: source::SourceManager, modules: Vec[module::Module], diagnostics: diag::Diagnostics, foreign path: String, foreign text: String) -> void:
+    id := len(sources.sources)
+    file := source::SourceFile{id, path = path::normalize(path, .sources), text = copy(text, .sources)}[.sources]
+    sources.source_id_by_path[file.path] = id
+    sources.sources.push(file)
+    tokens := lexer::tokenize(file, diagnostics)
+    ast := parser::parse(file, tokens, diagnostics)
+    modules.push(module::Module{source_id = id, tokens, ast})
+end
+
+
+throws func translate(foreign main_source: String, foreign helper_source: String, r: Region) -> String:
+    sources := source::SourceManager{}[r]
+    diagnostics := diag::Diagnostics{}[r]
+    modules: Vec[module::Module][r]
+    add_module(sources, modules, diagnostics, "test/bootstrap_codegen/entry.jik", main_source)
+    if len(helper_source) > 0:
+        add_module(sources, modules, diagnostics, "test/bootstrap_codegen/helper.jik", helper_source)
+    end
+    semantic::analyze(modules, diagnostics)
+    translation := try codegen::generate(modules, sources, diagnostics, 0, r)
+    return translation
+end
+
+
+func contains(foreign text: String, foreign fragment: String) -> bool:
+    return string::replace(text, fragment, "") != text
+end
+
+
+func test_integer_program(ts) -> void:
+    translation := must translate("func main():\n    n := 2 + 3\n    if n < 6:\n        return n\n    end\n    return 0\nend\n", "", _)
+    test::suite_assert(ts, contains(translation, "int32_t jik_v_n = (2 + 3);"), site())
+    test::suite_assert(ts, contains(translation, "if ((jik_v_n < 6)) {"), site())
+    test::suite_assert(ts, contains(translation, "return jik_m0_main();"), site())
+end
+
+
+func test_imported_call(ts) -> void:
+    translation := must translate("use \"helper\" as h\nfunc main():\n    return h::add(20, 22)\nend\n", "func add(left: int, right: int):\n    return left + right\nend\n", _)
+    test::suite_assert(ts, contains(translation, "int32_t jik_m1_add(int32_t jik_v_left, int32_t jik_v_right);"), site())
+    test::suite_assert(ts, contains(translation, "return jik_m1_add(20, 22);"), site())
+end
+
+
+func test_local_call_and_bare_return(ts) -> void:
+    translation := must translate("func add(left, right):\n    return left + right\nend\nfunc main():\n    value := add(1, 2)\n    if value < 0:\n        return\n    end\n    return value\nend\n", "", _)
+    test::suite_assert(ts, contains(translation, "int32_t jik_v_value = jik_m0_add(1, 2);"), site())
+    test::suite_assert(ts, contains(translation, "return 0;"), site())
+end
+
+
+func run_tests(ts) -> void:
+    test_integer_program(ts)
+    test_imported_call(ts)
+    test_local_call_and_bare_return(ts)
+end

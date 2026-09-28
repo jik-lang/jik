@@ -1,12 +1,13 @@
 use "jik/argparse" as ap
-use "jik/fs"
+use "jik/path"
+use "jik/string"
 
 use "../compiler"
 
 
 func make_parser(r: Region) -> ap::Parser:
     parser := ap::new("jik tran", r)
-    ap::set_description(parser, "Translate a Jik source file to C.")
+    ap::set_description(parser, "Translate the bootstrap integer subset of Jik to C.")
     ap::add_positional(parser, "input", "Input file")
     opt_out := ap::add_option(parser, "--out", "-o", "Output file")
     ap::add_option_positional(opt_out, "file", "Output path.")
@@ -20,6 +21,11 @@ throws func run(args: Vec[String]):
     res := try ap::parse(p, args)
     input_file := res.positionals["input"]?
     output_file := res.options["--out"]?["file"]? if res.options["--out"] is Some else ""
+    if len(output_file) == 0:
+        basename := path::basename(input_file)
+        stem := must string::slice(basename, 0, len(basename) - 4) if string::ends_with(basename, ".jik") else basename
+        output_file = concat(stem, ".c")
+    end
     config := compiler::Config{
         input_path = input_file,
         output_path = output_file,

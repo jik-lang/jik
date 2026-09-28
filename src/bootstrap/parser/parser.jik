@@ -18,7 +18,7 @@ end
 func new(file: source::SourceFile, tokens: Vec[token::Token], diagnostics: diag::Diagnostics) -> Parser:
     p := Parser{file, tokens, diagnostics, ast = ast::Ast{}}@
     span := source::Span{source_id = file.id, start = 0, stop = len(file.text)}@
-    p.ast.root = p.ast.add(span, ast::NodeKind.MODULE{ast::Module{}})
+    p.ast.root = p.ast.add_module(span)
     return p
 end
 
@@ -125,7 +125,7 @@ throws func parse_import(p: Parser) -> int:
     try p.expect(token::TokenType.NEWLINE)
 
     span := source::Span{source_id = start.span.source_id, start = start.span.start, stop = stop}@
-    return p.ast.add(span, ast::NodeKind.IMPORT{ast::Import{path, alias}})
+    return p.ast.add_import(span, path, alias)
 end
 
 
@@ -133,26 +133,34 @@ throws func parse_primary(p: Parser) -> int:
     tok := p.current()
     if tok.type == token::TokenType.INTEGER:
         p.advance()
-        return p.ast.add(tok.span, ast::NodeKind.INTEGER_LITERAL{})
+        return p.ast.add_integer(tok.span)
     elif tok.type == token::TokenType.IDENTIFIER:
         p.advance()
         qualifier: Option[String] = None@
         name := p.text(tok.span)
-        stop := tok.span.stop
+        last_span := tok.span
         if p.current_type() == token::TokenType.DOUBLE_COLON:
             p.advance()
             qualifier = Some{name}@
             member := try p.expect(token::TokenType.IDENTIFIER)
             name = p.text(member.span)
-            stop = member.span.stop
+            last_span = member.span
         end
-        name_span := source::Span{source_id = tok.span.source_id, start = tok.span.start, stop}@
-        identifier_id := p.ast.add(name_span, ast::NodeKind.IDENTIFIER_EXPR{ast::IdentifierExpr{qualifier, name}})
+        identifier_id := p.ast.add_identifier(tok.span, last_span, qualifier, name)
         if p.current_type() == token::TokenType.LPAREN:
             p.advance()
+            arguments: Vec[int]@
+            if p.current_type() != token::TokenType.RPAREN:
+                argument := try p.parse_expression()
+                arguments.push(argument)
+                while p.current_type() == token::TokenType.COMMA:
+                    p.advance()
+                    argument = try p.parse_expression()
+                    arguments.push(argument)
+                end
+            end
             close := try p.expect(token::TokenType.RPAREN)
-            call_span := source::Span{source_id = tok.span.source_id, start = tok.span.start, stop = close.span.stop}@
-            return p.ast.add(call_span, ast::NodeKind.CALL{ast::CallExpr{callee = identifier_id}})
+            return p.ast.add_call(identifier_id, arguments, close.span)
         end
         return identifier_id
     end
@@ -165,7 +173,7 @@ throws func parse_primary(p: Parser) -> int:
 end
 
 
-throws func parse_expression(p: Parser) -> int:
+throws func parse_additive(p: Parser) -> int:
     left := try p.parse_primary()
     while p.current_type() == token::TokenType.OP_PLUS or p.current_type() == token::TokenType.OP_MINUS:
         op_type := p.current_type()
@@ -175,17 +183,22 @@ throws func parse_expression(p: Parser) -> int:
         if op_type == token::TokenType.OP_MINUS:
             op = ast::BinaryOp.MINUS
         end
-        span := source::Span{
-            source_id = p.ast.nodes[left].span.source_id,
-            start = p.ast.nodes[left].span.start,
-            stop = p.ast.nodes[right].span.stop
-        }@
-        left = p.ast.add(span, ast::NodeKind.BINARY{
-            ast::BinaryExpr{left, right, op}
-        })
+        left = p.ast.add_binary(left, right, op)
     end
     return left
 end
+
+
+throws func parse_expression(p: Parser) -> int:
+    left := try p.parse_additive()
+    while p.current_type() == token::TokenType.OP_LT:
+        p.advance()
+        right := try p.parse_additive()
+        left = p.ast.add_binary(left, right, ast::BinaryOp.LT)
+    end
+    return left
+end
+
 
 
 throws func parse_declaration(p: Parser) -> int:
@@ -194,9 +207,7 @@ throws func parse_declaration(p: Parser) -> int:
     value := try p.parse_expression()
     try p.expect(token::TokenType.NEWLINE)
     span := source::Span{source_id = name_tok.span.source_id, start = name_tok.span.start, stop = p.ast.nodes[value].span.stop}@
-    return p.ast.add(span, ast::NodeKind.LOCAL_DECL{
-        ast::LocalDecl{name = p.text(name_tok.span), initializer = value}
-    })
+    return p.ast.add_local_decl(span, p.text(name_tok.span), value)
 end
 
 
@@ -211,7 +222,7 @@ throws func parse_return(p: Parser) -> int:
     end
     try p.expect(token::TokenType.NEWLINE)
     span := source::Span{source_id = start.span.source_id, start = start.span.start, stop}@
-    return p.ast.add(span, ast::NodeKind.RETURN{ast::ReturnStmt{value}})
+    return p.ast.add_return(span, value)
 end
 
 
@@ -239,7 +250,7 @@ throws func parse_if(p: Parser) -> int:
 
     end_tok := try p.expect(token::TokenType.KWD_END)
     span := source::Span{source_id = start.span.source_id, start = start.span.start, stop = end_tok.span.stop}@
-    return p.ast.add(span, ast::NodeKind.IF{statement})
+    return p.ast.add_if(span, statement)
 end
 
 
@@ -257,15 +268,58 @@ throws func parse_statement(p: Parser) -> int:
 end
 
 
+throws func parse_type_name(p: Parser) -> int:
+    first := try p.expect(token::TokenType.IDENTIFIER)
+    qualifier: Option[String] = None@
+    name := p.text(first.span)
+    last_span := first.span
+    if p.current_type() == token::TokenType.DOUBLE_COLON:
+        p.advance()
+        qualifier = Some{name}@
+        member := try p.expect(token::TokenType.IDENTIFIER)
+        name = p.text(member.span)
+        last_span = member.span
+    end
+    return p.ast.add_type_name(first.span, last_span, qualifier, name)
+end
+
+
+
+throws func parse_parameter(p: Parser) -> int:
+    name_tok := try p.expect(token::TokenType.IDENTIFIER)
+    annotation: Option[int] = None@
+    stop := name_tok.span.stop
+    if p.current_type() == token::TokenType.COLON:
+        p.advance()
+        type_name := try p.parse_type_name()
+        annotation = Some{type_name}@
+        stop = p.ast.nodes[type_name].span.stop
+    end
+    span := source::Span{source_id = name_tok.span.source_id, start = name_tok.span.start, stop}@
+    return p.ast.add_parameter(span, p.text(name_tok.span), annotation)
+end
+
+
+
 throws func parse_function(p: Parser) -> int:
     start := try p.expect(token::TokenType.KWD_FUNC)
     name_tok := try p.expect(token::TokenType.IDENTIFIER)
     try p.expect(token::TokenType.LPAREN)
+    parameters: Vec[int]@
+    if p.current_type() != token::TokenType.RPAREN:
+        param_id := try p.parse_parameter()
+        parameters.push(param_id)
+        while p.current_type() == token::TokenType.COMMA:
+            p.advance()
+            param_id = try p.parse_parameter()
+            parameters.push(param_id)
+        end
+    end
     try p.expect(token::TokenType.RPAREN)
     try p.expect(token::TokenType.COLON)
     try p.expect(token::TokenType.NEWLINE)
 
-    function := ast::FunctionDecl{name = p.text(name_tok.span)}@
+    function := ast::FunctionDecl{name = p.text(name_tok.span), parameters}@
     p.skip_newlines()
     while p.current_type() != token::TokenType.KWD_END:
         if p.at_end():
@@ -283,7 +337,7 @@ throws func parse_function(p: Parser) -> int:
 
     end_tok := try p.expect(token::TokenType.KWD_END)
     span := source::Span{source_id = start.span.source_id, start = start.span.start, stop = end_tok.span.stop}@
-    return p.ast.add(span, ast::NodeKind.FUNCTION_DECL{function})
+    return p.ast.add_function_decl(span, function)
 end
 
 

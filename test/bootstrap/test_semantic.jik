@@ -94,9 +94,47 @@ func test_if_cannot_shadow(ts):
 end
 
 
+
+func test_parameters_in_function_scope(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func add(left, right):\n    result := left + right\n    return result\nend\nfunc other(left):\n    return left\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    semantic::analyze(modules, diagnostics)
+
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    add := mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL
+    second_function := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    test::suite_assert(ts, add.body.scope.symbols["left"]?.kind == symbol::SymbolKind.PARAMETER, site())
+    test::suite_assert(ts, add.body.scope.symbols["left"]?.origin == add.parameters[0], site())
+    test::suite_assert(ts, add.body.scope.symbols["right"]?.origin == add.parameters[1], site())
+    test::suite_assert(ts, second_function.body.scope.symbols["left"]?.origin == second_function.parameters[0], site())
+    test::suite_assert(ts, mod.global_scope.symbols["left"] is None, site())
+end
+
+
+
+func test_parameter_conflicts(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func global():\nend\nfunc main(first, first, global):\n    first := 1\n    if first:\n        first := 2\n    end\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    semantic::analyze(modules, diagnostics)
+
+    test::suite_assert(ts, diagnostics.error_count == 4, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    function := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    test::suite_assert(ts, function.body.scope.symbols["first"]?.origin == function.parameters[0], site())
+    test::suite_assert(ts, function.body.scope.symbols["global"] is None, site())
+end
+
+
 func run_tests(ts):
     test_function_scopes(ts)
     test_local_conflicts(ts)
     test_if_scopes(ts)
     test_if_cannot_shadow(ts)
+    test_parameters_in_function_scope(ts)
+    test_parameter_conflicts(ts)
 end

@@ -2,7 +2,6 @@ use "symbol"
 use "../parser/ast"
 use "../diag"
 use "../module"
-use "../parser/format"
 
 
 func quotify(foreign s: String, r: Region) -> String:
@@ -26,7 +25,6 @@ end
 
 func collect_block(mod: module::Module, block: ast::Block, parent: symbol::Scope, diagnostics: diag::Diagnostics):
     scope := block.scope
-    assert(scope.parent is None)
     scope.parent = Some{parent}
     for nd_id in block.statements:
         subnode := mod.ast.nodes[nd_id]
@@ -49,6 +47,14 @@ func collect_local_declarations(mod: module::Module, diagnostics: diag::Diagnost
         node := mod.ast.nodes[id]
         if node.kind is FUNCTION_DECL:
             function := node.kind.FUNCTION_DECL
+            function.body.scope.parent = Some{mod.global_scope}
+            for param_id in function.parameters:
+                param_node := mod.ast.nodes[param_id]
+                parameter := param_node.kind.PARAMETER
+                if not symbol::add_symbol(function.body.scope, parameter.name, symbol::SymbolKind.PARAMETER, param_id):
+                    diag::error(diagnostics, "semantic analysis", concat("symbol ", quotify(parameter.name), " already declared"), Some{param_node.span})
+                end
+            end
             collect_block(mod, function.body, mod.global_scope, diagnostics)
         end
     end
@@ -60,7 +66,7 @@ func analyze(modules: Vec[module::Module], diagnostics: diag::Diagnostics):
         collect_global_declarations(mod, diagnostics)
         if diagnostics.error_count > 0:
             return
-        end        
+        end
     end
     for mod in modules:
         collect_local_declarations(mod, diagnostics)

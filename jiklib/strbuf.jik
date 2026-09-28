@@ -17,6 +17,13 @@
 extern struct jik_StrBuf as
     StrBuf
 
+/// Create an empty buffer when a StrBuf is default-initialized.
+///
+/// @param region Allocation region.
+/// @returns An empty `StrBuf`.
+extern init func jik_strbuf_new_empty as
+    new_empty(region: Region) -> StrBuf
+
 /// Create a new buffer from initial content.
 ///
 /// @param text Initial content.
@@ -98,6 +105,18 @@ jik_strbuf_new(JikString *from, JikRegion *a)
     sb->data[n] = '\0';
     sb->size = n;
     sb->capacity = n;
+    sb->jik_region = a;
+    return sb;
+}
+
+jik_StrBuf *
+jik_strbuf_new_empty(JikRegion *a)
+{
+    jik_StrBuf *sb = jik_region_alloc(a, sizeof(jik_StrBuf));
+    sb->data = jik_region_alloc(a, 1);
+    sb->data[0] = '\0';
+    sb->size = 0;
+    sb->capacity = 0;
     sb->jik_region = a;
     return sb;
 }

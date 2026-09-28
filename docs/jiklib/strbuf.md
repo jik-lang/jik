@@ -15,6 +15,8 @@ Notes:
 
 Opaque string buffer allocated in a `Region`.
 
+Default construction creates an empty buffer in the chosen region.
+
 ## Functions
 
 ### `append(buf: StrBuf, foreign text: String) -> void`
@@ -71,6 +73,18 @@ Create a new buffer from initial content.
 
 **Returns**
 - A new `StrBuf`.
+
+---
+
+### `new_empty(region: Region) -> StrBuf`
+
+Create an empty buffer. Jik also uses this function for default construction of `StrBuf` fields.
+
+**Parameters**
+1. `region: Region` - Allocation region.
+
+**Returns**
+- An empty `StrBuf`.
 
 ---
 
