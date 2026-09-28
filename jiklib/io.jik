@@ -1,8 +1,11 @@
 //! File I/O utilities.
 //!
 //! This module provides a minimal wrapper around basic C stdio file operations.
-//! Supported file modes are currently `"r"` for reading, `"w"` for writing, and `"a"` for appending.
+//! Supported file modes are `"r"`, `"w"`, and `"a"` for text, and `"rb"`, `"wb"`,
+//! and `"ab"` for binary data.
 //! All operations throw on error.
+
+use "jik/bytes" as bytes
 
 // -------------------------------------------------------------
 //      API
@@ -14,7 +17,8 @@ extern struct jik_impl_io_File as
 
 /// Open a file.
 ///
-/// Supported modes are `"r"` (read), `"w"` (write), and `"a"` (append).
+/// Supported text modes are `"r"` (read), `"w"` (write), and `"a"` (append).
+/// Binary modes are `"rb"`, `"wb"`, and `"ab"`.
 ///
 /// @param path File path.
 /// @param mode File open mode.
@@ -31,7 +35,7 @@ extern throws func jik_impl_io_close as
 
 /// Read the full contents of a file.
 ///
-/// The file must have been opened in read mode.
+/// The file must have been opened with `"r"`. Embedded NUL bytes cause an error.
 ///
 /// @param file File handle.
 /// @param region Allocation region for the returned string.
@@ -39,14 +43,34 @@ extern throws func jik_impl_io_close as
 extern throws func jik_impl_io_read as
     read(foreign file: File, region: Region) -> String
 
+/// Read all bytes from a binary file, starting at the beginning.
+///
+/// The file must have been opened with `"rb"` and support seeking.
+/// Files larger than `INT32_MAX` bytes are rejected.
+///
+/// @param file File handle.
+/// @param region Allocation region for the returned bytes.
+/// @returns Full file contents, including any NUL bytes.
+extern throws func jik_impl_io_read_bytes as
+    read_bytes(foreign file: File, region: Region) -> bytes::Bytes
+
 /// Write a string to a file.
 ///
-/// The file must have been opened in write mode.
+/// The file must have been opened with `"w"` or `"a"`.
 ///
 /// @param file File handle.
 /// @param text String to write.
 extern throws func jik_impl_io_write as
     write(file: File, foreign text: String) -> void
+
+/// Write all bytes to a binary file.
+///
+/// The file must have been opened with `"wb"` or `"ab"`.
+///
+/// @param file File handle.
+/// @param data Bytes to write.
+extern throws func jik_impl_io_write_bytes as
+    write_bytes(file: File, foreign data: bytes::Bytes) -> void
 
 /// Write a string to standard error.
 ///
@@ -59,18 +83,32 @@ extern func jik_impl_io_write_stderr as
 /// Read an entire file by path.
 ///
 /// @param path File path.
-/// @param region Allocation region for file handle state and the returned string.
+/// @param region Allocation region for the returned string.
 /// @returns Full file contents.
 throws func read_file(foreign path: String, region: Region) -> String:
-    f := try open(path, "r", region)
+    f := try open(path, "r", _)
     try text := read(f, region):
         try close(f)
         return text
     except:
-        msg := error_msg()
-        code := error_code()
         try close(f)
-        fail(msg, code)
+        fail(error_msg(), error_code())
+    end
+end
+
+/// Read an entire file as bytes by path.
+///
+/// @param path File path.
+/// @param region Allocation region for the returned bytes.
+/// @returns Full file contents, including any NUL bytes.
+throws func read_file_bytes(foreign path: String, region: Region) -> bytes::Bytes:
+    f := try open(path, "rb", _)
+    try data := read_bytes(f, region):
+        try close(f)
+        return data
+    except:
+        try close(f)
+        fail(error_msg(), error_code())
     end
 end
 
@@ -78,16 +116,27 @@ end
 ///
 /// @param path File path.
 /// @param text String to write.
-/// @param region Allocation region for file handle state.
-throws func write_file(foreign path: String, foreign text: String, region: Region) -> void:
-    f := try open(path, "w", region)
+throws func write_file(foreign path: String, foreign text: String) -> void:
+    f := try open(path, "w", _)
     try write(f, text):
         try close(f)
     except:
-        msg := error_msg()
-        code := error_code()
         try close(f)
-        fail(msg, code)
+        fail(error_msg(), error_code())
+    end
+end
+
+/// Write bytes to a file by path, truncating existing contents.
+///
+/// @param path File path.
+/// @param data Bytes to write.
+throws func write_file_bytes(foreign path: String, foreign data: bytes::Bytes) -> void:
+    f := try open(path, "wb", _)
+    try write_bytes(f, data):
+        try close(f)
+    except:
+        try close(f)
+        fail(error_msg(), error_code())
     end
 end
 
@@ -108,7 +157,8 @@ static bool
 jik_impl_io_mode_valid(JikString *mode)
 {
     return strcmp(mode->data, "r") == 0 || strcmp(mode->data, "w") == 0 ||
-           strcmp(mode->data, "a") == 0;
+           strcmp(mode->data, "a") == 0 || strcmp(mode->data, "rb") == 0 ||
+           strcmp(mode->data, "wb") == 0 || strcmp(mode->data, "ab") == 0;
 }
 
 jik_impl_io_File *
@@ -158,7 +208,7 @@ jik_impl_io_read(jik_impl_io_File *fh, JikRegion *r, JikError *e)
         jik_error_set(e, 1, "io::read: cannot read from invalid file");
         return jik_string_new("", r);
     }
-    if (!(fh->mode->data[0] == 'r')) {
+    if (strcmp(fh->mode->data, "r") != 0) {
         jik_error_set(e, 1, "io::read: file not opened for reading");
         return jik_string_new("", r);
     }
@@ -185,8 +235,71 @@ jik_impl_io_read(jik_impl_io_File *fh, JikRegion *r, JikError *e)
         jik_error_set(e, 1, "io::read: failed to read file");
         return jik_string_new("", r);
     }
+    if (memchr(buffer, '\0', bytes) != NULL) {
+        jik_error_set(e, 1, "io::read: file contains a NUL byte; use read_bytes");
+        return jik_string_new("", r);
+    }
 
     return jik_string_new(buffer, r);
+}
+
+struct jik_impl_bytes_Bytes *
+jik_impl_io_read_bytes(jik_impl_io_File *fh, JikRegion *r, JikError *e)
+{
+    if (!fh->valid) {
+        jik_error_set(e, 1, "io::read_bytes: cannot read from invalid file");
+        return jik_impl_bytes_from_raw_copy(NULL, 0, r);
+    }
+    if (strcmp(fh->mode->data, "rb") != 0) {
+        jik_error_set(e, 1, "io::read_bytes: file not opened in binary read mode");
+        return jik_impl_bytes_from_raw_copy(NULL, 0, r);
+    }
+    if (fseek(fh->file, 0L, SEEK_SET) != 0) {
+        jik_error_set(e, 1, "io::read_bytes: could not rewind file");
+        return jik_impl_bytes_from_raw_copy(NULL, 0, r);
+    }
+
+    uint8_t chunk[8192];
+    uint8_t *buffer = NULL;
+    size_t size = 0;
+    size_t capacity = 0;
+    for (;;) {
+        size_t count = fread(chunk, 1, sizeof(chunk), fh->file);
+        if (count > 0) {
+            if (count > (size_t)INT32_MAX - size) {
+                free(buffer);
+                jik_error_set(e, 1, "io::read_bytes: file too large");
+                return jik_impl_bytes_from_raw_copy(NULL, 0, r);
+            }
+            size_t needed = size + count;
+            if (needed > capacity) {
+                size_t new_capacity = capacity ? capacity : sizeof(chunk);
+                while (new_capacity < needed) {
+                    if (new_capacity > (size_t)INT32_MAX / 2) {
+                        new_capacity = needed;
+                        break;
+                    }
+                    new_capacity *= 2;
+                }
+                buffer = jik_realloc(buffer, new_capacity);
+                capacity = new_capacity;
+            }
+            memcpy(buffer + size, chunk, count);
+            size = needed;
+        }
+        if (count < sizeof(chunk)) {
+            if (ferror(fh->file)) {
+                free(buffer);
+                jik_error_set(e, 1, "io::read_bytes: failed to read file");
+                return jik_impl_bytes_from_raw_copy(NULL, 0, r);
+            }
+            break;
+        }
+    }
+
+    struct jik_impl_bytes_Bytes *result = jik_impl_bytes_from_raw_copy(buffer, size, r);
+    free(buffer);
+    return result;
 }
 
 void
@@ -196,12 +309,12 @@ jik_impl_io_write(jik_impl_io_File *fh, JikString *s, JikError *e)
         jik_error_set(e, 1, "io::write: cannot write to invalid file");
         return;
     }
-    if (!(fh->mode->data[0] == 'w' || fh->mode->data[0] == 'a')) {
+    if (strcmp(fh->mode->data, "w") != 0 && strcmp(fh->mode->data, "a") != 0) {
         jik_error_set(e, 1, "io::write: file not opened for writing");
         return;
     }
 
-    size_t len = strlen(s->data);
+    size_t len = s->size;
     size_t n   = fwrite(s->data, 1, len, fh->file);
     if (n != len) {
         jik_error_set(e, 1, "io::write: failed to write all bytes");
@@ -211,6 +324,34 @@ jik_impl_io_write(jik_impl_io_File *fh, JikString *s, JikError *e)
     if (fflush(fh->file) != 0) {
         jik_error_set(e, 1, "io::write: fflush failed");
         return;
+    }
+}
+
+void
+jik_impl_io_write_bytes(jik_impl_io_File *fh, struct jik_impl_bytes_Bytes *data, JikError *e)
+{
+    if (!fh->valid) {
+        jik_error_set(e, 1, "io::write_bytes: cannot write to invalid file");
+        return;
+    }
+    if (strcmp(fh->mode->data, "wb") != 0 && strcmp(fh->mode->data, "ab") != 0) {
+        jik_error_set(e, 1, "io::write_bytes: file not opened in binary write mode");
+        return;
+    }
+
+    const uint8_t *bytes = jik_impl_bytes_raw_data(data);
+    size_t size = jik_impl_bytes_raw_size(data);
+    size_t offset = 0;
+    while (offset < size) {
+        size_t written = fwrite(bytes + offset, 1, size - offset, fh->file);
+        if (written == 0) {
+            jik_error_set(e, 1, "io::write_bytes: failed to write all bytes");
+            return;
+        }
+        offset += written;
+    }
+    if (fflush(fh->file) != 0) {
+        jik_error_set(e, 1, "io::write_bytes: fflush failed");
     }
 }
 

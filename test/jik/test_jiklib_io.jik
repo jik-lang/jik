@@ -1,6 +1,7 @@
 use "jik/testing" as test
 use "jik/io"
 use "jik/fs"
+use "jik/bytes"
 
 
 func test_fileio(ts):
@@ -61,7 +62,7 @@ func test_fileio(ts):
         test::suite_assert(ts, true, site())
     end
 
-    try io::write_file("test/jik/input/data2.txt", "alpha", _):
+    try io::write_file("test/jik/input/data2.txt", "alpha"):
         data := must io::read_file("test/jik/input/data2.txt", _)
         test::suite_assert(ts, data == "alpha", site())
         must fs::remove_file("test/jik/input/data2.txt")
@@ -71,7 +72,88 @@ func test_fileio(ts):
 
 end
 
+func test_binary_fileio(ts):
+    path := "test/jik/input/data2.bin"
+    buf := bytes::buf_new(_)
+    i := 0
+    while i < 8200:
+        bytes::buf_push(buf, 'x')
+        i += 1
+    end
+    must bytes::buf_push_int(buf, 0)
+    must bytes::buf_push_int(buf, 10)
+    must bytes::buf_push_int(buf, 13)
+    must bytes::buf_push_int(buf, 26)
+    must bytes::buf_push_int(buf, 128)
+    must bytes::buf_push_int(buf, 255)
+    expected := bytes::to_bytes(buf, _)
+
+    must io::write_file_bytes(path, expected)
+    actual := must io::read_file_bytes(path, _)
+    test::suite_assert(ts, bytes::len(actual) == 8206, site())
+    test::suite_assert(ts, bytes::equals(actual, expected), site())
+
+    f := must io::open(path, "rb", _)
+    test::suite_assert(ts, bytes::equals(must io::read_bytes(f, _), expected), site())
+    test::suite_assert(ts, bytes::equals(must io::read_bytes(f, _), expected), site())
+    try io::read(f, _):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+    must io::close(f)
+
+    try io::read_file(path, _):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg(_) == "io::read: file contains a NUL byte; use read_bytes", site())
+        test::suite_assert(ts, error_code() == 1, site())
+    end
+
+    must io::write_file_bytes(path, bytes::new(_))
+    test::suite_assert(ts, bytes::len(must io::read_file_bytes(path, _)) == 0, site())
+
+    f = must io::open(path, "ab", _)
+    must io::write_bytes(f, expected)
+    try io::write(f, "x"):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+    must io::close(f)
+    test::suite_assert(ts, bytes::equals(must io::read_file_bytes(path, _), expected), site())
+
+    f = must io::open(path, "r", _)
+    try io::read_bytes(f, _):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+    must io::close(f)
+
+    f = must io::open(path, "rb", _)
+    try io::write_bytes(f, expected):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+    must io::close(f)
+
+    try io::open(path, "rbb", _):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+    try io::read_file_bytes("test/jik/input/does_not_exist.bin", _):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+    end
+    must fs::remove_file(path)
+end
+
 
 func run_tests(ts):
     test_fileio(ts)
+    test_binary_fileio(ts)
 end

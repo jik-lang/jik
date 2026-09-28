@@ -30,7 +30,7 @@ func _reset_root():
 end
 
 func _write(foreign path: String, foreign text: String):
-    must io::write_file(path, text, _)
+    must io::write_file(path, text)
 end
 
 func test_predicates(ts):

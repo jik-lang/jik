@@ -389,7 +389,7 @@
   },
   "io": {
     "module": "io",
-    "doc": "File I/O utilities.\n\nThis module provides a minimal wrapper around basic C stdio file operations.\nSupported file modes are currently `\"r\"` for reading, `\"w\"` for writing, and `\"a\"` for appending.\nAll operations throw on error.",
+    "doc": "File I/O utilities.\n\nThis module provides a minimal wrapper around basic C stdio file operations.\nSupported file modes are `\"r\"`, `\"w\"`, and `\"a\"` for text, and `\"rb\"`, `\"wb\"`,\nand `\"ab\"` for binary data.\nAll operations throw on error.",
     "symbols": [
       {
         "name": "File",
@@ -401,7 +401,7 @@
         "name": "open",
         "kind": "function",
         "signature": "open(path: String, mode: String, region: Region) -> File",
-        "doc": "Open a file.\n\nSupported modes are `\"r\"` (read), `\"w\"` (write), and `\"a\"` (append).",
+        "doc": "Open a file.\n\nSupported text modes are `\"r\"` (read), `\"w\"` (write), and `\"a\"` (append).\nBinary modes are `\"rb\"`, `\"wb\"`, and `\"ab\"`.",
         "throws": true
       },
       {
@@ -415,14 +415,28 @@
         "name": "read",
         "kind": "function",
         "signature": "read(file: File, region: Region) -> String",
-        "doc": "Read the full contents of a file.\n\nThe file must have been opened in read mode.",
+        "doc": "Read the full contents of a file.\n\nThe file must have been opened with `\"r\"`. Embedded NUL bytes cause an error.",
+        "throws": true
+      },
+      {
+        "name": "read_bytes",
+        "kind": "function",
+        "signature": "read_bytes(file: File, region: Region) -> bytes::Bytes",
+        "doc": "Read all bytes from a binary file, starting at the beginning.\n\nThe file must have been opened with `\"rb\"` and support seeking.\nFiles larger than `INT32_MAX` bytes are rejected.",
         "throws": true
       },
       {
         "name": "write",
         "kind": "function",
         "signature": "write(file: File, text: String) -> void",
-        "doc": "Write a string to a file.\n\nThe file must have been opened in write mode.",
+        "doc": "Write a string to a file.\n\nThe file must have been opened with `\"w\"` or `\"a\"`.",
+        "throws": true
+      },
+      {
+        "name": "write_bytes",
+        "kind": "function",
+        "signature": "write_bytes(file: File, data: bytes::Bytes) -> void",
+        "doc": "Write all bytes to a binary file.\n\nThe file must have been opened with `\"wb\"` or `\"ab\"`.",
         "throws": true
       },
       {
@@ -440,10 +454,24 @@
         "throws": true
       },
       {
+        "name": "read_file_bytes",
+        "kind": "function",
+        "signature": "read_file_bytes(path: String, region: Region) -> bytes::Bytes",
+        "doc": "Read an entire file as bytes by path.",
+        "throws": true
+      },
+      {
         "name": "write_file",
         "kind": "function",
-        "signature": "write_file(path: String, text: String, region: Region) -> void",
+        "signature": "write_file(path: String, text: String) -> void",
         "doc": "Write a string to a file by path, truncating existing contents.",
+        "throws": true
+      },
+      {
+        "name": "write_file_bytes",
+        "kind": "function",
+        "signature": "write_file_bytes(path: String, data: bytes::Bytes) -> void",
+        "doc": "Write bytes to a file by path, truncating existing contents.",
         "throws": true
       }
     ]
