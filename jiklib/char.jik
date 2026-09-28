@@ -78,57 +78,57 @@ extern func jik_impl_tolower as
 @embed{C_END}
 
 bool
-jik_impl_isdigit(char c)
+jik_impl_isdigit(uint8_t c)
 {
-    return isdigit(c);
+    return isdigit((unsigned char)c);
 }
 
 bool
-jik_impl_isalpha(char c)
+jik_impl_isalpha(uint8_t c)
 {
-    return isalpha(c);
+    return isalpha((unsigned char)c);
 }
 
 bool
-jik_impl_isalnum(char c)
+jik_impl_isalnum(uint8_t c)
 {
-    return isalnum(c);
+    return isalnum((unsigned char)c);
 }
 
 bool
-jik_impl_isspace(char c)
+jik_impl_isspace(uint8_t c)
 {
-    return isspace(c);
+    return isspace((unsigned char)c);
 }
 
 bool
-jik_impl_isupper(char c)
+jik_impl_isupper(uint8_t c)
 {
-    return isupper(c);
+    return isupper((unsigned char)c);
 }
 
 bool
-jik_impl_islower(char c)
+jik_impl_islower(uint8_t c)
 {
-    return islower(c);
+    return islower((unsigned char)c);
 }
 
 bool
-jik_impl_isxdigit(char c)
+jik_impl_isxdigit(uint8_t c)
 {
-    return isxdigit(c);
+    return isxdigit((unsigned char)c);
 }
 
-char
-jik_impl_toupper(char c)
+uint8_t
+jik_impl_toupper(uint8_t c)
 {
-    return (char)toupper(c);
+    return (uint8_t)toupper((unsigned char)c);
 }
 
-char
-jik_impl_tolower(char c)
+uint8_t
+jik_impl_tolower(uint8_t c)
 {
-    return (char)tolower(c);
+    return (uint8_t)tolower((unsigned char)c);
 }
 
 C_END
