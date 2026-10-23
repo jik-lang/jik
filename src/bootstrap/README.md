@@ -1,5 +1,19 @@
 # Bootstrap compiler
 
+The Jik compiler written in Jik is now on main and can compile itself. It is
+undergoing further review and refactoring before release. The default build and
+release archives still use the C seed compiler.
+
+Run these commands from the repository root:
+
+```sh
+make boot                 # Build jik1 using the C seed
+make test-boot            # Build and test jik1
+make test-bootstrap-full  # Test successive compiler generations and compare C output
+```
+
+## Reading the compiler
+
 Start with [compiler.jik](compiler.jik), which runs one compilation, then
 [semantic/semantic.jik](semantic/semantic.jik), which runs the analysis phases.
 The compiler stores types and region information on the AST and generates C
