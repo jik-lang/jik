@@ -1,0 +1,9 @@
+func empty():
+end
+
+
+func main():
+    value := 1
+    value -= empty()
+    return value
+end

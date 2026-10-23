@@ -1,0 +1,5 @@
+use "a"
+
+func main():
+    a::ping()
+end

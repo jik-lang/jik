@@ -1,0 +1,94 @@
+struct Box:
+    value: int
+end
+
+
+enum Mode:
+    READY
+    OTHER
+end
+
+
+variant Reply:
+    TEXT: String
+    EMPTY
+end
+
+
+throws func number(value: int) -> int:
+    return value
+end
+
+
+throws func action(box: Box):
+    box.value += 1
+end
+
+
+throws func next(box: Box) -> int:
+    box.value += 1
+    return box.value
+end
+
+
+throws func read(foreign source: String, box: Box) -> int:
+    return len(source) + box.value
+end
+
+
+throws func checked_flag(bad: bool) -> bool:
+    if bad:
+        fail("short circuit failed", 0)
+    end
+    return true
+end
+
+
+throws func new_box(value: int, r: Region) -> Box:
+    return Box{value}[r]
+end
+
+
+throws func text(r: Region) -> String:
+    return concat("caller-", "owned", r)
+end
+
+
+throws func option(r: Region) -> Option[String]:
+    return Some{concat("payload", r)}[r]
+end
+
+
+throws func reply(r: Region) -> Reply:
+    return Reply.TEXT{concat("reply", r)}[r]
+end
+
+
+throws func values(r: Region) -> Vec[int]:
+    return [2, 3][r]
+end
+
+
+throws func location() -> Site:
+    return site()
+end
+
+
+throws func mode() -> Mode:
+    return Mode.READY
+end
+
+
+throws func fractional() -> double:
+    return 1.5
+end
+
+
+throws func flag() -> bool:
+    return true
+end
+
+
+throws func letter() -> char:
+    return 'x'
+end

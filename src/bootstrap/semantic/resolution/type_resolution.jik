@@ -1,0 +1,186 @@
+//! Register named identities, resolve type syntax, and reject invalid type cycles.
+
+use "../../language/types"
+use "../../language/symbol"
+use "lookup"
+use "../../modules/module"
+use "../../diag"
+
+
+func declare(mod: module::Module, id: int, diagnostics: diag::Diagnostics) -> void:
+    node := mod.ast.nodes[id]
+    declaration := node.kind.TYPE_DECL
+    if types::builtin(mod.type_store, declaration.name) is Some or declaration.name == "Vec" or declaration.name == "Dict" or declaration.name == "Option":
+        diag::error(diagnostics, "invalid type name", "type declarations cannot replace builtin types", Some{node.span})
+        return
+    end
+    declaration.resolved_type = Some{must types::named(mod.type_store, declaration.kind, mod.source_id, id, declaration.name)}
+end
+
+
+func container_kind(name: String) -> Option[types::Container]:
+    if name == "Vec":
+        return Some{types::Container.VECTOR}
+    elif name == "Dict":
+        return Some{types::Container.DICTIONARY}
+    elif name == "Option":
+        return Some{types::Container.OPTION}
+    end
+    return None
+end
+
+
+func resolve(modules: Vec[module::Module], mod: module::Module, id: int, diagnostics: diag::Diagnostics) -> Option[int]:
+    node := mod.ast.nodes[id]
+    description := node.kind.TYPE_NAME
+    description.resolved_type = None
+    constructor := container_kind(description.name)
+    if description.applied:
+        if description.qualifier is Some or constructor is None:
+            diag::error(diagnostics, "invalid type constructor", "only Vec, Dict and Option accept type arguments", Some{node.span})
+            return None
+        end
+        if len(description.arguments) != 1:
+            diag::error(diagnostics, "invalid type arguments", "expected exactly one element type", Some{node.span})
+            return None
+        end
+        element := resolve(modules, mod, description.arguments[0], diagnostics)
+        if element is None:
+            return None
+        end
+        if constructor? == types::Container.OPTION and (element? == types::atom(mod.type_store, types::Atom.REGION) or element? == types::atom(mod.type_store, types::Atom.VOID)):
+            diag::error(diagnostics, "invalid option type", "Option payloads cannot have type Region or void", Some{node.span})
+            return None
+        end
+        if constructor? == types::Container.DICTIONARY and (element? == types::atom(mod.type_store, types::Atom.REGION) or element? == types::atom(mod.type_store, types::Atom.VOID)):
+            diag::error(diagnostics, "invalid dictionary type", "dictionary values cannot have type Region or void", Some{node.span})
+            return None
+        end
+        description.resolved_type = Some{must types::container(mod.type_store, constructor?, element?)}
+        return description.resolved_type
+    end
+    if description.qualifier is None:
+        if constructor is Some:
+            diag::error(diagnostics, "missing type argument", "Vec, Dict and Option require an element type", Some{node.span})
+            return None
+        end
+        builtin := types::builtin(mod.type_store, description.name)
+        if builtin is Some:
+            description.resolved_type = builtin
+            return builtin
+        end
+    end
+    target_source_id := lookup::qualified_module(modules, mod, description.qualifier, diagnostics, node.span)
+    if target_source_id is None:
+        return None
+    end
+    target := modules[target_source_id?]
+    entry := target.global_scope.symbols[description.name]
+    if entry is None:
+        diag::error(diagnostics, "unknown type", description.name, Some{node.span})
+        return None
+    end
+    if entry?.kind != symbol::SymbolKind.TYPE:
+        diag::error(diagnostics, "expected a type", description.name, Some{node.span})
+        return None
+    end
+    declaration := target.ast.nodes[entry?.origin].kind.TYPE_DECL
+    description.resolved_type = declaration.resolved_type
+    return description.resolved_type
+end
+
+
+func resolve_members(modules: Vec[module::Module], mod: module::Module, id: int, diagnostics: diag::Diagnostics) -> void:
+    declaration := mod.ast.nodes[id].kind.TYPE_DECL
+    if (declaration.kind == types::NamedKind.ENUM or declaration.kind == types::NamedKind.VARIANT) and len(declaration.members) == 0:
+        diag::error(diagnostics, "empty enum" if declaration.kind == types::NamedKind.ENUM else "empty variant", "enums and variants need at least one member", Some{mod.ast.nodes[id].span})
+        return
+    end
+    if declaration.resolved_type is None:
+        return
+    end
+    definition := mod.type_store.types[declaration.resolved_type?].kind.NAMED
+    definition.member_types.clear()
+    definition.member_names.clear()
+    seen: Dict[bool]
+    for member_id in declaration.members:
+        node := mod.ast.nodes[member_id]
+        member := node.kind.TYPE_MEMBER
+        if seen[member.name] is Some:
+            diag::error(diagnostics, "duplicate type member", member.name, Some{node.span})
+        end
+        seen[member.name] = true
+        member.resolved_type = None
+        if declaration.kind == types::NamedKind.ENUM:
+            definition.member_names.push(copy(member.name, .definition))
+        end
+        if declaration.kind == types::NamedKind.VARIANT and member.annotation is None:
+            definition.member_names.push(copy(member.name, .definition))
+            definition.member_types.push(types::atom(mod.type_store, types::Atom.VOID))
+        end
+        if member.annotation is Some:
+            member.resolved_type = resolve(modules, mod, member.annotation?, diagnostics)
+            if member.resolved_type is Some:
+                if declaration.kind == types::NamedKind.VARIANT and (member.resolved_type? == types::atom(mod.type_store, types::Atom.VOID) or member.resolved_type? == types::atom(mod.type_store, types::Atom.REGION)):
+                    diag::error(diagnostics, "invalid variant payload type", "variant members cannot hold void or Region values; omit the type annotation for a member with no value", Some{node.span})
+                    continue
+                end
+                definition.member_types.push(member.resolved_type?)
+                definition.member_names.push(copy(member.name, .definition))
+            end
+        end
+    end
+end
+
+
+func reaches_without_option(foreign store: types::Store, id: int, target: int, visited: Vec[bool]) -> bool:
+    kind := store.types[id].kind
+    if kind is CONTAINER:
+        container := kind.CONTAINER
+        if container.kind == types::Container.OPTION:
+            return false
+        end
+        return reaches_without_option(store, container.element_type, target, visited)
+    end
+    if not (kind is NAMED):
+        return false
+    end
+    if id == target:
+        return true
+    end
+    if visited[id]:
+        return false
+    end
+    visited[id] = true
+    for member in kind.NAMED.member_types:
+        if reaches_without_option(store, member, target, visited):
+            return true
+        end
+    end
+    return false
+end
+
+
+func check_cycles(mod: module::Module, diagnostics: diag::Diagnostics) -> void:
+    root := mod.ast.get_root_module()
+    for id in root.declarations:
+        node := mod.ast.nodes[id]
+        if not (node.kind is TYPE_DECL):
+            continue
+        end
+        declaration := node.kind.TYPE_DECL
+        if declaration.resolved_type is None:
+            continue
+        end
+        for member_id in declaration.members:
+            member_node := mod.ast.nodes[member_id]
+            member := member_node.kind.TYPE_MEMBER
+            if member.resolved_type is Some:
+                visited := [len(mod.type_store.types) of false]
+                if reaches_without_option(mod.type_store, member.resolved_type?, declaration.resolved_type?, visited):
+                    diag::error(diagnostics, "illegal recursive type", "recursive cycles must pass through Option", Some{member_node.span})
+                end
+            end
+        end
+    end
+end

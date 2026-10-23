@@ -1,0 +1,6 @@
+use "./self" as loop
+
+
+func main():
+    return 0
+end

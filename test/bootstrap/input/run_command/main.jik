@@ -1,0 +1,13 @@
+use "jik/io"
+use "jik/path"
+use "jik/sys"
+
+@copy("payload.txt")
+
+func main(args):
+    println("argc=", len(args))
+    io::write_stderr("child stderr\n")
+    executable := must sys::executable_path()
+    print(must io::read_file(path::join([path::dirname(executable), "payload.txt"])))
+    return 7
+end

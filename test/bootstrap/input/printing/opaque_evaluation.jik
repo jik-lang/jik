@@ -1,0 +1,19 @@
+use "opaque_library" as lib
+
+
+func wrapped(r: Region) -> lib::Handle:
+    return lib::make(r)
+end
+
+
+func main():
+    println(lib::make())
+    println(lib::creations())
+    print(wrapped())
+    println()
+    println(lib::creations())
+    println(lib::Handle{})
+    println(lib::creations())
+    println(Some{lib::make()})
+    println(lib::creations())
+end

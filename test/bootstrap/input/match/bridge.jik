@@ -1,0 +1,5 @@
+use "shared"
+
+func make(r: Region) -> shared::V:
+    return shared::make(r)
+end

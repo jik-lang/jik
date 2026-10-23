@@ -1,0 +1,342 @@
+//! Find functions that do not store or return inputs from separate regions.
+
+use "../../language/builtin"
+use "../../parser/ast"
+use "../../modules/module"
+use "../../language/types"
+use "literal_rules"
+
+
+// A storing call needs a shared input region. Local allocations and scalar
+// element updates are safe; storing composites from caller regions invalidates proof.
+func local_value(mod: module::Module, id: int) -> bool:
+    node := mod.ast.nodes[id]
+    match node.kind:
+    case LOCAL_REGION:
+        return true
+    case STRING_LITERAL{literal}:
+        return not literal.implicit and (literal.destination is None or local_value(mod, literal.destination?))
+    case VECTOR_LITERAL{literal}:
+        return not literal.implicit and (literal.destination is None or local_value(mod, literal.destination?))
+    case STRUCT_LITERAL{literal}:
+        return not literal.implicit and (literal.destination is None or local_value(mod, literal.destination?))
+    case VARIANT_LITERAL{literal}:
+        return not literal.implicit and (literal.destination is None or local_value(mod, literal.destination?))
+    case OPTION_LITERAL{literal}:
+        return not literal.implicit and (literal.destination is None or local_value(mod, literal.destination?))
+    case DICT_LITERAL{literal}:
+        return not literal.implicit and (literal.destination is None or local_value(mod, literal.destination?))
+    case UNWRAP{value}:
+        return local_value(mod, value)
+    case DEFAULT_VALUE:
+        return true
+    case FIELD{field}:
+        return local_value(mod, field.value)
+    case REGION_OF{inner}:
+        return local_value(mod, inner)
+    case GROUP{inner}:
+        return local_value(mod, inner)
+    case MUST{required}:
+        return local_value(mod, required.call)
+    case INDEX{index}:
+        return local_value(mod, index.value)
+    case SLICE{slice}:
+        return local_value(mod, slice.value)
+    case CALL{call}:
+        if call.builtin is Some and call.builtin? == builtin::Kind.CONCAT:
+            return call.auto_region or local_value(mod, call.arguments[len(call.arguments) - 1])
+        end
+        if call.builtin is Some and (call.builtin? == builtin::Kind.COPY or builtin::is_site_text(call.builtin?)):
+            return local_value(mod, call.arguments[1])
+        end
+        if call.builtin is Some and call.builtin? == builtin::Kind.ERROR_MSG:
+            return local_value(mod, call.arguments[0])
+        end
+        return call.builtin is Some and (call.builtin? == builtin::Kind.POP or call.builtin? == builtin::Kind.UNWRAP) and local_value(mod, call.arguments[0])
+    case IDENTIFIER_EXPR{identifier}:
+        if identifier.global_origin is Some:
+            return false
+        end
+        origin := mod.ast.nodes[identifier.local_origin?]
+        if origin.kind is MATCH_BINDING:
+            return local_value(mod, origin.kind.MATCH_BINDING.value)
+        end
+        if origin.kind is LOOP_VARIABLE and origin.iteration_source is Some:
+            return local_value(mod, origin.iteration_source?)
+        end
+        return origin.kind is LOCAL_DECL and origin.kind.LOCAL_DECL.initializer is Some and local_value(mod, origin.kind.LOCAL_DECL.initializer?)
+    other:
+        return false
+    end
+end
+
+
+// Identify the binding supplying a copy destination or a store receiver's region.
+// Distinct parameters remain distinct here: shared-call rules are not a proof
+// that the helper itself is safe with inputs from independent regions.
+func storage_origin(mod: module::Module, id: int) -> int:
+    node := mod.ast.nodes[id]
+    match node.kind:
+    case GROUP{inner}:
+        return storage_origin(mod, inner)
+    case MUST{required}:
+        return storage_origin(mod, required.call)
+    case REGION_OF{inner}:
+        return storage_origin(mod, inner)
+    case FIELD{field}:
+        return storage_origin(mod, field.value)
+    case INDEX{index}:
+        return storage_origin(mod, index.value)
+    case UNWRAP{value}:
+        return storage_origin(mod, value)
+    case IDENTIFIER_EXPR{identifier}:
+        if identifier.local_origin is Some:
+            return identifier.local_origin?
+        end
+    other:
+    end
+    return id
+end
+
+
+func copied_into(mod: module::Module, value: int, destination: int) -> bool:
+    node := mod.ast.nodes[value]
+    if node.kind is GROUP:
+        return copied_into(mod, node.kind.GROUP, destination)
+    elif node.kind is MUST:
+        return copied_into(mod, node.kind.MUST.call, destination)
+    elif node.kind is CALL:
+        call := node.kind.CALL
+        if call.builtin is Some:
+            if call.builtin? == builtin::Kind.ERROR_MSG:
+                return storage_origin(mod, call.arguments[0]) == storage_origin(mod, destination)
+            end
+            if call.builtin? == builtin::Kind.COPY or builtin::is_site_text(call.builtin?):
+                return storage_origin(mod, call.arguments[1]) == storage_origin(mod, destination)
+            elif call.builtin? == builtin::Kind.CONCAT and not call.auto_region:
+                return storage_origin(mod, call.arguments[len(call.arguments) - 1]) == storage_origin(mod, destination)
+            end
+        end
+    end
+    return false
+end
+
+
+func unsafe_expression(modules: Vec[module::Module], mod: module::Module, id: int) -> bool:
+    node := mod.ast.nodes[id]
+    match node.kind:
+    case CALL{call}:
+        if call.builtin is Some:
+            if call.builtin? == builtin::Kind.PUSH and types::is_allocated(mod.type_store, mod.ast.nodes[call.arguments[1]].inferred_type?):
+                if (not local_value(mod, call.arguments[0]) or not local_value(mod, call.arguments[1])) and not copied_into(mod, call.arguments[1], call.arguments[0]) and not literal_rules::fresh_tree(mod, call.arguments[1]):
+                    return true
+                end
+            end
+        else:
+            target := call.target?
+            if not modules[target.source_id].ast.nodes[target.origin].kind.FUNCTION_DECL.is_region_safe:
+                return true
+            end
+        end
+        for argument in call.arguments:
+            if unsafe_expression(modules, mod, argument):
+                return true
+            end
+        end
+    case DICT_LITERAL{literal}:
+        for entry in literal.entries:
+            if unsafe_expression(modules, mod, entry.key) or unsafe_expression(modules, mod, entry.value):
+                return true
+            end
+            if types::is_allocated(mod.type_store, mod.ast.nodes[entry.value].inferred_type?):
+                if not local_value(mod, id) or not local_value(mod, entry.value):
+                    return true
+                end
+            end
+        end
+    case VARIANT_LITERAL{literal}:
+        if literal.value is Some:
+            value := literal.value?
+            if unsafe_expression(modules, mod, value):
+                return true
+            end
+            if types::is_allocated(mod.type_store, mod.ast.nodes[value].inferred_type?):
+                return not local_value(mod, id) or not local_value(mod, value)
+            end
+        end
+    case OPTION_LITERAL{literal}:
+        if literal.value is Some:
+            value := literal.value?
+            if unsafe_expression(modules, mod, value):
+                return true
+            end
+            if types::is_allocated(mod.type_store, mod.ast.nodes[value].inferred_type?):
+                return not local_value(mod, id) or not local_value(mod, value)
+            end
+        end
+    case VARIANT_CHECK{check}:
+        return unsafe_expression(modules, mod, check.value)
+    case OPTION_CHECK{check}:
+        return unsafe_expression(modules, mod, check.value)
+    case UNWRAP{value}:
+        return unsafe_expression(modules, mod, value)
+    case STRUCT_LITERAL{literal}:
+        for field in literal.fields:
+            if unsafe_expression(modules, mod, field.value):
+                return true
+            end
+            if types::is_allocated(mod.type_store, mod.ast.nodes[field.value].inferred_type?):
+                if not local_value(mod, id) or not local_value(mod, field.value):
+                    return true
+                end
+            end
+        end
+    case FIELD{field}:
+        return unsafe_expression(modules, mod, field.value)
+    case VECTOR_LITERAL{literal}:
+        if literal.count is Some and unsafe_expression(modules, mod, literal.count?):
+            return true
+        end
+        for element in literal.elements:
+            if unsafe_expression(modules, mod, element):
+                return true
+            end
+            if types::is_allocated(mod.type_store, mod.ast.nodes[element].inferred_type?):
+                if not local_value(mod, id) or not local_value(mod, element):
+                    return true
+                end
+            end
+        end
+    case TABLE_LOOKUP{value}:
+        return unsafe_expression(modules, mod, value.key)
+    case INDEX{index}:
+        return unsafe_expression(modules, mod, index.value) or unsafe_expression(modules, mod, index.index)
+    case SLICE{slice}:
+        return unsafe_expression(modules, mod, slice.value) or (slice.start is Some and unsafe_expression(modules, mod, slice.start?)) or (slice.stop is Some and unsafe_expression(modules, mod, slice.stop?))
+    case BINARY{binary}:
+        return unsafe_expression(modules, mod, binary.left) or unsafe_expression(modules, mod, binary.right)
+    case CONDITIONAL{conditional}:
+        return unsafe_expression(modules, mod, conditional.condition) or unsafe_expression(modules, mod, conditional.when_true) or unsafe_expression(modules, mod, conditional.when_false)
+    case GROUP{inner}:
+        return unsafe_expression(modules, mod, inner)
+    case MUST{required}:
+        return unsafe_expression(modules, mod, required.call)
+    case UNARY{unary}:
+        return unsafe_expression(modules, mod, unary.operand)
+    case REGION_OF{inner}:
+        return unsafe_expression(modules, mod, inner)
+    other:
+    end
+    return false
+end
+
+
+func unsafe_block(modules: Vec[module::Module], mod: module::Module, body: ast::Block) -> bool:
+    for id in body.statements:
+        node := mod.ast.nodes[id]
+        match node.kind:
+        case LOCAL_DECL{local}:
+            if local.initializer is Some and unsafe_expression(modules, mod, local.initializer?):
+                return true
+            end
+        case ASSIGN{statement}:
+            if unsafe_expression(modules, mod, statement.target) or unsafe_expression(modules, mod, statement.value):
+                return true
+            end
+            target := mod.ast.nodes[statement.target]
+            if (target.kind is INDEX or target.kind is FIELD) and types::is_allocated(mod.type_store, target.inferred_type?):
+                if (not local_value(mod, statement.target) or not local_value(mod, statement.value)) and not copied_into(mod, statement.value, statement.target) and not literal_rules::fresh_tree(mod, statement.value):
+                    return true
+                end
+            end
+        case CALL:
+            if unsafe_expression(modules, mod, id):
+                return true
+            end
+        case MUST:
+            if unsafe_expression(modules, mod, id):
+                return true
+            end
+        case RETURN{statement}:
+            if statement.value is Some and unsafe_expression(modules, mod, statement.value?):
+                return true
+            end
+        case TRY{statement}:
+            if unsafe_expression(modules, mod, statement.call) or unsafe_block(modules, mod, statement.body) or unsafe_block(modules, mod, statement.except_body):
+                return true
+            end
+        case IF{statement}:
+            for branch in statement.branches:
+                if unsafe_expression(modules, mod, branch.condition) or unsafe_block(modules, mod, branch.body):
+                    return true
+                end
+            end
+            if statement.else_body is Some and unsafe_block(modules, mod, statement.else_body?):
+                return true
+            end
+        case MATCH{statement}:
+            if unsafe_expression(modules, mod, statement.value):
+                return true
+            end
+            for arm in statement.arms:
+                if unsafe_block(modules, mod, arm.body):
+                    return true
+                end
+            end
+            if statement.other_body is Some and unsafe_block(modules, mod, statement.other_body?):
+                return true
+            end
+        case WHILE{loop}:
+            if unsafe_expression(modules, mod, loop.condition) or unsafe_block(modules, mod, loop.body):
+                return true
+            end
+        case FOR{loop}:
+            if unsafe_expression(modules, mod, loop.start) or unsafe_expression(modules, mod, loop.stop) or unsafe_block(modules, mod, loop.body):
+                return true
+            end
+        case FOREACH{loop}:
+            if unsafe_expression(modules, mod, loop.container) or unsafe_block(modules, mod, loop.body):
+                return true
+            end
+        other:
+        end
+    end
+    return false
+end
+
+
+/// Infer function safety before assigning region sources. Repeat until no flags
+/// change (a fixed point). Start with candidate functions marked safe, then clear
+/// flags when their bodies or callees are unsafe, including through recursive calls.
+func infer_function_safety(modules: Vec[module::Module], foreign order: Vec[int]) -> void:
+    for source_id in order:
+        mod := modules[source_id]
+        root := mod.ast.get_root_module()
+        for id in root.declarations:
+            node := mod.ast.nodes[id]
+            if node.kind is FUNCTION_DECL:
+                signature := mod.type_store.types[node.inferred_type?].kind.FUNCTION
+                // An external body cannot prove that composite inputs are read-only.
+                node.kind.FUNCTION_DECL.is_region_safe = node.kind.FUNCTION_DECL.external_name is None and not types::is_allocated(mod.type_store, signature.return_type)
+            end
+        end
+    end
+    changed := true
+    while changed:
+        changed = false
+        for source_id in order:
+            mod := modules[source_id]
+            root := mod.ast.get_root_module()
+            for id in root.declarations:
+                node := mod.ast.nodes[id]
+                if node.kind is FUNCTION_DECL:
+                    function := node.kind.FUNCTION_DECL
+                    if function.is_region_safe and unsafe_block(modules, mod, function.body):
+                        function.is_region_safe = false
+                        changed = true
+                    end
+                end
+            end
+        end
+    end
+end

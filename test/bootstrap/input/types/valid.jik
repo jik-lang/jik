@@ -1,0 +1,19 @@
+use "shared" as defs
+use "wrapper"
+
+struct Local:
+    items: Vec[Option[defs::Box]]
+    label: String
+    state: wrapper::Mode
+end
+
+variant Value:
+    BOX: defs::Box
+    EMPTY
+end
+
+extern struct Native as Handle
+
+func main() -> int:
+    return 42
+end

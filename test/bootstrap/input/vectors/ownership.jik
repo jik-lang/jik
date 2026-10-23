@@ -1,0 +1,38 @@
+func create(r: Region) -> Vec[Vec[String]]:
+    scratch := [1, 2]
+    result := [["one"], ["two"]][r]
+    return result
+end
+
+func direct(r: Region) -> Vec[String]:
+    return ["direct"]
+end
+
+func implicit(r: Region) -> Vec[String]:
+    result: Vec[String]@
+    result = ["implicit"]@
+    return result
+end
+
+func associated(owner: Vec[String]) -> Vec[String]:
+    return ["associated"][.owner]
+end
+
+func identity(value: Vec[String]) -> Vec[String]:
+    return value
+end
+
+func main():
+    result := create()
+    first := direct(.result)
+    second := implicit(.result)
+    third := associated(first)
+    fourth := identity(["retargeted"])
+    if result[1][0] != "two" or first[0] != "direct" or second[0] != "implicit":
+        return 1
+    end
+    if third[0] != "associated" or fourth[0] != "retargeted":
+        return 2
+    end
+    return 42
+end

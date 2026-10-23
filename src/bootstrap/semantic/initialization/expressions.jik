@@ -1,0 +1,92 @@
+//! Collect resolved initializer value nodes in postorder.
+
+use "../../parser/ast"
+use "../../modules/module"
+use "../../diag"
+
+
+/// Visit only value expressions, not constructor annotations or callee names.
+/// Defaults added during resolution participate in initialization and region analysis.
+/// Collect the already-resolved tree in postorder without appending AST nodes.
+func collect_initializer_nodes(foreign mod: module::Module, id: int, nodes: Vec[int]) -> void:
+    node := mod.ast.nodes[id]
+    destination: Option[int]
+    match node.kind:
+    case STRING_LITERAL{literal}:
+        destination = copy(literal.destination, _)
+    case VECTOR_LITERAL{literal}:
+        destination = copy(literal.destination, _)
+        if literal.count is Some:
+            collect_initializer_nodes(mod, literal.count?, nodes)
+        end
+        for value in literal.elements:
+            collect_initializer_nodes(mod, value, nodes)
+        end
+    case DICT_LITERAL{literal}:
+        destination = copy(literal.destination, _)
+        for entry in literal.entries:
+            collect_initializer_nodes(mod, entry.key, nodes)
+            collect_initializer_nodes(mod, entry.value, nodes)
+        end
+    case STRUCT_LITERAL{literal}:
+        destination = copy(literal.destination, _)
+        for field in literal.fields:
+            collect_initializer_nodes(mod, field.value, nodes)
+        end
+    case VARIANT_LITERAL{literal}:
+        destination = copy(literal.destination, _)
+        if literal.value is Some:
+            collect_initializer_nodes(mod, literal.value?, nodes)
+        end
+    case OPTION_LITERAL{literal}:
+        destination = copy(literal.destination, _)
+        if literal.value is Some:
+            collect_initializer_nodes(mod, literal.value?, nodes)
+        end
+    case CALL{call}:
+        for argument in call.arguments:
+            collect_initializer_nodes(mod, argument, nodes)
+        end
+    case TABLE_LOOKUP{value}:
+        collect_initializer_nodes(mod, value.key, nodes)
+    case FIELD{field}:
+        collect_initializer_nodes(mod, field.value, nodes)
+    case INDEX{index}:
+        collect_initializer_nodes(mod, index.value, nodes)
+        collect_initializer_nodes(mod, index.index, nodes)
+    case SLICE{slice}:
+        collect_initializer_nodes(mod, slice.value, nodes)
+        if slice.start is Some:
+            collect_initializer_nodes(mod, slice.start?, nodes)
+        end
+        if slice.stop is Some:
+            collect_initializer_nodes(mod, slice.stop?, nodes)
+        end
+    case CONDITIONAL{value}:
+        collect_initializer_nodes(mod, value.condition, nodes)
+        collect_initializer_nodes(mod, value.when_true, nodes)
+        collect_initializer_nodes(mod, value.when_false, nodes)
+    case BINARY{value}:
+        collect_initializer_nodes(mod, value.left, nodes)
+        collect_initializer_nodes(mod, value.right, nodes)
+    case UNARY{value}:
+        collect_initializer_nodes(mod, value.operand, nodes)
+    case GROUP{value}:
+        collect_initializer_nodes(mod, value, nodes)
+    case MUST{required}:
+        collect_initializer_nodes(mod, required.call, nodes)
+    case UNWRAP{value}:
+        collect_initializer_nodes(mod, value, nodes)
+    case REGION_OF{value}:
+        collect_initializer_nodes(mod, value, nodes)
+    case OPTION_CHECK{value}:
+        collect_initializer_nodes(mod, value.value, nodes)
+    case VARIANT_CHECK{value}:
+        collect_initializer_nodes(mod, value.value, nodes)
+    other:
+    end
+    if destination is Some:
+        collect_initializer_nodes(mod, destination?, nodes)
+    end
+    nodes.push(id)
+end

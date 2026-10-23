@@ -1,0 +1,30 @@
+variant V:
+    INT: int
+    NUMS: Vec[int]
+    EOF
+end
+
+func receiver(value: V, count: Vec[int]) -> V:
+    count[0] = count[0] + 1
+    return value
+end
+
+func payload(count: Vec[int]) -> int:
+    count[0] = count[0] + 1
+    return 7
+end
+
+func main():
+    count := [0]
+    value := V.INT{payload(count)}
+    println(count[0])
+    number := receiver(value, count).INT
+    println(number, ":", count[0])
+    receiver(value, count).INT = 8
+    println(value.INT, ":", count[0])
+    active := receiver(value, count) is INT
+    println(active, ":", count[0])
+    value = V.NUMS{[1]}
+    receiver(value, count).NUMS[0] = 2
+    println(value.NUMS[0], ":", count[0])
+end

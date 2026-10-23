@@ -1,0 +1,17 @@
+// Read the runtime's public switch without executing an unchecked invalid access.
+extern func bootstrap_bounds_enabled as bounds_enabled() -> bool
+
+@embed{C}
+static bool bootstrap_bounds_enabled(void) {
+#ifdef JIK_UNSAFE_NO_BOUNDS_CHECKS
+    return false;
+#else
+    return true;
+#endif
+}
+C
+
+func main():
+    values := [42]
+    println(values[0], " checked" if bounds_enabled() else " unchecked")
+end

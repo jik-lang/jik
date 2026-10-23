@@ -1,0 +1,6 @@
+func bad():
+    part := ("abc")[:]
+end
+func main():
+    return 42
+end

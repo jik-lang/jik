@@ -1,0 +1,8 @@
+enum Direction:
+    WEST
+    NORTH
+end
+
+func choose() -> Direction:
+    return Direction.NORTH
+end

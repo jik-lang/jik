@@ -1,0 +1,9 @@
+variant Number:
+    VALUE: int
+    OTHER
+end
+
+func main():
+    value := Number.OTHER{}
+    value.VALUE += 2
+end

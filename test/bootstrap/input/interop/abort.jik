@@ -1,0 +1,6 @@
+use "library" as lib
+
+func main():
+    value := lib::int_result(-17)!
+    println("unreachable", value)
+end

@@ -1,0 +1,6 @@
+func f(value: Vec[int, bool]):
+end
+
+func main():
+    return 0
+end

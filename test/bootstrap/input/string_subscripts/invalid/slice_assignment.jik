@@ -1,0 +1,6 @@
+func bad(value: String):
+    value[:] = value
+end
+func main():
+    return 42
+end

@@ -1,0 +1,4 @@
+func main():
+    values := [1]
+    values[1] += 2
+end

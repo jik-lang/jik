@@ -1,0 +1,36 @@
+func main():
+    counts: Dict[int]
+    counts["apple"] = 3
+    counts["banana"] = 5
+    counts["apple"] = 7
+    if len(counts) != 2 or counts["apple"]? != 7 or counts["banana"]? != 5 or counts["missing"] is Some:
+        return 1
+    end
+    literal := {"first": 1, "second": 2, "first": 3}
+    if len(literal) != 2 or literal["first"]? != 3:
+        return 2
+    end
+    literal[""] = 0
+    literal["Ž"] = 4
+    if literal[""] is None or literal[""]? != 0 or literal["Ž"]? != 4 or len(literal) != 4:
+        return 6
+    end
+    empty: Dict[Vec[String]]
+    if len(empty) != 0 or empty["unknown"] is Some:
+        return 3
+    end
+    total := 0
+    seen := 0
+    for key, value in counts:
+        if key != "apple" and key != "banana":
+            return 4
+        end
+        total = total + value
+        seen = seen + 1
+    end
+    if total != 12 or seen != 2:
+        return 5
+    end
+    println("dictionary:", counts["apple"]?, ":", total, ":", len(empty))
+    return 42
+end

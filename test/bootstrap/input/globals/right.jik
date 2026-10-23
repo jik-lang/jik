@@ -1,0 +1,3 @@
+use "shared"
+
+value := shared::stamp(3)

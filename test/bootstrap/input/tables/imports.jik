@@ -1,0 +1,22 @@
+use "shared" as base
+use "bridge"
+
+enum Key:
+    A
+    B
+end
+
+table Values[Key] -> int:
+    A: 1
+    B: 2
+end
+
+table Imported[base::Key] -> String:
+    B: "local-b"
+    A: "local-a"
+end
+
+func main():
+    println(base::Values[base::Key.B], ":", bridge::read(base::Key.A), ":", Values[Key.A])
+    println(Imported[base::Key.B])
+end

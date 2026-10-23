@@ -1,0 +1,5 @@
+@profile(linux-x64-gnu)
+@link("preview_target")
+
+func main():
+end

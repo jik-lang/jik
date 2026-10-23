@@ -1,0 +1,37 @@
+source := ["global"]
+duplicate := source.copy()
+global_count := source.len()
+replacement := "changed"
+
+func store(values: Vec[String], text: String):
+    values.push(text.copy(.values))
+end
+
+func local_store(values: Vec[String]):
+    text := "local"
+    store(values, text)
+end
+
+func main():
+    assert(global_count == 1)
+    source[0] = replacement
+    assert(duplicate[0] == "global")
+    values := [1, 2]
+    values.push(3)
+    assert(values.len() == 3)
+    assert(values.pop() == 3)
+    copied := values.copy()
+    values.clear()
+    assert(values.len() == 0 and copied.len() == 2)
+    words := ["first"]
+    local_store(words)
+    assert(words[1] == "local")
+    text := "hello"
+    assert(text.len() == 5 and text.copy() == "hello")
+    dictionary := {"key": "value"}
+    assert(dictionary.len() == 1)
+    dictionary_copy := dictionary.copy()
+    dictionary.clear()
+    assert(dictionary.len() == 0 and dictionary_copy["key"]? == "value")
+    println("builtins-ok")
+end

@@ -1,0 +1,31 @@
+struct Box:
+    message: String
+    code: int
+end
+
+
+throws func code_only(code: int):
+    fail(code)
+end
+
+
+throws func default_error():
+    fail(concat("default-", "message"))
+end
+
+
+throws func load(box: Box, code: int) -> int:
+    if code == 42:
+        return 42
+    end
+    fail(concat("imported-", "error"), code)
+end
+
+
+throws func maybe(flag: bool) -> int:
+    if flag:
+        fail(0)
+    end
+    // A fail in a child block does not terminate this enclosing block.
+    return 42
+end

@@ -1,0 +1,22 @@
+func show(left: String, right: Vec[String]):
+    local := "local"
+    print(left, ":", right, ":", local)
+    println()
+end
+
+func caller(values: Vec[String]):
+    local := "independent"
+    show(local, values)
+end
+
+func returning(value: String) -> String:
+    println(42)
+    return value
+end
+
+func main():
+    values := ["caller"]
+    caller(values)
+    println(returning("returned"))
+    return 42
+end

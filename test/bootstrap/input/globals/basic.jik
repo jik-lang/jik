@@ -1,0 +1,24 @@
+before := later + 1
+later := 3
+indirect := read_later()
+last := 7
+enabled := true
+fraction := 2.5
+label := "global"
+alias := label
+byte := label[0]
+tail := label[1:4]
+
+func read_later() -> int:
+    return last
+end
+
+func echo(later: int) -> int:
+    return later
+end
+
+func main():
+    println(before, ":", later, ":", indirect, ":", last)
+    println(enabled, ":", fraction, ":", alias, ":", byte, ":", tail)
+    println(echo(9), ":", later)
+end

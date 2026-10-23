@@ -6,6 +6,10 @@ use "jik/sys"
 use "jik/testing" as test
 
 func compiler_command(r: Region):
+    selected := sys::getenv("JIK_TEST_COMPILER", r)
+    if selected is Some and len(selected?) > 0:
+        return selected?
+    end
     p := sys::platform(r)
     if p == "windows":
         return "jik"[r]

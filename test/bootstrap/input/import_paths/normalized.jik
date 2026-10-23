@@ -1,0 +1,7 @@
+use "helper" as first
+use "./absent/../helper" as second
+
+
+func main():
+    return 0
+end

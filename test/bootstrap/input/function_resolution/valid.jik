@@ -1,0 +1,17 @@
+use "shared"
+use "wrapper" as bridge
+
+func main():
+    return shared::value() + bridge::value() + value()
+end
+
+func value():
+    return recurse(2)
+end
+
+func recurse(n):
+    if n < 1:
+        return 0
+    end
+    return 1 + recurse(n - 1)
+end

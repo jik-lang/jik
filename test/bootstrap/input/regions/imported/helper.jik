@@ -1,0 +1,3 @@
+func answer(r: Region) -> int:
+    return 42
+end

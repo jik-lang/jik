@@ -1,0 +1,5 @@
+func main():
+    values := [1]
+    result := push(values, 2)
+    return 0
+end

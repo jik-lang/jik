@@ -1,0 +1,106 @@
+//! Builtin kinds, names, argument counts, and categories.
+
+// Information about supported builtins. Function declarations take precedence
+// except for unqualified unwrap extraction syntax;
+// ordinary bindings cannot reuse these names.
+enum Kind:
+    FAIL
+    ERROR_MSG
+    ERROR_CODE
+    LEN
+    PUSH
+    POP
+    CLEAR
+    PRINT
+    PRINTLN
+    UNWRAP
+    COPY
+    ASSERT
+    CONCAT
+    SITE
+    SITE_FILE
+    SITE_LINE
+    SITE_CODE
+end
+
+
+table Names[Kind] -> String:
+    FAIL: "fail"
+    ERROR_MSG: "error_msg"
+    ERROR_CODE: "error_code"
+    LEN: "len"
+    PUSH: "push"
+    POP: "pop"
+    CLEAR: "clear"
+    PRINT: "print"
+    PRINTLN: "println"
+    UNWRAP: "unwrap"
+    COPY: "copy"
+    ASSERT: "assert"
+    CONCAT: "concat"
+    SITE: "site"
+    SITE_FILE: "site_file"
+    SITE_LINE: "site_line"
+    SITE_CODE: "site_code"
+end
+
+
+func find(name: String) -> Option[Kind]:
+    if name == "fail":
+        return Some{Kind.FAIL}
+    elif name == "error_msg":
+        return Some{Kind.ERROR_MSG}
+    elif name == "error_code":
+        return Some{Kind.ERROR_CODE}
+    elif name == "len":
+        return Some{Kind.LEN}
+    elif name == "push":
+        return Some{Kind.PUSH}
+    elif name == "pop":
+        return Some{Kind.POP}
+    elif name == "clear":
+        return Some{Kind.CLEAR}
+    elif name == "print":
+        return Some{Kind.PRINT}
+    elif name == "println":
+        return Some{Kind.PRINTLN}
+    elif name == "unwrap":
+        return Some{Kind.UNWRAP}
+    elif name == "copy":
+        return Some{Kind.COPY}
+    elif name == "assert":
+        return Some{Kind.ASSERT}
+    elif name == "concat":
+        return Some{Kind.CONCAT}
+    elif name == "site":
+        return Some{Kind.SITE}
+    elif name == "site_file":
+        return Some{Kind.SITE_FILE}
+    elif name == "site_line":
+        return Some{Kind.SITE_LINE}
+    elif name == "site_code":
+        return Some{Kind.SITE_CODE}
+    end
+    return None
+end
+
+
+func arity(kind: Kind) -> int:
+    if kind == Kind.SITE or kind == Kind.ERROR_CODE:
+        return 0
+    end
+    if is_output(kind) or kind == Kind.CONCAT or kind == Kind.FAIL:
+        return -1    // Variable arity; the owning type rule validates its range.
+    end
+    return 2 if kind == Kind.PUSH or kind == Kind.COPY or is_site_text(kind) else 1
+end
+
+
+func is_site_text(kind: Kind) -> bool:
+    return kind == Kind.SITE_FILE or kind == Kind.SITE_CODE
+end
+
+
+func is_output(kind: Kind) -> bool:
+    return kind == Kind.PRINT or kind == Kind.PRINTLN
+end

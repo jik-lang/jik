@@ -1,0 +1,4 @@
+func main():
+    values: Vec[int]
+    return pop(values)
+end

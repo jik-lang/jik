@@ -1,0 +1,13 @@
+func grow(values: Vec[int]) -> int:
+    while len(values) < 1000:
+        push(values, 0)
+    end
+    return 2
+end
+
+func main():
+    values := [10]
+    // The RHS may relocate the vector's storage. Do not retain an element pointer.
+    values[0] += grow(values)
+    println(values[0], ":", len(values))
+end

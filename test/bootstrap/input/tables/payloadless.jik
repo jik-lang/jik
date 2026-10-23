@@ -1,0 +1,13 @@
+variant Key:
+    A
+    B
+end
+
+table Values[Key] -> int:
+    B: 9
+    A: 7
+end
+
+func main():
+    println(Values[Key.A{}], ":", Values[Key.B{}])
+end

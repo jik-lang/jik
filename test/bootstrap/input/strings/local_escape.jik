@@ -1,0 +1,9 @@
+func bad(r: Region) -> String:
+    local := "local"
+    return local
+end
+
+
+func main():
+    return 0
+end

@@ -1,0 +1,6 @@
+use "helper"
+
+
+func main():
+    return helper::answer()
+end

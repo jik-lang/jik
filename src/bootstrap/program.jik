@@ -1,0 +1,20 @@
+//! Data shared by compiler phases, independent of command-line configuration.
+
+use "source"
+use "diag"
+use "modules/module"
+use "language/types"
+
+
+// Persistent state for one compilation, allocated in the caller's region.
+struct Program:
+    sources: source::SourceManager
+    modules: Vec[module::Module]    // Indexed by stable source ID, matching sources.sources.
+    // Source IDs in DFS dependency-first order; drives semantic passes and diagnostics.
+    dependency_order: Vec[int]
+    // Source IDs in seed-compatible startup/native-directive order, prepared after graph validation.
+    initialization_order: Vec[int]
+    diagnostics: diag::Diagnostics
+    // Shared type store, initialized by declaration resolution. All modules use this value.
+    type_store: types::Store
+end

@@ -437,6 +437,10 @@ jik_lexer_lex_cblock(JikLexer *lex)
     jik_diag_fatal_error_if(
         code[lex->pos] != '}', "syntax error", "expected '}' after embed delimiter");
     lex->pos++;
+    // Text-mode reads preserve CRLF on Linux; consume it as one newline.
+    if (code[lex->pos] == '\r' && code[lex->pos + 1] == '\n') {
+        lex->pos++;
+    }
     jik_diag_fatal_error_if(
         code[lex->pos] != '\n', "syntax error", "expected newline after @embed{...}");
     lex->pos++;

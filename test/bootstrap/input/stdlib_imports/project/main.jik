@@ -1,0 +1,7 @@
+use "jik/answer"
+use "jik/nested/offset"
+
+
+func main():
+    return answer::value()
+end

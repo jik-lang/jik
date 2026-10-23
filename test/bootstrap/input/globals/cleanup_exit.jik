@@ -1,0 +1,5 @@
+data := ["global", "values"]
+
+func main():
+    return 7
+end

@@ -1,0 +1,4 @@
+func main():
+    value := 1 if true else missing
+    return 0
+end

@@ -1,0 +1,10 @@
+use "helper"
+
+func main():
+    values: Vec[String]
+    helper::add(values)
+    if helper::take(values) != "imported" or len(values) != 0:
+        return 1
+    end
+    return helper::clear(42)
+end

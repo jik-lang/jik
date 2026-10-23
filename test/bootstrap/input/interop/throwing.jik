@@ -1,0 +1,37 @@
+use "library" as lib
+
+throws func relay(code: int, r: Region) -> String:
+    temporary := [1, 2, 3]
+    value := try lib::string_result(code, r)
+    assert(len(temporary) == 3)
+    return value
+end
+
+throws func relay_void(code: int):
+    text := "temporary"
+    try lib::void_result(code)
+    assert(text == "temporary")
+end
+
+func main():
+    assert(lib::int_result(0)! == 42)
+    assert(lib::ready()! == 42)
+    assert(lib::odd(20, 22)! == 42)
+    assert(lib::macro_names(20, 22) == 42)
+    assert(must lib::int_result(0) == 42)
+    lib::void_result(0)!
+    assert(lib::string_result(0)! == "native result")
+    for code = -1, 2:
+        try result := relay(code):
+            assert(code == 0 and result == "native result")
+        except:
+            assert(error_code() == code and error_msg() == "native failure")
+        end
+        try relay_void(code):
+            assert(code == 0)
+        except:
+            assert(error_code() == code and error_msg() == "native failure")
+        end
+    end
+    println("throwing-interop-ok")
+end

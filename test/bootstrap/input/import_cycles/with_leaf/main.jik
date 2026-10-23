@@ -1,0 +1,7 @@
+use "a"
+use "leaf"
+
+
+func main():
+    return leaf::value()
+end

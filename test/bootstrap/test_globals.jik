@@ -1,0 +1,131 @@
+use "jik/string"
+use "jik/testing" as test
+
+use "support"
+use "test_strings"
+use "../../src/bootstrap/compiler"
+use "../../src/bootstrap/parser/format"
+use "../../src/bootstrap/language/region_source"
+use "../../src/bootstrap/language/types"
+
+
+func test_bindings_and_inference(ts) -> void:
+    text := "first := later + 1\nlater := 3\ntext := \"global\"\nalias := text\nfunc echo(later: int) -> int:\n    return later\nend\nfunc read() -> int:\n    return first\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    test::suite_assert(ts, len(root.declarations) == 6, site())
+    declaration := mod.ast.nodes[root.declarations[0]]
+    test::suite_assert(ts, declaration.kind is GLOBAL_DECL, site())
+    test::suite_assert(ts, declaration.inferred_type? == types::atom(mod.type_store, types::Atom.INT), site())
+    test::suite_assert(ts, must string::slice(text, declaration.span.start, declaration.span.stop) == "first := later + 1", site())
+    references := 0
+    for node in mod.ast.nodes:
+        if node.kind is IDENTIFIER_EXPR and node.kind.IDENTIFIER_EXPR.global_origin is Some:
+            reference := node.kind.IDENTIFIER_EXPR
+            target := reference.global_origin?
+            test::suite_assert(ts, target.source_id == 0, site())
+            test::suite_assert(ts, mod.ast.nodes[target.origin].kind is GLOBAL_DECL, site())
+            test::suite_assert(ts, reference.local_origin is None, site())
+            test::suite_assert(ts, node.inferred_type? == mod.ast.nodes[target.origin].inferred_type?, site())
+            references += 1
+        end
+    end
+    test::suite_assert(ts, references == 3, site())
+    for index = 2, 4:
+        value := mod.ast.nodes[root.declarations[index]]
+        test::suite_assert(ts, value.region_source.kind == region_source::Kind.GLOBAL, site())
+        initializer := mod.ast.nodes[value.kind.GLOBAL_DECL.initializer]
+        test::suite_assert(ts, initializer.region_source.kind == region_source::Kind.GLOBAL, site())
+    end
+    parameter := mod.ast.nodes[root.declarations[4]].kind.FUNCTION_DECL.parameters[0]
+    returned := mod.ast.nodes[root.declarations[4]].kind.FUNCTION_DECL.body.statements[0]
+    reference := mod.ast.nodes[mod.ast.nodes[returned].kind.RETURN.value?].kind.IDENTIFIER_EXPR
+    test::suite_assert(ts, reference.global_origin is None and reference.local_origin? == parameter, site())
+    test::suite_assert(ts, string::find(format::format(mod.ast), "GLOBAL #") >= 0, site())
+end
+
+
+func test_initializer_regions(ts) -> void:
+    text := "struct Box:\n    values: Vec[String]\nend\nfirst := make()\nsecond := Box{values=[\"literal\", first]}\nfunc make(r: Region) -> String:\n    return \"made\"[r]\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    first := mod.ast.nodes[root.declarations[1]].kind.GLOBAL_DECL
+    call := mod.ast.nodes[first.initializer].kind.CALL
+    test::suite_assert(ts, call.auto_region, site())
+    test::suite_assert(ts, len(call.arguments) == 1, site())
+    operand := mod.ast.nodes[call.arguments[0]]
+    test::suite_assert(ts, operand.kind is GLOBAL_REGION, site())
+    test::suite_assert(ts, operand.region_source.kind == region_source::Kind.GLOBAL, site())
+    second := mod.ast.nodes[root.declarations[2]].kind.GLOBAL_DECL
+    allocated := 0
+    for id in second.initializer_nodes:
+        node := mod.ast.nodes[id]
+        if types::is_allocated(mod.type_store, node.inferred_type?):
+            test::suite_assert(ts, node.region_source.kind == region_source::Kind.GLOBAL, site())
+            allocated += 1
+        end
+    end
+    test::suite_assert(ts, allocated == 4, site())
+    for node in mod.ast.nodes:
+        if node.kind is STRING_LITERAL and node.kind.STRING_LITERAL.value == "made":
+            test::suite_assert(ts, node.region_source.kind == region_source::Kind.CALLER, site())
+        end
+    end
+end
+
+
+func test_imported_identity(ts) -> void:
+    comp := must compiler::new(compiler::Config{input_path="test/bootstrap/input/globals/imports.jik"})
+    must compiler::translate(comp)
+    test::suite_assert(ts, comp.program.diagnostics.error_count == 0, site())
+    references := 0
+    for mod in comp.program.modules:
+        for node in mod.ast.nodes:
+            if node.kind is IDENTIFIER_EXPR and node.kind.IDENTIFIER_EXPR.global_origin is Some:
+                target := node.kind.IDENTIFIER_EXPR.global_origin?
+                declaration := comp.program.modules[target.source_id].ast.nodes[target.origin]
+                test::suite_assert(ts, declaration.kind is GLOBAL_DECL, site())
+                test::suite_assert(ts, declaration.inferred_type? == node.inferred_type?, site())
+                if target.source_id != mod.source_id:
+                    references += 1
+                end
+            end
+        end
+    end
+    test::suite_assert(ts, references >= 8, site())
+end
+
+
+func test_errors_and_recovery(ts) -> void:
+    test_strings::check_error(ts, "value := 1\nfunc bad():\n    value = 2\nend\n", "global bindings are immutable")
+    test_strings::check_error(ts, "value := 1\nfunc bad():\n    value := 2\nend\n", "semantic analysis")
+    test_strings::check_error(ts, "value := make(_)\nfunc make(r: Region) -> String:\n    return \"made\"[r]\nend\n", "local region referenced outside function")
+    test_strings::check_error(ts, "value := \"global\"\nfunc bad(r: Region) -> String:\n    return value\nend\n", "cannot return global allocation")
+    recovered := support::parse_source("broken: int\nvalid := 2\nfunc main():\nend\n", _)
+    test::suite_assert(ts, recovered.diagnostics.error_count == 1, site())
+    root := recovered.ast.get_root_module()
+    test::suite_assert(ts, len(root.declarations) == 2, site())
+    if len(root.declarations) == 2:
+        test::suite_assert(ts, recovered.ast.nodes[root.declarations[0]].kind.GLOBAL_DECL.name == "valid", site())
+        test::suite_assert(ts, recovered.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL.name == "main", site())
+    end
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_globals")
+    test_bindings_and_inference(ts)
+    test_initializer_regions(ts)
+    test_imported_identity(ts)
+    test_errors_and_recovery(ts)
+end

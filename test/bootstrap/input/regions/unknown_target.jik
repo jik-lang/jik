@@ -1,0 +1,8 @@
+func answer(r: Region) -> int:
+    return 42
+end
+
+
+func main():
+    return answer(.missing)
+end

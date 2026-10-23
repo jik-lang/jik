@@ -1,0 +1,11 @@
+struct Label:
+    text: String
+    count: int
+end
+func bad():
+    text := 7
+    value := Label{text}
+end
+func main():
+    return 42
+end

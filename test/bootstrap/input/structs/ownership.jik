@@ -1,0 +1,56 @@
+struct Label:
+    text: String
+end
+
+struct Holder:
+    label: Label
+    tags: Vec[String]
+    labels: Vec[Label]
+end
+
+func make(r: Region) -> Holder:
+    scratch := "scratch"
+    return Holder{label = Label{text = "caller"}, tags = ["first"], labels = [Label{text = "nested"}]}
+end
+
+func part(value: Holder) -> String:
+    return value.label.text[1:]
+end
+
+func make_implicit(r: Region) -> Holder:
+    value: Holder@
+    return value
+end
+
+func store(value: Holder, text: String):
+    value.label.text = text
+    value.tags[0] = text
+end
+
+func same(left: Holder, right: Holder) -> bool:
+    return left.label.text == right.label.text
+end
+
+func main():
+    value := make()
+    defaults := make_implicit()
+    caller_defaults: Holder[.value]
+    implicit := Holder{}[.value]
+    if value.label.text != "caller" or value.tags[0] != "first" or value.labels[0].text != "nested" or defaults.label.text != "" or len(defaults.tags) != 0:
+        return 1
+    end
+    value.label.text = "replaced"
+    value.label = Label{text = "assigned"}
+    value.tags = ["new"]
+    text := "stored"[.value]
+    store(value, text)
+    if value.label.text != "stored" or value.tags[0] != "stored" or part(value) != "tored":
+        return 2
+    end
+    independent := Holder{label = Label{text = "stored"}}
+    if not same(value, independent):
+        return 3
+    end
+    println(value.label.text, ":", value.tags[0], ":", value.labels[0].text, ":", len(caller_defaults.labels))
+    return 42
+end

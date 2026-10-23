@@ -1,27 +1,95 @@
+//! Token kinds and located token payloads shared by lexing and parsing.
+
 use "../source"
 
 
 enum TokenType:
     INTEGER
+    DOUBLE
+    CHAR
     STRING
+    STRING_MULTILINE
+    EMBEDDED_C
+    DIRECTIVE_PLATFORM
+    DIRECTIVE_PROFILE
+    DIRECTIVE_INCLUDEDIR
+    DIRECTIVE_LIBDIR
+    DIRECTIVE_LINK
+    DIRECTIVE_COPY
     IDENTIFIER
+    UNDERSCORE
+    KWD_VEC
+    KWD_DICT
+    KWD_OPTION
+    KWD_THROWS
+    KWD_MUST
+    KWD_TRY
+    KWD_EXCEPT
+    KWD_INIT
+    KWD_FOREIGN
     ASSIGN
+    OP_PLUS_EQ
+    OP_MINUS_EQ
+    OP_TIMES_EQ
+    OP_DIV_EQ
+    OP_MOD_EQ
     DECLARE
     COLON
     DOUBLE_COLON
     NEWLINE
     LPAREN
     RPAREN
+    LBRACKET
+    RBRACKET
+    LBRACE
+    RBRACE
+    ARROW
     COMMA
+    DOT
+    AT
+    QUESTION
+    BANG
     OP_PLUS
     OP_MINUS
+    OP_TIMES
+    OP_DIV
+    OP_MOD
     OP_LT
+    OP_GT
+    OP_LE
+    OP_GE
+    OP_EQ
+    OP_NE
+    KWD_TRUE
+    KWD_FALSE
+    KWD_NOT
+    KWD_AND
+    KWD_OR
+    KWD_IS
+    KWD_SOME
+    KWD_NONE
     KWD_FUNC
+    KWD_MATCH
+    KWD_CASE
+    KWD_OTHER
     KWD_IF
+    KWD_ELIF
+    KWD_ELSE
+    KWD_WHILE
+    KWD_FOR
+    KWD_OF
+    KWD_IN
+    KWD_BREAK
+    KWD_CONTINUE
     KWD_RETURN
     KWD_END
     KWD_USE
     KWD_AS
+    KWD_TABLE
+    KWD_STRUCT
+    KWD_ENUM
+    KWD_VARIANT
+    KWD_EXTERN
     ERROR
     EOF
 end
@@ -29,31 +97,101 @@ end
 
 table TokenTypeNames[TokenType] -> String:
     INTEGER: "integer"
+    DOUBLE: "double"
+    CHAR: "character"
     STRING: "string"
+    STRING_MULTILINE: "multiline string"
+    EMBEDDED_C: "embedded C"
+    DIRECTIVE_PLATFORM: "@platform"
+    DIRECTIVE_PROFILE: "@profile"
+    DIRECTIVE_INCLUDEDIR: "@includedir"
+    DIRECTIVE_LIBDIR: "@libdir"
+    DIRECTIVE_LINK: "@link"
+    DIRECTIVE_COPY: "@copy"
     IDENTIFIER: "identifier"
+    UNDERSCORE: "_"
+    KWD_VEC: "Vec"
+    KWD_DICT: "Dict"
+    KWD_OPTION: "Option"
+    KWD_THROWS: "throws"
+    KWD_MUST: "must"
+    KWD_TRY: "try"
+    KWD_EXCEPT: "except"
+    KWD_INIT: "init"
+    KWD_FOREIGN: "foreign"
     ASSIGN: "="
+    OP_PLUS_EQ: "+="
+    OP_MINUS_EQ: "-="
+    OP_TIMES_EQ: "*="
+    OP_DIV_EQ: "/="
+    OP_MOD_EQ: "%="
     DECLARE: ":="
     COLON: ":"
     DOUBLE_COLON: "::"
     NEWLINE: "newline"
     LPAREN: "("
     RPAREN: ")"
+    LBRACKET: "["
+    RBRACKET: "]"
+    LBRACE: "{"
+    RBRACE: "}"
+    ARROW: "->"
     COMMA: ","
+    DOT: "."
+    AT: "@"
+    QUESTION: "?"
+    BANG: "!"
     OP_PLUS: "+"
     OP_MINUS: "-"
+    OP_TIMES: "*"
+    OP_DIV: "/"
+    OP_MOD: "%"
     OP_LT: "<"
+    OP_GT: ">"
+    OP_LE: "<="
+    OP_GE: ">="
+    OP_EQ: "=="
+    OP_NE: "!="
+    KWD_TRUE: "true"
+    KWD_FALSE: "false"
+    KWD_NOT: "not"
+    KWD_AND: "and"
+    KWD_OR: "or"
+    KWD_IS: "is"
+    KWD_SOME: "Some"
+    KWD_NONE: "None"
     KWD_FUNC: "func"
+    KWD_MATCH: "match"
+    KWD_CASE: "case"
+    KWD_OTHER: "other"
     KWD_IF: "if"
+    KWD_ELIF: "elif"
+    KWD_ELSE: "else"
+    KWD_WHILE: "while"
+    KWD_FOR: "for"
+    KWD_OF: "of"
+    KWD_IN: "in"
+    KWD_BREAK: "break"
+    KWD_CONTINUE: "continue"
     KWD_RETURN: "return"
     KWD_END: "end"
     KWD_USE: "use"
     KWD_AS: "as"
+    KWD_TABLE: "table"
+    KWD_STRUCT: "struct"
+    KWD_ENUM: "enum"
+    KWD_VARIANT: "variant"
+    KWD_EXTERN: "extern"
     ERROR: "invalid token"
     EOF: "end of file"
 end
 
 
+// Lexical token with a source span and decoded literal data where needed.
 struct Token:
+    // Decoded String content; numeric/identifier spelling stays in source spans.
+    text: Option[String]
+    character: char    // Decoded CHAR byte, including NUL; unused for other tokens.
     type: TokenType
     span: source::Span
 end

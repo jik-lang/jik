@@ -1,0 +1,30 @@
+//! Validate table initializer forms and declaration-order dependencies.
+
+use "../../parser/ast"
+use "../../modules/module"
+use "../../diag"
+
+
+use "expressions"
+
+func validate_initializers(modules: Vec[module::Module], mod: module::Module, node: ast::Node, diagnostics: diag::Diagnostics) -> void:
+    declaration := node.kind.TABLE_DECL
+    declaration.initializer_nodes.clear()
+    for entry in declaration.entries:
+        expressions::collect_initializer_nodes(mod, entry.value, declaration.initializer_nodes)
+    end
+    for id in declaration.initializer_nodes:
+        value := mod.ast.nodes[id]
+        if value.kind is CALL:
+            diag::error(diagnostics, "table entries cannot call functions", "table initializers require data expressions", Some{value.span})
+        elif value.kind is IDENTIFIER_EXPR and value.kind.IDENTIFIER_EXPR.global_origin is Some:
+            diag::error(diagnostics, "table entries cannot read global variables", "tables initialize before globals", Some{value.span})
+        elif value.kind is TABLE_LOOKUP:
+            target := value.kind.TABLE_LOOKUP.target
+            previous := modules[target.source_id].ast.nodes[target.origin].kind.TABLE_DECL
+            if previous.initialization_order >= declaration.initialization_order:
+                diag::error(diagnostics, "table read before initialization", concat(declaration.name, " reads ", previous.name), Some{value.span})
+            end
+        end
+    end
+end

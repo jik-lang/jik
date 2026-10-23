@@ -1,0 +1,11 @@
+use "shared"
+
+func inspect(text: String):
+    local := "local"
+    shared::inspect(([text, local]), ({"first": text, "second": local}))
+    shared::inspect([2 of text], {"first": text})
+end
+
+func main():
+    inspect("caller")
+end

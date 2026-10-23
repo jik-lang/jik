@@ -1,0 +1,6 @@
+func bad(value: Option[int]):
+    checked := value is Missing
+end
+func main():
+    return 42
+end

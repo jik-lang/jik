@@ -1,0 +1,10 @@
+func append(values: Vec[String], value: Site):
+    push(values, site_code(value, .values))
+end
+
+func main():
+    values := ["first"]
+    append(values, site())
+    assert(values[1] == "    append(values, site())")
+    println("store-ok")
+end

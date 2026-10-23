@@ -1,0 +1,7 @@
+func consume(value):
+    value = value + 1
+end
+
+func answer():
+    return 42
+end

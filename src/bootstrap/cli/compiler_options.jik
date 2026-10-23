@@ -1,0 +1,21 @@
+//! Share runtime option definitions and their compiler configuration mapping.
+
+use "jik/argparse" as ap
+
+use "../compiler"
+
+
+func add_runtime(parser: ap::Parser):
+    ap::add_option(parser, "--unsafe-no-bounds-checks", "", "Disable runtime vector bounds checks.")
+    ap::add_option(parser, "--region-stats", "", "Print runtime region statistics at program exit.")
+    ap::add_option(parser, "--region-tree", "", "Print the runtime region lifetime hierarchy.")
+end
+
+
+func configure(config: compiler::Config, result: ap::ParseResult):
+    config.dump_ast = result.options["--dump-ast"] is Some
+    config.verbose = result.options["--verbose"] is Some
+    config.unsafe_no_bounds_checks = result.options["--unsafe-no-bounds-checks"] is Some
+    config.region_stats = result.options["--region-stats"] is Some
+    config.region_tree = result.options["--region-tree"] is Some
+end

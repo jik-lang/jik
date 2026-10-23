@@ -1,0 +1,98 @@
+use "jik/testing" as test
+
+use "support"
+use "../../src/bootstrap/source"
+use "../../src/bootstrap/diag"
+use "../../src/bootstrap/lexer/lexer"
+use "../../src/bootstrap/lexer/token"
+
+
+func check_tokens(ts, foreign text: String, foreign kinds: Vec[token::TokenType], foreign starts: Vec[int], foreign stops: Vec[int]) -> void:
+    file := source::SourceFile{id = 23, text = copy(text, _)}
+    diagnostics := diag::Diagnostics{}[.file]
+    scanned := lexer::tokenize(file, diagnostics)
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    test::suite_assert(ts, len(scanned) == len(kinds) + 1, site())
+    if len(scanned) != len(kinds) + 1:
+        return
+    end
+    for index, kind in kinds:
+        item := scanned[index]
+        test::suite_assert(ts, item.type == kind, site())
+        test::suite_assert(ts, item.span.source_id == 23 and item.span.start == starts[index] and item.span.stop == stops[index], site())
+    end
+    eof := scanned[len(kinds)]
+    test::suite_assert(ts, eof.type == token::TokenType.EOF and eof.span.start == len(text) and eof.span.stop == len(text), site())
+end
+
+
+func test_dot_boundaries(ts) -> void:
+    integer := token::TokenType.INTEGER
+    decimal := token::TokenType.DOUBLE
+    dot := token::TokenType.DOT
+    name := token::TokenType.IDENTIFIER
+    check_tokens(ts, "1.", [integer, dot], [0, 1], [1, 2])
+    check_tokens(ts, "1.foo", [integer, dot, name], [0, 1, 2], [1, 2, 5])
+    check_tokens(ts, "1.e2", [integer, dot, name], [0, 1, 2], [1, 2, 4])
+    check_tokens(ts, "1._2", [integer, dot, name], [0, 1, 2], [1, 2, 4])
+    check_tokens(ts, ".5", [dot, integer], [0, 1], [1, 2])
+    check_tokens(ts, "1..2", [integer, dot, dot, integer], [0, 1, 2, 3], [1, 2, 3, 4])
+    check_tokens(ts, "1.2.3", [decimal, dot, integer], [0, 3, 4], [3, 4, 5])
+    check_tokens(ts, "1.2.foo", [decimal, dot, name], [0, 3, 4], [3, 4, 7])
+end
+
+
+func test_exponent_boundaries(ts) -> void:
+    integer := token::TokenType.INTEGER
+    decimal := token::TokenType.DOUBLE
+    name := token::TokenType.IDENTIFIER
+    plus := token::TokenType.OP_PLUS
+    minus := token::TokenType.OP_MINUS
+    check_tokens(ts, "1e", [integer, name], [0, 1], [1, 2])
+    check_tokens(ts, "1e+", [integer, name, plus], [0, 1, 2], [1, 2, 3])
+    check_tokens(ts, "1E-", [integer, name, minus], [0, 1, 2], [1, 2, 3])
+    check_tokens(ts, "1e_2", [integer, name], [0, 1], [1, 4])
+    check_tokens(ts, "1E+_2", [integer, name, plus, name], [0, 1, 2, 3], [1, 2, 3, 5])
+    check_tokens(ts, "1e+-2", [integer, name, plus, minus, integer], [0, 1, 2, 3, 4], [1, 2, 3, 4, 5])
+    check_tokens(ts, "1.0e", [decimal, name], [0, 3], [3, 4])
+    check_tokens(ts, "1e2foo", [decimal, name], [0, 3], [3, 6])
+    check_tokens(ts, "1e2e3", [decimal, name], [0, 3], [3, 5])
+    check_tokens(ts, "-1e-2", [minus, decimal], [0, 1], [1, 5])
+    check_tokens(ts, "1_2.3_4e+0_2", [decimal], [0], [12])
+    check_tokens(ts, "1e +2", [integer, name, plus, integer], [0, 1, 3, 4], [1, 2, 4, 5])
+end
+
+
+func test_following_tokens(ts) -> void:
+    integer := token::TokenType.INTEGER
+    check_tokens(ts, "1of", [integer, token::TokenType.KWD_OF], [0, 1], [1, 3])
+    check_tokens(ts, "1::name", [integer, token::TokenType.DOUBLE_COLON, token::TokenType.IDENTIFIER], [0, 1, 3], [1, 3, 7])
+    check_tokens(ts, "1e2[0]", [token::TokenType.DOUBLE, token::TokenType.LBRACKET, integer, token::TokenType.RBRACKET], [0, 3, 4, 5], [3, 4, 5, 6])
+    check_tokens(ts, "1?.", [integer, token::TokenType.QUESTION, token::TokenType.DOT], [0, 1, 2], [1, 2, 3])
+    check_tokens(ts, "1/*2", [integer, token::TokenType.OP_DIV, token::TokenType.OP_TIMES, integer], [0, 1, 2, 3], [1, 2, 3, 4])
+    check_tokens(ts, "1//ignored.e+", [integer], [0], [1])
+end
+
+
+func test_bad_separators_and_recovery(ts) -> void:
+    invalid := ["1_", "1__2", "1_foo", "1_.2", "1.2_", "1.2__3", "1e2_", "1e+2__3"]
+    for spelling in invalid:
+        file := source::SourceFile{text = spelling}
+        diagnostics := diag::Diagnostics{}[.file]
+        scanned := lexer::tokenize(file, diagnostics)
+        test::suite_assert(ts, diagnostics.error_count == 1 and scanned[0].type == token::TokenType.ERROR, site())
+        test::suite_assert(ts, diagnostics.messages[0].summary == "invalid numeric literal", site())
+        test::suite_assert(ts, scanned[0].span.start == 0 and scanned[0].span.stop > 0 and scanned[0].span.stop <= len(spelling), site())
+        parsed := support::parse_source(concat("func broken():\n    value := ", spelling, "\n    return 1\nend\nfunc valid():\n    return 2\nend\n"))
+        test::suite_assert(ts, parsed.diagnostics.error_count > 0 and len(parsed.ast.get_root_module().declarations) == 2, site())
+    end
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_numeric_tokens")
+    test_dot_boundaries(ts)
+    test_exponent_boundaries(ts)
+    test_following_tokens(ts)
+    test_bad_separators_and_recovery(ts)
+end

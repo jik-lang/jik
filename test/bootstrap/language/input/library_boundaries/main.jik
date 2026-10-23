@@ -1,0 +1,44 @@
+use "jik/region"
+use "jik/std"
+use "jik/strbuf"
+use "jik/sys"
+use "jik/io"
+use "jik/testing" as test
+
+// Supply stdin without shell quoting or an interactive prompt.
+extern func bootstrap_library_stdin as open_stdin(path: String) -> bool
+
+@embed{C}
+static bool bootstrap_library_stdin(JikString *path) {
+    return freopen(path->data, "r", stdin) != NULL;
+}
+C
+
+func main(args):
+    assert(len(args) >= 2)
+    if args[1] == "input":
+        assert(len(args) == 3)
+        assert(open_stdin(args[2]))
+        println(std::input())
+    elif args[1] == "panic":
+        std::panic("expected library panic")
+    elif args[1] == "exit":
+        sys::exit(7)
+    elif args[1] == "suite-failure":
+        ts := test::suite_new()
+        test::suite_assert(ts, false, site())
+        test::suite_finish(ts)
+    elif args[1] == "streams":
+        assert(len(args) == 6 and args[2] == "" and args[3] == "two words" and args[4] == "a\"b" and args[5] == "end\\")
+        print("stdout")
+        io::write_stderr("stderr")
+    else:
+        before := region::used_bytes(_)
+        buffer := strbuf::new("library")
+        assert(region::used_bytes(.buffer) > before)
+        assert(region::total_bytes(.buffer) >= region::used_bytes(.buffer))
+        assert(region::block_count(.buffer) > 0)
+        region::print_stats(.buffer)
+        strbuf::print(buffer)
+    end
+end

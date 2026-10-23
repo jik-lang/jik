@@ -1,0 +1,7 @@
+struct Item:
+    value: int
+end
+
+func read(item: Item) -> int:
+    return item.value
+end

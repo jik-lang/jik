@@ -1,0 +1,6 @@
+func bad():
+    byte := ("abc")[0]
+end
+func main():
+    return 42
+end

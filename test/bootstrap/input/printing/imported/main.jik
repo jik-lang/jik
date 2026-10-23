@@ -1,0 +1,7 @@
+use "helper"
+
+func main():
+    values := ["module"]
+    helper::show(values)
+    return 42
+end

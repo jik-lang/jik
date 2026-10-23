@@ -1,0 +1,52 @@
+enum Kind:
+    FIRST
+    SECOND
+end
+
+struct Record:
+    text: String
+end
+
+variant Inner:
+    NUMBER: int
+    EMPTY
+end
+
+variant Outer:
+    RECORD: Record
+    MAYBE: Option[Inner]
+    MAP: Dict[int]
+    KIND: Kind
+end
+
+func inspect(value: Outer):
+    match value:
+        case RECORD{payload}:
+            payload.text = "updated"
+            println(value.RECORD.text)
+        case MAYBE{payload}:
+            if payload is Some:
+                match payload?:
+                    case NUMBER{number}:
+                        println(number)
+                    case EMPTY:
+                end
+            end
+        case MAP{payload}:
+            payload["key"] = 7
+            println(value.MAP)
+        case KIND{payload}:
+            match payload:
+                case FIRST:
+                case SECOND:
+                    println("second")
+            end
+    end
+end
+
+func main():
+    inspect(Outer.RECORD{Record{text="original"}})
+    inspect(Outer.MAYBE{Some{Inner.NUMBER{42}}})
+    inspect(Outer.MAP{{"key": 1}})
+    inspect(Outer.KIND{Kind.SECOND})
+end

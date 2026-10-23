@@ -1,0 +1,22 @@
+func site() -> int:
+    return 1
+end
+
+func site_line(value: int) -> int:
+    return value + 1
+end
+
+func site_file(value: int) -> int:
+    return value + 2
+end
+
+func site_code(value: int) -> int:
+    return value + 3
+end
+
+func main():
+    assert(site_line(site()) == 2)
+    assert(site_file(site()) == 3)
+    assert(site_code(site()) == 4)
+    println("dispatch-ok")
+end

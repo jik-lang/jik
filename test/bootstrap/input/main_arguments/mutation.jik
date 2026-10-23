@@ -1,0 +1,14 @@
+func append(values: Vec[String]):
+    push(values, "added"[.values])
+end
+
+func main(args):
+    previous := len(args)
+    append(args)
+    assert(len(args) == previous + 1)
+    assert(args[previous] == "added")
+    args[0] = "changed"[.args]
+    assert(args[0] == "changed")
+    println("mutation-ok")
+    return 17
+end

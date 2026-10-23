@@ -1,0 +1,3 @@
+struct main:
+    value: int
+end

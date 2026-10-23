@@ -1,0 +1,40 @@
+use "shared" as base
+
+func answer() -> int:
+    return 42
+end
+
+func main():
+    first := answer(
+        // Empty argument lists may contain newlines and comments.
+    )
+    second := base::add(
+        2,
+        // Newlines are allowed after the comma.
+        base::add(
+            1,
+            4
+        )
+    )
+    values := [
+        base::add(
+            1,
+            2
+        ),
+        answer(
+        )
+    ]
+    optional := Some{second}
+    unwrapped := unwrap(
+        optional
+    )
+    println(
+        first,
+        ":",
+        unwrapped,
+        ":",
+        values[0],
+        ":",
+        values[1]
+    )
+end

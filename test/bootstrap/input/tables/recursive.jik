@@ -1,0 +1,31 @@
+enum Key:
+    A
+    B
+end
+
+struct Node:
+    value: int
+    next: Option[Node]
+end
+
+table Nodes[Key] -> Node:
+    B: Node{value=3}
+    A: Node{value=1, next=Some{Node{value=2}}}
+end
+
+table Text[Key] -> String:
+    A: "alpha"
+    B: "beta"
+end
+
+table Characters[Key] -> char:
+    A: Text[Key.A][0]
+    B: Text[Key.B][1]
+end
+
+func main():
+    Nodes[Key.A].next?.value = 9
+    println(Nodes[Key.A])
+    println(Nodes[Key.B])
+    println(Characters[Key.A], ":", Characters[Key.B])
+end

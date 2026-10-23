@@ -1,0 +1,11 @@
+func fail_assertion():
+    values := [1, 2]
+    assert(
+        pop(values) == 99
+    )
+    println("unreachable")
+end
+
+func main():
+    fail_assertion()
+end

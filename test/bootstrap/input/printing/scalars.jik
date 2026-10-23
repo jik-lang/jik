@@ -1,0 +1,11 @@
+func main():
+    print()
+    println()
+    print("prefix", ":", 42, ":", -7, ":", true, ":", false)
+    println("!")
+    println(1.5, ":", 0.1, ":", -0.0)
+    letter: char
+    println("char:", letter, ":end")
+    println("UTF8: Ž😀", "\tquote:\" slash:\\")
+    return 42
+end

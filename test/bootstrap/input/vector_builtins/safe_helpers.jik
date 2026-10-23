@@ -1,0 +1,26 @@
+func mutate(values: Vec[int], unrelated: Vec[String]) -> bool:
+    push(values, 42)
+    clear(unrelated)
+    return pop(values) == 42
+end
+
+func local_transfer(left: Vec[String], right: Vec[String]) -> bool:
+    source := ["local"]
+    destination: Vec[String]
+    push(destination, pop(source))
+    return pop(destination) == "local" and len(left) == len(right)
+end
+
+func inspect(caller: Vec[String]) -> bool:
+    local: Vec[int]
+    independent: Vec[String]
+    return mutate(local, caller) and local_transfer(caller, independent)
+end
+
+func main():
+    words: Vec[String]
+    if not inspect(words):
+        return 1
+    end
+    return 42
+end

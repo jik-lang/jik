@@ -1,0 +1,22 @@
+throws func leaf() -> int:
+    values := ["callee"]
+    if len(values) > 0:
+        fail(concat("failure-", values[0]), 0)
+    end
+    return 42
+end
+
+
+throws func forwarded() -> int:
+    values := [1, 2]
+    value := try leaf()
+    return value + len(values)
+end
+
+
+func main():
+    caller := [7]
+    println("before")
+    value := must forwarded()
+    println("after ", value, caller[0])
+end

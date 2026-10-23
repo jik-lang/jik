@@ -1,14 +1,18 @@
+//! Read source bytes into tokens with source locations and report lexer errors.
+
 use "jik/char"
 use "jik/string"
 
 use "../source"
 use "../diag"
 use "token"
+use "string_literal"
 
 
+// Cursor over one source file while producing tokens.
 struct Lexer:
     file: source::SourceFile
-    pos: int
+    pos: int    // Zero-based byte offset in file.text; len(file.text) is end of input.
 end
 
 
@@ -63,10 +67,52 @@ end
 
 func get_identifier_type(l: Lexer, start: int, stop: int) -> token::TokenType:
     text := must string::slice(l.file.text, start, stop)
-    if text == "func":
+    if text == "_":
+        return token::TokenType.UNDERSCORE
+    elif text == "Vec":
+        return token::TokenType.KWD_VEC
+    elif text == "Dict":
+        return token::TokenType.KWD_DICT
+    elif text == "Option":
+        return token::TokenType.KWD_OPTION
+    elif text == "throws":
+        return token::TokenType.KWD_THROWS
+    elif text == "must":
+        return token::TokenType.KWD_MUST
+    elif text == "try":
+        return token::TokenType.KWD_TRY
+    elif text == "except":
+        return token::TokenType.KWD_EXCEPT
+    elif text == "init":
+        return token::TokenType.KWD_INIT
+    elif text == "foreign":
+        return token::TokenType.KWD_FOREIGN
+    elif text == "func":
         return token::TokenType.KWD_FUNC
+    elif text == "match":
+        return token::TokenType.KWD_MATCH
+    elif text == "case":
+        return token::TokenType.KWD_CASE
+    elif text == "other":
+        return token::TokenType.KWD_OTHER
     elif text == "if":
         return token::TokenType.KWD_IF
+    elif text == "elif":
+        return token::TokenType.KWD_ELIF
+    elif text == "else":
+        return token::TokenType.KWD_ELSE
+    elif text == "while":
+        return token::TokenType.KWD_WHILE
+    elif text == "for":
+        return token::TokenType.KWD_FOR
+    elif text == "of":
+        return token::TokenType.KWD_OF
+    elif text == "in":
+        return token::TokenType.KWD_IN
+    elif text == "break":
+        return token::TokenType.KWD_BREAK
+    elif text == "continue":
+        return token::TokenType.KWD_CONTINUE
     elif text == "return":
         return token::TokenType.KWD_RETURN
     elif text == "end":
@@ -75,21 +121,95 @@ func get_identifier_type(l: Lexer, start: int, stop: int) -> token::TokenType:
         return token::TokenType.KWD_USE
     elif text == "as":
         return token::TokenType.KWD_AS
+    elif text == "table":
+        return token::TokenType.KWD_TABLE
+    elif text == "struct":
+        return token::TokenType.KWD_STRUCT
+    elif text == "enum":
+        return token::TokenType.KWD_ENUM
+    elif text == "variant":
+        return token::TokenType.KWD_VARIANT
+    elif text == "extern":
+        return token::TokenType.KWD_EXTERN
+    elif text == "true":
+        return token::TokenType.KWD_TRUE
+    elif text == "false":
+        return token::TokenType.KWD_FALSE
+    elif text == "not":
+        return token::TokenType.KWD_NOT
+    elif text == "and":
+        return token::TokenType.KWD_AND
+    elif text == "or":
+        return token::TokenType.KWD_OR
+    elif text == "is":
+        return token::TokenType.KWD_IS
+    elif text == "Some":
+        return token::TokenType.KWD_SOME
+    elif text == "None":
+        return token::TokenType.KWD_NONE
     end
     return token::TokenType.IDENTIFIER
 end
 
 
-func scan_integer(l: Lexer) -> token::Token:
-    start := l.pos
+func scan_digits(l: Lexer) -> bool:
+    valid := true
+    previous_digit := false
     while not l.at_end():
         ch := l.current()
-        if not char::isdigit(ch):
+        if char::isdigit(ch):
+            previous_digit = true
+        elif ch == '_':
+            if not previous_digit or l.pos + 1 >= len(l.file.text) or not char::isdigit(l.file.text[l.pos + 1]):
+                valid = false
+            end
+            previous_digit = false
+        else:
             break
         end
         l.advance()
     end
-    return token::Token{type = token::TokenType.INTEGER, span = l.span(start, l.pos)}
+    return valid and previous_digit
+end
+
+
+func exponent_follows(l: Lexer) -> bool:
+    if l.at_end() or (l.current() != 'e' and l.current() != 'E'):
+        return false
+    end
+    digit := l.pos + 1
+    if digit < len(l.file.text) and (l.file.text[digit] == '+' or l.file.text[digit] == '-'):
+        digit += 1
+    end
+    return digit < len(l.file.text) and char::isdigit(l.file.text[digit])
+end
+
+
+func scan_number(l: Lexer, diagnostics: diag::Diagnostics) -> token::Token:
+    start := l.pos
+    valid := l.scan_digits()
+    kind := token::TokenType.INTEGER
+    // A non-fractional dot belongs to the following postfix/token sequence.
+    if l.pos + 1 < len(l.file.text) and l.current() == '.' and char::isdigit(l.file.text[l.pos + 1]):
+        kind = token::TokenType.DOUBLE
+        l.advance()
+        fraction_valid := l.scan_digits()
+        valid = valid and fraction_valid
+    end
+    // Leave e/E for identifier scanning unless a complete exponent starts here.
+    if l.exponent_follows():
+        kind = token::TokenType.DOUBLE
+        l.advance()
+        if not l.at_end() and (l.current() == '+' or l.current() == '-'):
+            l.advance()
+        end
+        exponent_valid := l.scan_digits()
+        valid = valid and exponent_valid
+    end
+    if not valid:
+        return l.error_token(diagnostics, start, l.pos, "invalid numeric literal", "expected digits with separators only between digits")
+    end
+    return token::Token{type = kind, span = l.span(start, l.pos)}
 end
 
 
@@ -115,25 +235,171 @@ end
 
 func scan_string(l: Lexer, diag: diag::Diagnostics) -> token::Token:
     start := l.pos
-    l.advance()
+    multiline := l.pos + 2 < len(l.file.text) and l.file.text[l.pos + 1] == '"' and l.file.text[l.pos + 2] == '"'
+    delimiter := 3 if multiline else 1
+    l.pos += delimiter
+    content_start := l.pos
     while not l.at_end():
         ch := l.current()
-        if ch == '"':
+        closes := ch == '"'
+        if multiline:
+            closes = closes and l.pos + 2 < len(l.file.text) and l.file.text[l.pos + 1] == '"' and l.file.text[l.pos + 2] == '"'
+        end
+        if closes:
+            content_stop := l.pos
+            l.pos += delimiter
+            try decoded := string_literal::decode(l.file.text, content_start, content_stop, multiline, .l):
+                kind := token::TokenType.STRING_MULTILINE if multiline else token::TokenType.STRING
+                return token::Token{type = kind, span = l.span(start, l.pos), text = Some{decoded}}[.l]
+            except:
+                return l.error_token(diag, start, l.pos, error_msg(), "invalid string literal")
+            end
+        elif ch == '\\' and not multiline:
             l.advance()
-            return token::Token{type = token::TokenType.STRING, span = l.span(start, l.pos)}
-        elif ch == '\\':
-            l.advance()
-            if l.at_end():
+            if l.at_end() or l.current() == '\n':
                 return l.error_token(diag, start, l.pos, "unterminated string literal", "")
             end
             l.advance()
-        elif ch == '\n':
+        elif ch == '\n' and not multiline:
             return l.error_token(diag, start, l.pos, "unterminated string literal", "")
         else:
             l.advance()
         end
     end
     return l.error_token(diag, start, l.pos, "unterminated string literal", "")
+end
+
+
+func character_error(l: Lexer, diagnostics: diag::Diagnostics, start: int, foreign summary: String) -> token::Token:
+    // Consume the rest of a malformed literal, preserving the next statement.
+    while not l.at_end() and l.current() != '\n':
+        ch := l.current()
+        l.advance()
+        if ch == '\'':
+            break
+        end
+    end
+    return l.error_token(diagnostics, start, l.pos, summary, "expected one byte or a character escape between single quotes")
+end
+
+
+func scan_character(l: Lexer, diagnostics: diag::Diagnostics) -> token::Token:
+    start := l.pos
+    l.advance()
+    if l.at_end():
+        return l.character_error(diagnostics, start, "unterminated character literal")
+    end
+    value := l.current()
+    raw_newline := value == '\n'
+    l.advance()
+    if value == '\\':
+        if l.at_end():
+            return l.character_error(diagnostics, start, "unterminated character escape")
+        end
+        escape := l.current()
+        l.advance()
+        if escape == 'n':
+            value = '\n'
+        elif escape == 't':
+            value = '\t'
+        elif escape == 'r':
+            value = '\r'
+        elif escape == '0':
+            value = '\0'
+        elif escape == '\\' or escape == '\'' or escape == '"':
+            value = escape
+        elif escape == 'x':
+            if l.pos + 1 >= len(l.file.text):
+                return l.character_error(diagnostics, start, "invalid hex character escape")
+            end
+            hi := string_literal::hex_digit(l.file.text[l.pos])
+            lo := string_literal::hex_digit(l.file.text[l.pos + 1])
+            if hi < 0 or lo < 0:
+                return l.character_error(diagnostics, start, "invalid hex character escape")
+            end
+            value = string_literal::byte_from_value(hi * 16 + lo)
+            l.pos += 2
+        else:
+            if escape == '\n':
+                l.pos -= 1
+            end
+            return l.character_error(diagnostics, start, "unknown character escape")
+        end
+    end
+    if l.at_end() or l.current() != '\'':
+        if raw_newline:
+            l.pos -= 1
+        end
+        return l.character_error(diagnostics, start, "invalid character literal")
+    end
+    l.advance()
+    return token::Token{type = token::TokenType.CHAR, span = l.span(start, l.pos), character = value}
+end
+
+
+// C is opaque here: only a delimiter at the start of a raw line closes it.
+func scan_embedded_c(l: Lexer, diagnostics: diag::Diagnostics) -> token::Token:
+    start := l.pos
+    l.pos += 6    // @embed
+    if not l.match_next('{') or l.at_end() or not is_identifier_start(l.current()):
+        return l.error_token(diagnostics, start, l.pos, "invalid embedded C delimiter", "expected @embed{identifier} followed by a newline")
+    end
+    delimiter_start := l.pos
+    while not l.at_end() and valid_identifier_char(l.current()):
+        l.advance()
+    end
+    delimiter_stop := l.pos
+    if not l.match_next('}'):
+        return l.error_token(diagnostics, start, l.pos, "invalid embedded C header", "expected } followed immediately by a newline")
+    end
+    if l.pos + 1 < len(l.file.text) and l.current() == '\r' and l.file.text[l.pos + 1] == '\n':
+        l.advance()
+    end
+    if not l.match_next('\n'):
+        return l.error_token(diagnostics, start, l.pos, "invalid embedded C header", "expected } followed immediately by a newline")
+    end
+    content_start := l.pos
+    while not l.at_end():
+        line_start := l.pos
+        matched := 0
+        while matched < delimiter_stop - delimiter_start and not l.at_end() and l.current() == l.file.text[delimiter_start + matched]:
+            matched += 1
+            l.advance()
+        end
+        if matched == delimiter_stop - delimiter_start:
+            while not l.at_end() and is_whitespace(l.current()):
+                l.advance()
+            end
+            if l.at_end() or l.current() == '\n':
+                if not l.at_end():
+                    l.advance()
+                end
+                content := must string::slice(l.file.text, content_start, line_start, .l)
+                return token::Token{type = token::TokenType.EMBEDDED_C, span = l.span(start, l.pos), text = Some{content}}[.l]
+            end
+        end
+        while not l.at_end() and l.current() != '\n':
+            l.advance()
+        end
+        if not l.at_end():
+            l.advance()
+        end
+    end
+    return l.error_token(diagnostics, start, l.pos, "unterminated embedded C", "expected delimiter at the start of a line")
+end
+
+
+func scan_directive(l: Lexer) -> Option[token::Token]:
+    names := ["@platform", "@profile", "@includedir", "@libdir", "@link", "@copy"]
+    kinds := [token::TokenType.DIRECTIVE_PLATFORM, token::TokenType.DIRECTIVE_PROFILE, token::TokenType.DIRECTIVE_INCLUDEDIR, token::TokenType.DIRECTIVE_LIBDIR, token::TokenType.DIRECTIVE_LINK, token::TokenType.DIRECTIVE_COPY]
+    for index, name in names:
+        if l.pos + len(name) <= len(l.file.text) and must string::slice(l.file.text, l.pos, l.pos + len(name)) == name:
+            start := l.pos
+            l.pos += len(name)
+            return Some{token::Token{type = kinds[index], span = l.span(start, l.pos)}}
+        end
+    end
+    return None
 end
 
 
@@ -151,6 +417,9 @@ func next_token(l: Lexer, diag: diag::Diagnostics) -> token::Token:
             return token::Token{type = token::TokenType.NEWLINE, span = l.span(start, l.pos)}
         elif ch == '=':
             l.advance()
+            if l.match_next('='):
+                return token::Token{type = token::TokenType.OP_EQ, span = l.span(start, l.pos)}
+            end
             return token::Token{type = token::TokenType.ASSIGN, span = l.span(start, l.pos)}
         elif ch == ':':
             l.advance()
@@ -167,18 +436,84 @@ func next_token(l: Lexer, diag: diag::Diagnostics) -> token::Token:
         elif ch == ')':
             l.advance()
             return token::Token{type = token::TokenType.RPAREN, span = l.span(start, l.pos)}
+        elif ch == '[':
+            l.advance()
+            return token::Token{type = token::TokenType.LBRACKET, span = l.span(start, l.pos)}
+        elif ch == ']':
+            l.advance()
+            return token::Token{type = token::TokenType.RBRACKET, span = l.span(start, l.pos)}
+        elif ch == '@':
+            if l.pos + 6 <= len(l.file.text) and must string::slice(l.file.text, l.pos, l.pos + 6) == "@embed":
+                return l.scan_embedded_c(diag)
+            end
+            directive := l.scan_directive()
+            if directive is Some:
+                return directive?
+            end
+            l.advance()
+            return token::Token{type = token::TokenType.AT, span = l.span(start, l.pos)}
+        elif ch == '?':
+            l.advance()
+            return token::Token{type = token::TokenType.QUESTION, span = l.span(start, l.pos)}
+        elif ch == '{':
+            l.advance()
+            return token::Token{type = token::TokenType.LBRACE, span = l.span(start, l.pos)}
+        elif ch == '}':
+            l.advance()
+            return token::Token{type = token::TokenType.RBRACE, span = l.span(start, l.pos)}
+        elif ch == '.':
+            l.advance()
+            return token::Token{type = token::TokenType.DOT, span = l.span(start, l.pos)}
         elif ch == ',':
             l.advance()
             return token::Token{type = token::TokenType.COMMA, span = l.span(start, l.pos)}
         elif ch == '+':
             l.advance()
+            if l.match_next('='):
+                return token::Token{type = token::TokenType.OP_PLUS_EQ, span = l.span(start, l.pos)}
+            end
             return token::Token{type = token::TokenType.OP_PLUS, span = l.span(start, l.pos)}
         elif ch == '-':
             l.advance()
+            if l.match_next('>'):
+                return token::Token{type = token::TokenType.ARROW, span = l.span(start, l.pos)}
+            end
+            if l.match_next('='):
+                return token::Token{type = token::TokenType.OP_MINUS_EQ, span = l.span(start, l.pos)}
+            end
             return token::Token{type = token::TokenType.OP_MINUS, span = l.span(start, l.pos)}
         elif ch == '<':
             l.advance()
+            if l.match_next('='):
+                return token::Token{type = token::TokenType.OP_LE, span = l.span(start, l.pos)}
+            end
             return token::Token{type = token::TokenType.OP_LT, span = l.span(start, l.pos)}
+        elif ch == '>':
+            l.advance()
+            kind := token::TokenType.OP_GT
+            if l.match_next('='):
+                kind = token::TokenType.OP_GE
+            end
+            return token::Token{type = kind, span = l.span(start, l.pos)}
+        elif ch == '!':
+            l.advance()
+            if l.match_next('='):
+                return token::Token{type = token::TokenType.OP_NE, span = l.span(start, l.pos)}
+            end
+            return token::Token{type = token::TokenType.BANG, span = l.span(start, l.pos)}
+        elif ch == '*' or ch == '%':
+            l.advance()
+            kind := token::TokenType.OP_TIMES
+            if ch == '%':
+                kind = token::TokenType.OP_MOD
+            end
+            if l.match_next('='):
+                kind = token::TokenType.OP_TIMES_EQ
+                if ch == '%':
+                    kind = token::TokenType.OP_MOD_EQ
+                end
+            end
+            return token::Token{type = kind, span = l.span(start, l.pos)}
         elif ch == '/':
             l.advance()
             if l.match_next('/'):
@@ -187,11 +522,16 @@ func next_token(l: Lexer, diag: diag::Diagnostics) -> token::Token:
                 end
                 continue
             end
-            return l.error_token(diag, start, l.pos, "unexpected character", "")
+            if l.match_next('='):
+                return token::Token{type = token::TokenType.OP_DIV_EQ, span = l.span(start, l.pos)}
+            end
+            return token::Token{type = token::TokenType.OP_DIV, span = l.span(start, l.pos)}
         elif ch == '"':
             return l.scan_string(diag)
+        elif ch == '\'':
+            return l.scan_character(diag)
         elif char::isdigit(ch):
-            return l.scan_integer()
+            return l.scan_number(diag)
         elif is_identifier_start(ch):
             return l.scan_identifier_or_keyword()
         else:
@@ -215,6 +555,8 @@ func lex(l: Lexer, diag: diag::Diagnostics) -> Vec[token::Token]:
 end
 
 
+/// Return tokens, including EOF, in the inferred result region.
+/// Record lexer errors in diagnostics; the loader stops before parsing if any occur.
 func tokenize(file: source::SourceFile, diag: diag::Diagnostics) -> Vec[token::Token]:
     lexer := new(file)
     return lexer.lex(diag)

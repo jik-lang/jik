@@ -1,0 +1,8 @@
+func invalid(r: Region) -> Vec[int]:
+    values := [1]
+    return values
+end
+
+func main():
+    return 0
+end

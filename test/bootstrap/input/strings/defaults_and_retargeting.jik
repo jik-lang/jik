@@ -1,0 +1,29 @@
+func keep(value: String, r: Region) -> String:
+    return value
+end
+
+
+func relay(r: Region) -> String:
+    return keep("payload", r)
+end
+
+
+func empty(r: Region) -> String:
+    value: String@
+    return value
+end
+
+
+func main():
+    local: String
+    local = "replacement"
+    anchor := "owner"
+    associated: String[.anchor]
+    if local != "replacement" or associated != "" or empty() != "":
+        return 1
+    end
+    if relay() != "payload":
+        return 2
+    end
+    return 42
+end

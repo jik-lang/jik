@@ -1,0 +1,9 @@
+func bad(value: String):
+    local := "local"
+    value = local
+end
+
+
+func main():
+    return 0
+end

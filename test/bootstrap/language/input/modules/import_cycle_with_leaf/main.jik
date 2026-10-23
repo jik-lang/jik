@@ -1,0 +1,6 @@
+use "a"
+use "c"
+
+func main():
+    c::ok()
+end

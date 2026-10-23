@@ -1,70 +1,75 @@
 use "jik/testing" as test
 use "jik/string"
-use "jik/path"
 
+use "../../src/bootstrap/program"
+use "support"
 use "../../src/bootstrap/codegen/codegen"
 use "../../src/bootstrap/diag"
-use "../../src/bootstrap/module"
+use "../../src/bootstrap/modules/module"
 use "../../src/bootstrap/source"
-use "../../src/bootstrap/lexer/lexer"
-use "../../src/bootstrap/parser/parser"
 use "../../src/bootstrap/semantic/semantic"
 
 
-func add_module(sources: source::SourceManager, modules: Vec[module::Module], diagnostics: diag::Diagnostics, foreign path: String, foreign text: String) -> void:
-    id := len(sources.sources)
-    file := source::SourceFile{id, path = path::normalize(path, .sources), text = copy(text, .sources)}[.sources]
-    sources.source_id_by_path[file.path] = id
-    sources.sources.push(file)
-    tokens := lexer::tokenize(file, diagnostics)
-    ast := parser::parse(file, tokens, diagnostics)
-    modules.push(module::Module{source_id = id, tokens, ast})
-end
-
-
-throws func translate(foreign main_source: String, foreign helper_source: String, r: Region) -> String:
-    sources := source::SourceManager{}[r]
-    diagnostics := diag::Diagnostics{}[r]
-    modules: Vec[module::Module][r]
-    add_module(sources, modules, diagnostics, "test/bootstrap_codegen/entry.jik", main_source)
-    if len(helper_source) > 0:
-        add_module(sources, modules, diagnostics, "test/bootstrap_codegen/helper.jik", helper_source)
-    end
-    semantic::analyze(modules, diagnostics)
-    translation := try codegen::generate(modules, sources, diagnostics, 0, r)
-    return translation
-end
-
-
-func contains(foreign text: String, foreign fragment: String) -> bool:
-    return string::replace(text, fragment, "") != text
-end
-
-
 func test_integer_program(ts) -> void:
-    translation := must translate("func main():\n    n := 2 + 3\n    if n < 6:\n        return n\n    end\n    return 0\nend\n", "", _)
-    test::suite_assert(ts, contains(translation, "int32_t jik_v_n = (2 + 3);"), site())
-    test::suite_assert(ts, contains(translation, "if ((jik_v_n < 6)) {"), site())
-    test::suite_assert(ts, contains(translation, "return jik_m0_main();"), site())
+    translation := must support::translate("func main():\n    n := 2 + 3\n    if n < 6:\n        return n\n    end\n    return 0\nend\n", "", _)
+    test::suite_assert(ts, string::find(translation, "int32_t jik_v_n = (2 + 3);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "if ((jik_v_n < 6)) {") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "return jik_m0_main();") >= 0, site())
 end
 
 
 func test_imported_call(ts) -> void:
-    translation := must translate("use \"helper\" as h\nfunc main():\n    return h::add(20, 22)\nend\n", "func add(left: int, right: int):\n    return left + right\nend\n", _)
-    test::suite_assert(ts, contains(translation, "int32_t jik_m1_add(int32_t jik_v_left, int32_t jik_v_right);"), site())
-    test::suite_assert(ts, contains(translation, "return jik_m1_add(20, 22);"), site())
+    translation := must support::translate("use \"helper\" as h\nfunc main():\n    return h::add(20, 22)\nend\n", "func add(left: int, right: int):\n    return left + right\nend\n", _)
+    test::suite_assert(ts, string::find(translation, "int32_t jik_m1_add(int32_t jik_v_left, int32_t jik_v_right);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "return jik_m1_add(20, 22);") >= 0, site())
 end
 
 
 func test_local_call_and_bare_return(ts) -> void:
-    translation := must translate("func add(left, right):\n    return left + right\nend\nfunc main():\n    value := add(1, 2)\n    if value < 0:\n        return\n    end\n    return value\nend\n", "", _)
-    test::suite_assert(ts, contains(translation, "int32_t jik_v_value = jik_m0_add(1, 2);"), site())
-    test::suite_assert(ts, contains(translation, "return 0;"), site())
+    translation := must support::translate("func add(left, right):\n    return left + right\nend\nfunc stop():\n    return\nend\nfunc main():\n    value := add(1, 2)\n    return value\nend\n", "", _)
+    test::suite_assert(ts, string::find(translation, "int32_t jik_v_value = jik_m0_add(1, 2);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "void jik_m0_stop(void)") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "return;") >= 0, site())
+end
+
+
+func test_codegen_uses_resolved_target(ts) -> void:
+    sources := source::SourceManager{}
+    diagnostics := diag::Diagnostics{}[.sources]
+    modules: Vec[module::Module][.sources]
+    support::add_source_module(sources, modules, diagnostics, "test/bootstrap_codegen/entry.jik", "func main():\n    return answer()\nend\nfunc answer():\n    return 42\nend\n")
+    comp := program::Program{modules = modules, dependency_order = [0], initialization_order = [0], diagnostics = diagnostics, sources = sources}[.modules]
+    semantic::analyze_program(comp, 0)
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    // Once resolved, spelling/alias metadata is not an input to code generation.
+    for node in modules[0].ast.nodes:
+        if node.kind is CALL:
+            identifier := modules[0].ast.nodes[node.kind.CALL.callee].kind.IDENTIFIER_EXPR
+            identifier.name = "unresolved_spelling"
+            identifier.qualifier = Some{"unknown_alias"}
+        end
+    end
+    translation := must codegen::generate(comp, 0, codegen::Options{}, _)
+    test::suite_assert(ts, string::find(translation, "return jik_m0_answer();") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "unresolved_spelling") < 0, site())
+end
+
+
+func test_call_statements(ts) -> void:
+    translation := must support::translate("use \"helper\" as h\nfunc main():\n    stop()\n    if 1 < 2:\n        h::consume(42)\n    end\n    h::answer()\n    return 42\nend\nfunc stop():\n    return\nend\n", "func consume(value):\n    value = value + 1\nend\nfunc answer():\n    return 42\nend\n", _)
+    test::suite_assert(ts, string::find(translation, "void jik_m0_stop(void);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "jik_m0_stop();") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "void jik_m1_consume(int32_t jik_v_value);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "jik_m1_consume(42);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "jik_m1_answer();") >= 0, site())
 end
 
 
 func run_tests(ts) -> void:
+    println("[test] test_codegen")
+    test_call_statements(ts)
     test_integer_program(ts)
     test_imported_call(ts)
     test_local_call_and_bare_return(ts)
+    test_codegen_uses_resolved_target(ts)
 end

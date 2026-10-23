@@ -1,0 +1,6 @@
+func bad(r: Region):
+    value: Dict[int][r] = {"key": 1}
+end
+func main():
+    return 42
+end

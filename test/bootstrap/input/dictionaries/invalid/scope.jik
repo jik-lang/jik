@@ -1,0 +1,9 @@
+func bad():
+    values := {"key": 1}
+    for key, value in values:
+    end
+    result := value
+end
+func main():
+    return 42
+end

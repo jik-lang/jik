@@ -1,0 +1,68 @@
+//! Check which literals can use a different allocation region.
+
+use "../../parser/ast"
+use "../../modules/module"
+use "../../language/types"
+
+
+func retargetable(node: ast::Node) -> bool:
+    match node.kind:
+    case STRING_LITERAL{literal}:
+        return literal.destination is None and not literal.implicit
+    case VECTOR_LITERAL{literal}:
+        return literal.destination is None and not literal.implicit
+    case STRUCT_LITERAL{literal}:
+        return literal.destination is None and not literal.implicit
+    case DEFAULT_VALUE:
+        return true
+    case VARIANT_LITERAL{literal}:
+        return literal.destination is None and not literal.implicit
+    case OPTION_LITERAL{literal}:
+        return literal.destination is None and not literal.implicit
+    case DICT_LITERAL{literal}:
+        return literal.destination is None and not literal.implicit
+    other:
+        return false
+    end
+end
+
+
+// A fresh tree contains only newly created composite literals whose regions can
+// still be chosen. Scalar expressions are allowed; dictionary keys are copied.
+// Calls and side effects in scalar expressions are checked separately for safety.
+func fresh_tree(mod: module::Module, id: int) -> bool:
+    node := mod.ast.nodes[id]
+    if not types::is_allocated(mod.type_store, node.inferred_type?):
+        return true
+    end
+    if not retargetable(node):
+        return false
+    end
+    match node.kind:
+    case STRUCT_LITERAL{literal}:
+        for field in literal.fields:
+            if not fresh_tree(mod, field.value):
+                return false
+            end
+        end
+    case VECTOR_LITERAL{literal}:
+        for element in literal.elements:
+            if not fresh_tree(mod, element):
+                return false
+            end
+        end
+    case DICT_LITERAL{literal}:
+        // Dictionary insertion copies keys; only values can retain an input.
+        for entry in literal.entries:
+            if not fresh_tree(mod, entry.value):
+                return false
+            end
+        end
+    case VARIANT_LITERAL{literal}:
+        return literal.value is None or fresh_tree(mod, literal.value?)
+    case OPTION_LITERAL{literal}:
+        return literal.value is None or fresh_tree(mod, literal.value?)
+    other:
+    end
+    return true
+end

@@ -1,0 +1,13 @@
+enum E:
+    A
+    B
+end
+
+variant V:
+    TEXT: String
+    EOF
+end
+
+func make(r: Region) -> V:
+    return V.TEXT{"imported"}[r]
+end

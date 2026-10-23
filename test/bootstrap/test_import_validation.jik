@@ -1,0 +1,111 @@
+use "jik/path"
+use "jik/string"
+use "jik/testing" as test
+
+use "../../src/bootstrap/modules/import_path"
+use "../../src/bootstrap/modules/module_loader"
+use "../../src/bootstrap/diag"
+use "../../src/bootstrap/source"
+use "../../src/bootstrap/lexer/lexer"
+use "../../src/bootstrap/parser/parser"
+
+
+func check_invalid_path(ts, foreign import_path: String, foreign expected: String) -> void:
+    sources := source::SourceManager{stdlib_path = "installation/jiklib", package_path = Some{"repository"}}
+    escaped_path := string::replace(import_path, "\\", "\\\\", .sources)
+    text := concat("use \"", escaped_path, "\"\nfunc main():\n    return 0\nend\n", .sources)
+    file := source::SourceFile{id = 0, path = "project/main.jik", text}[.sources]
+    sources.sources.push(file)
+    diagnostics := diag::Diagnostics{}[.sources]
+    tokens := lexer::tokenize(file, diagnostics)
+    tree := parser::parse(file, tokens, diagnostics)
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    imports := module_loader::resolve_imports(sources, tree, diagnostics, file)
+    test::suite_assert(ts, len(imports) == 0 and len(sources.sources) == 1, site())
+    test::suite_assert(ts, diagnostics.error_count == 1, site())
+    test::suite_assert(ts, len(diagnostics.messages) == 1, site())
+    if len(diagnostics.messages) != 1:
+        return
+    end
+    message := diagnostics.messages[0]
+    test::suite_assert(ts, message.summary == expected, site())
+    test::suite_assert(ts, message.span is Some, site())
+    if message.span is Some:
+        test::suite_assert(ts, message.span?.source_id == 0 and message.span?.start == 0, site())
+    end
+end
+
+
+func check_root_escape(ts, foreign kind: String, foreign import_path: String) -> void:
+    sources := source::SourceManager{}
+    root := path::normalize("installation/root")
+    origin := source::Origin.STDLIB{root}
+    if kind == "package":
+        origin = source::Origin.PACKAGE{root}
+    end
+    file := source::SourceFile{path = path::normalize("installation/root/main.jik"), origin}
+    try import_path::resolve_path(sources, import_path, file):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg() == concat("relative import cannot escape the ", kind, " root"), site())
+    end
+    test::suite_assert(ts, len(sources.sources) == 0, site())
+end
+
+
+func test_valid_relative_paths(ts) -> void:
+    sources := source::SourceManager{}
+    root := path::normalize("installation/root")
+    file := source::SourceFile{path = path::normalize("installation/root/nested/main.jik"), origin = source::Origin.STDLIB{root}}
+    resolved := must import_path::resolve_path(sources, "../sibling", file)
+    test::suite_assert(ts, resolved.path == path::normalize("installation/root/sibling.jik"), site())
+    test::suite_assert(ts, resolved.origin is STDLIB, site())
+    if resolved.origin is STDLIB:
+        test::suite_assert(ts, resolved.origin.STDLIB == root, site())
+    end
+    file.origin = source::Origin.PACKAGE{root}
+    package := must import_path::resolve_path(sources, "../sibling", file)
+    test::suite_assert(ts, package.path == resolved.path and package.origin is PACKAGE, site())
+    file.origin = source::Origin.LOCAL{}
+    local := must import_path::resolve_path(sources, "../../outside", file)
+    test::suite_assert(ts, local.path == path::normalize("installation/outside.jik"), site())
+    test::suite_assert(ts, local.origin is LOCAL, site())
+end
+
+
+func test_malformed_imports(ts) -> void:
+    texts := ["use\n", "use name\n", "use \"helper\" as\n", "use \"helper\" extra\n"]
+    for text in texts:
+        file := source::SourceFile{path = "<test>", text}
+        diagnostics := diag::Diagnostics{}
+        tokens := lexer::tokenize(file, diagnostics)
+        parser::parse(file, tokens, diagnostics)
+        test::suite_assert(ts, diagnostics.error_count == 1, site())
+    end
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_import_validation")
+    check_invalid_path(ts, "", "module import path must not be empty")
+    check_invalid_path(ts, "C:../foo", "drive-relative module paths are not supported; use an absolute path")
+    check_invalid_path(ts, "C:", "drive-relative module paths are not supported; use an absolute path")
+    check_invalid_path(ts, "dir\\helper", "module paths in use declarations must use '/' separators")
+    check_invalid_path(ts, "jik/", "stdlib import path must include a module name")
+    check_invalid_path(ts, "pkg/", "package import path must include a package name")
+    check_invalid_path(ts, "jik//io", "stdlib import path contains an empty path segment")
+    check_invalid_path(ts, "jik/io/", "stdlib import path contains an empty path segment")
+    check_invalid_path(ts, "pkg/demo//offset", "package import path contains an empty path segment")
+    check_invalid_path(ts, "pkg/demo/", "package import path contains an empty path segment")
+    check_invalid_path(ts, "jik/./io", "stdlib import path cannot contain '.' or '..' path segments")
+    check_invalid_path(ts, "jik/../io", "stdlib import path cannot contain '.' or '..' path segments")
+    check_invalid_path(ts, "pkg/../demo", "package import path cannot contain '.' or '..' path segments")
+    check_invalid_path(ts, "pkg/demo/./offset", "package import path cannot contain '.' or '..' path segments")
+    check_invalid_path(ts, "pkg/demo/../offset", "package import path cannot contain '.' or '..' path segments")
+    check_root_escape(ts, "stdlib", "../outside")
+    check_root_escape(ts, "stdlib", "../root_other/file")
+    check_root_escape(ts, "package", "../outside")
+    check_root_escape(ts, "package", "../root_other/file")
+    test_valid_relative_paths(ts)
+    test_malformed_imports(ts)
+end

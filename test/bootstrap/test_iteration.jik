@@ -1,0 +1,93 @@
+use "jik/testing" as test
+
+use "support"
+use "test_strings"
+use "../../src/bootstrap/language/types"
+use "../../src/bootstrap/semantic/typing/typecheck"
+use "../../src/bootstrap/language/region_source"
+
+
+func test_binding_metadata(ts) -> void:
+    text := "func inspect(text: String, values: Vec[String]):\n    for byte in text:\n    end\n    for index, byte in text:\n    end\n    for value in values:\n    end\n    for index, value in values:\n    end\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    count := 0
+    for node in mod.ast.nodes:
+        if node.kind is FOREACH:
+            count += 1
+            loop := node.kind.FOREACH
+            container := mod.ast.nodes[loop.container]
+            element := types::iteration_element(mod.type_store, container.inferred_type?)?
+            first := mod.ast.nodes[loop.first]
+            expected := types::atom(mod.type_store, types::Atom.INT) if loop.second is Some else element
+            test::suite_assert(ts, first.inferred_type? == expected, site())
+            test::suite_assert(ts, first.iteration_source? == loop.container, site())
+            test::suite_assert(ts, loop.body.scope.symbols[first.kind.LOOP_VARIABLE]?.origin == loop.first, site())
+            if types::is_allocated(mod.type_store, expected):
+                test::suite_assert(ts, first.region_source.kind == region_source::Kind.CALLER, site())
+                test::suite_assert(ts, first.region_source.parameter_id == container.region_source.parameter_id, site())
+            end
+            if loop.second is Some:
+                second := mod.ast.nodes[loop.second?]
+                test::suite_assert(ts, second.inferred_type? == element, site())
+                if types::is_allocated(mod.type_store, element):
+                    test::suite_assert(ts, second.region_source.kind == region_source::Kind.CALLER, site())
+                    test::suite_assert(ts, second.region_source.parameter_id == container.region_source.parameter_id, site())
+                end
+            end
+        end
+    end
+    test::suite_assert(ts, count == 4, site())
+end
+
+
+func test_inference_and_safety(ts) -> void:
+    comp := test_strings::analyze("func first(values):\n    for value in values:\n        return value\n    end\n    return 0\nend\nfunc main():\n    values := [42]\n    return first(values)\nend\n")
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    support::check_signature(ts, comp, "first", "func(Vec[int]) -> int")
+    safe := test_strings::analyze("func compare(left: Vec[String], right: Vec[String]) -> bool:\n    local := [[\"local\"]]\n    for values in local:\n        for value in values:\n            push(values, value)\n            break\n        end\n    end\n    return left[0] == right[0]\nend\n")
+    test::suite_assert(ts, safe.diagnostics.error_count == 0, site())
+    if safe.diagnostics.error_count == 0:
+        mod := safe.modules[0]
+        root := mod.ast.get_root_module()
+        test::suite_assert(ts, mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL.is_region_safe, site())
+    end
+end
+
+
+func test_checked_binding_types(ts) -> void:
+    cases := [false, true]
+    for paired in cases:
+        text := "func inspect(text: String):\n    for byte in text:\n    end\nend\n"
+        if paired:
+            text = "func inspect(text: String):\n    for index, byte in text:\n    end\nend\n"
+        end
+        comp := support::infer_source(text, -1)
+        test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+        if comp.diagnostics.error_count > 0:
+            continue
+        end
+        mod := comp.modules[0]
+        for node in mod.ast.nodes:
+            if node.kind is FOREACH:
+                mod.ast.nodes[node.kind.FOREACH.first].inferred_type = Some{types::atom(mod.type_store, types::Atom.BOOL)}[.mod]
+            end
+        end
+        typecheck::run(comp)
+        test::suite_assert(ts, comp.diagnostics.error_count > 0, site())
+    end
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_iteration")
+    test_binding_metadata(ts)
+    test_inference_and_safety(ts)
+    test_checked_binding_types(ts)
+    test_strings::check_error(ts, "func bad(r: Region) -> String:\n    values := [\"local\"]\n    for value in values:\n        return value\n    end\n    return \"\"[r]\nend\n", "cannot return local allocation")
+    test_strings::check_error(ts, "func bad(values: Vec[String]):\n    for value in values:\n        value = \"local\"\n    end\nend\n", "region mismatch")
+end

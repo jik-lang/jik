@@ -1,0 +1,8 @@
+struct Point:
+    x: int
+end
+
+enum Kind:
+    A
+    B
+end

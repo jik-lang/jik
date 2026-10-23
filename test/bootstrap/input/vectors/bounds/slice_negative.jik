@@ -1,0 +1,5 @@
+func main():
+    values := [1]
+    result := values[-1:]
+    return 0
+end

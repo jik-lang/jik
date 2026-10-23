@@ -1,0 +1,50 @@
+//! Render process arguments for preview without changing their execution form.
+
+use "jik/strbuf"
+
+
+// Render an argument vector for inspection; execution still uses jik/process.
+func append_quoted(output: strbuf::StrBuf, foreign value: String, windows: bool) -> void:
+    if not windows:
+        strbuf::append_char(output, '\'')
+        for ch in value:
+            if ch == '\'':
+                strbuf::append(output, "'\\''")
+            else:
+                strbuf::append_char(output, ch)
+            end
+        end
+        strbuf::append_char(output, '\'')
+        return
+    end
+    strbuf::append_char(output, '"')
+    slashes := 0
+    for ch in value:
+        if ch == '\\':
+            slashes += 1
+            continue
+        end
+        count := slashes * 2 + 1 if ch == '"' else slashes
+        for index = 0, count:
+            strbuf::append_char(output, '\\')
+        end
+        strbuf::append_char(output, ch)
+        slashes = 0
+    end
+    // Backslashes before the closing quote must be doubled.
+    for index = 0, slashes * 2:
+        strbuf::append_char(output, '\\')
+    end
+    strbuf::append_char(output, '"')
+end
+
+
+func format(foreign program: String, foreign args: Vec[String], windows: bool, r: Region) -> String:
+    output := strbuf::new("")
+    append_quoted(output, program, windows)
+    for argument in args:
+        strbuf::append_char(output, ' ')
+        append_quoted(output, argument, windows)
+    end
+    return strbuf::to_string(output, r)
+end

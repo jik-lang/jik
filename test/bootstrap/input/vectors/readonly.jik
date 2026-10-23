@@ -1,0 +1,24 @@
+func equal_first(left: Vec[String], right: Vec[String]) -> bool:
+    return left[0] == right[0]
+end
+
+func inspect(caller: Vec[String]) -> bool:
+    local := ["same"]
+    return equal_first(caller, local)
+end
+
+func update(target: Vec[String], value: String):
+    target[0] = value
+end
+
+func main():
+    words := ["same"]
+    if not inspect(words):
+        return 1
+    end
+    update(words, "updated")
+    if words[0] != "updated":
+        return 2
+    end
+    return 42
+end

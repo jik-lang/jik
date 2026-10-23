@@ -1,0 +1,93 @@
+use "jik/fs"
+use "jik/io"
+use "jik/path"
+use "jik/sys"
+use "jik/testing" as test
+
+use "../../src/bootstrap/modules/import_path"
+use "../../src/bootstrap/compiler"
+use "../../src/bootstrap/source"
+
+
+func test_installation_path(ts) -> void:
+    config := compiler::Config{}
+    comp := must compiler::new(config)
+    executable := must sys::executable_path()
+    expected := path::normalize(path::join([path::dirname(executable), "jiklib"]))
+    test::suite_assert(ts, comp.program.sources.stdlib_path == expected, site())
+    test::suite_assert(ts, path::is_absolute(comp.program.sources.stdlib_path), site())
+end
+
+
+func test_stdlib_paths(ts) -> void:
+    sources := source::SourceManager{stdlib_path = "installation/jiklib"}
+    file := source::SourceFile{path = "unrelated/project/main.jik"}
+    answer_path := must import_path::resolve_path(sources, "jik/answer", file)
+    test::suite_assert(ts, answer_path.path == path::normalize("installation/jiklib/answer.jik"), site())
+    nested_path := must import_path::resolve_path(sources, "jik/nested/offset", file)
+    test::suite_assert(ts, nested_path.path == path::normalize("installation/jiklib/nested/offset.jik"), site())
+    local_path := must import_path::resolve_path(sources, "jik_extra/answer", file)
+    test::suite_assert(ts, local_path.path == path::normalize("unrelated/project/jik_extra/answer.jik"), site())
+end
+
+
+func test_real_library_source(ts) -> void:
+    root := path::join([sys::cwd(), "jiklib"])
+    sources := source::SourceManager{stdlib_path = root}
+    file := source::SourceFile{path = "unrelated/main.jik"}
+    library_path := must import_path::resolve_path(sources, "jik/io", file)
+    resolved := library_path.path
+    id := must sources.add_source(resolved)
+    test::suite_assert(ts, sources.sources[id].path == path::normalize(path::join([root, "io.jik"])), site())
+    test::suite_assert(ts, sources.sources[id].text == must io::read_file("jiklib/io.jik"), site())
+end
+
+
+func test_nested_library_imports(ts) -> void:
+    output_path := path::join([fs::temp_dir(), "jik-bootstrap-stdlib-imports.c"])
+    config := compiler::Config{input_path = "test/bootstrap/input/stdlib_imports/project/main.jik", output_path}
+    comp := must compiler::new(config)
+    // Unit tests run beside their own executable; use the fixture installation.
+    library := path::normalize(path::join([sys::cwd(), "test/bootstrap/input/stdlib_imports/library"]), .comp)
+    comp.program.sources.stdlib_path = library
+    must comp.run()
+    test::suite_assert(ts, comp.program.diagnostics.error_count == 0, site())
+    test::suite_assert(ts, len(comp.program.sources.sources) == 3, site())
+    test::suite_assert(ts, len(comp.program.modules) == 3, site())
+    for file in comp.program.sources.sources:
+        if file.id != 0:
+            test::suite_assert(ts, file.origin is STDLIB, site())
+            if file.origin is STDLIB:
+                test::suite_assert(ts, file.origin.STDLIB == library, site())
+            end
+        end
+    end
+    test::suite_assert(ts, fs::is_file(output_path), site())
+    must fs::remove_file(output_path)
+
+    answer_path := path::normalize(path::join([library, "answer.jik"]))
+    offset_path := path::normalize(path::join([library, "nested/offset.jik"]))
+    answer_id := comp.program.sources.source_id_by_path[answer_path]
+    offset_id := comp.program.sources.source_id_by_path[offset_path]
+    test::suite_assert(ts, answer_id is Some and offset_id is Some, site())
+    if answer_id is None or offset_id is None:
+        return
+    end
+    for mod in comp.program.modules:
+        if mod.source_id == answer_id?:
+            test::suite_assert(ts, len(mod.imports) == 1, site())
+            if len(mod.imports) == 1:
+                test::suite_assert(ts, mod.imports[0].target_id == offset_id?, site())
+            end
+        end
+    end
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_stdlib_imports")
+    test_installation_path(ts)
+    test_stdlib_paths(ts)
+    test_real_library_source(ts)
+    test_nested_library_imports(ts)
+end

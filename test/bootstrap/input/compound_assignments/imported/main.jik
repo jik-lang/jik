@@ -1,0 +1,11 @@
+use "helper"
+
+
+func main():
+    value := 10
+    value += helper::delta(value)
+    if value != 42:
+        return 1
+    end
+    return value
+end

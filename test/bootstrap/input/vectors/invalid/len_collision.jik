@@ -1,0 +1,4 @@
+func main():
+    len := 1
+    return len
+end

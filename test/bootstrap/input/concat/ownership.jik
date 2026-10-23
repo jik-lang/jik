@@ -1,0 +1,11 @@
+func join(foreign left: String, foreign right: String, r: Region) -> String:
+    return concat(left, right, r)
+end
+
+func single(foreign text: String, r: Region) -> String:
+    return concat(text, r)
+end
+
+func main():
+    println("ownership-ok")
+end

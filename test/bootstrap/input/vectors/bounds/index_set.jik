@@ -1,0 +1,5 @@
+func main():
+    values := [1]
+    values[1] = 2
+    return 0
+end

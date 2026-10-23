@@ -1,0 +1,4 @@
+func main():
+    byte := '\xFF'
+    println(byte == '\xFF', ":", byte != '\xFF')
+end

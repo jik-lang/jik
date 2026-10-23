@@ -1,0 +1,14 @@
+use "left"
+use "right"
+use "shared" as base
+
+value := base::stamp(4)
+name := "local"
+state := base::state
+
+func main():
+    left::update()
+    println(base::trace)
+    println(left::value, ":", right::value, ":", value)
+    println(name, ":", base::name, ":", left::alias.value, ":", state.value)
+end

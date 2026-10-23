@@ -1,0 +1,6 @@
+func bad(values: Dict[int]):
+    values[false] = 1
+end
+func main():
+    return 42
+end

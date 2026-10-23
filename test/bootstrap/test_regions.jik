@@ -1,0 +1,217 @@
+use "jik/testing" as test
+use "jik/string"
+
+use "support"
+use "../../src/bootstrap/parser/ast"
+use "../../src/bootstrap/language/region_source"
+use "../../src/bootstrap/semantic/regions/regions"
+use "../../src/bootstrap/language/types"
+use "../../src/bootstrap/semantic/typing/typecheck"
+
+
+func test_region_operands_and_sources(ts) -> void:
+    text := "func take(value: String, r: Region) -> int:\n    return 42\nend\nfunc inspect(value: String):\n    alias := value\n    take(alias, .alias)\n    take(value, _)\nend\n"
+    comp := support::infer_source(text, -1)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    function := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    parameter_id := function.parameters[0]
+    parameter := mod.ast.nodes[parameter_id]
+    test::suite_assert(ts, parameter.region_source.kind == region_source::Kind.CALLER, site())
+    test::suite_assert(ts, parameter.region_source.parameter_id == parameter_id, site())
+    local := mod.ast.nodes[function.body.statements[0]]
+    test::suite_assert(ts, local.region_source.kind == region_source::Kind.CALLER and local.region_source.parameter_id == parameter_id, site())
+    first_call := mod.ast.nodes[function.body.statements[1]].kind.CALL
+    argument := mod.ast.nodes[first_call.arguments[1]]
+    test::suite_assert(ts, argument.kind is REGION_OF, site())
+    test::suite_assert(ts, argument.inferred_type? == types::atom(mod.type_store, types::Atom.REGION), site())
+    test::suite_assert(ts, argument.region_source.kind == region_source::Kind.CALLER and argument.region_source.parameter_id == parameter_id, site())
+    second_call := mod.ast.nodes[function.body.statements[2]].kind.CALL
+    local_region := mod.ast.nodes[second_call.arguments[1]]
+    test::suite_assert(ts, local_region.kind is LOCAL_REGION, site())
+    test::suite_assert(ts, local_region.region_source.kind == region_source::Kind.LOCAL, site())
+    test::suite_assert(ts, function.needs_local_region, site())
+    test::suite_assert(ts, not mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL.needs_local_region, site())
+    // Running the phase twice must neither retain stale region sources nor change flags.
+    regions::run(comp)
+    test::suite_assert(ts, function.needs_local_region and argument.region_source.parameter_id == parameter_id, site())
+end
+
+
+func test_omitted_final_region(ts) -> void:
+    text := "func answer(r: Region) -> int:\n    return 42\nend\nfunc main():\n    return answer()\nend\n"
+    comp := support::infer_source(text, 0)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    main := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    returned := mod.ast.nodes[main.body.statements[0]].kind.RETURN.value
+    test::suite_assert(ts, returned is Some, site())
+    if returned is None:
+        return
+    end
+    call := mod.ast.nodes[returned?].kind.CALL
+    test::suite_assert(ts, len(call.arguments) == 1, site())
+    if len(call.arguments) == 1:
+        test::suite_assert(ts, mod.ast.nodes[call.arguments[0]].kind is LOCAL_REGION, site())
+    end
+    translation := must support::translate(text, "")
+    result := string::find(translation, "jik_return_value = jik_m0_answer(jik_local_region);")
+    cleanup := string::find(translation, "jik_region_free(jik_local_region);")
+    returned_result := string::find(translation, "return jik_return_value;")
+    test::suite_assert(ts, result >= 0 and cleanup > result and returned_result > cleanup, site())
+end
+
+
+func test_cleanup_and_unused_regions(ts) -> void:
+    text := "func noop(r: Region):\nend\nfunc leave(flag: bool):\n    noop(_)\n    if flag:\n        return\n    end\nend\nfunc main():\n    leave(true)\n    leave(false)\n    return 42\nend\n"
+    translation := must support::translate(text, "")
+    test::suite_assert(ts, string::find(translation, "JikRegion * jik_v_r") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "jik_region_free(jik_local_region);\n        return;") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "jik_region_free(jik_local_region);\n    return;") >= 0, site())
+    ordinary := must support::translate("func main():\n    return 42\nend\n", "")
+    test::suite_assert(ts, string::find(ordinary, "jik_region_new") < 0, site())
+    test::suite_assert(ts, string::find(ordinary, "jik_region_free") < 0, site())
+end
+
+
+func check_error(ts, foreign text: String, foreign expected: String) -> void:
+    comp := support::infer_source(text, -1)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 1, site())
+    if len(comp.diagnostics.messages) == 1:
+        test::suite_assert(ts, comp.diagnostics.messages[0].summary == expected, site())
+        test::suite_assert(ts, comp.diagnostics.messages[0].span is Some, site())
+    end
+end
+
+
+func test_region_restrictions(ts) -> void:
+    check_error(ts, "func bad(r: Region):\n    alias := r\nend\n", "invalid region declaration")
+    check_error(ts, "func bad(r: Region):\n    return r\nend\n", "invalid region return")
+    check_error(ts, "func bad(r: Region, destination: Region):\n    r = destination\nend\n", "invalid region assignment")
+    check_error(ts, "func use_region(r: Region):\nend\nfunc bad(value: int):\n    use_region(.value)\nend\n", "invalid region target")
+    check_error(ts, "func use_region(r: Region):\nend\nfunc bad(r: Region):\n    use_region(.r)\nend\n", "invalid region target")
+    check_error(ts, "func use_region(r: Region):\nend\nfunc bad():\n    use_region(.missing)\nend\n", "semantic analysis")
+    check_error(ts, "func use_region(r: Region):\nend\nfunc bad():\n    use_region(.later)\n    later := 1\nend\n", "semantic analysis")
+    check_error(ts, "func ordinary(value: int):\nend\nfunc bad():\n    ordinary()\nend\n", "call arity mismatch")
+    check_error(ts, "func ordinary(r: Region, value: int):\nend\nfunc bad():\n    ordinary(1)\nend\n", "call arity mismatch")
+end
+
+
+func test_allocated_type_classes(ts) -> void:
+    store := types::Store{}
+    types::initialize(store)
+    test::suite_assert(ts, types::is_allocated(store, types::atom(store, types::Atom.STRING)), site())
+    test::suite_assert(ts, not types::is_allocated(store, types::atom(store, types::Atom.REGION)), site())
+    test::suite_assert(ts, not types::is_allocated(store, types::atom(store, types::Atom.SITE)), site())
+    integer := types::atom(store, types::Atom.INT)
+    test::suite_assert(ts, not types::is_allocated(store, integer), site())
+    vector := must types::container(store, types::Container.VECTOR, integer)
+    enumeration := must types::named(store, types::NamedKind.ENUM, 0, 1, "Mode")
+    structure := must types::named(store, types::NamedKind.STRUCT, 0, 2, "Box")
+    test::suite_assert(ts, types::is_allocated(store, vector), site())
+    test::suite_assert(ts, not types::is_allocated(store, enumeration), site())
+    test::suite_assert(ts, types::is_allocated(store, structure), site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_regions")
+    test_region_operands_and_sources(ts)
+    test_omitted_final_region(ts)
+    test_cleanup_and_unused_regions(ts)
+    test_region_restrictions(ts)
+    test_allocated_type_classes(ts)
+    test_foreign_parameters(ts)
+    test_foreign_temporary(ts)
+    test_single_parameter_implicit_region(ts)
+end
+
+
+func test_foreign_temporary(ts) -> void:
+    text := "func take(foreign values: Vec[String]):\nend\nfunc invoke(value: String):\n    take([value, \"local\"])\nend\n"
+    comp := support::infer_source(text, -1)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    function := mod.ast.nodes[mod.ast.get_root_module().declarations[1]].kind.FUNCTION_DECL
+    call := mod.ast.nodes[function.body.statements[0]].kind.CALL
+    temporary := mod.ast.nodes[call.arguments[0]]
+    test::suite_assert(ts, temporary.foreign_argument_literal, site())
+    test::suite_assert(ts, temporary.region_source.kind == region_source::Kind.LOCAL and function.needs_local_region, site())
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0 and temporary.foreign_argument_literal, site())
+end
+
+
+func test_foreign_parameters(ts) -> void:
+    text := "func inspect(foreign value: String,\n    r: Region) -> String:\n    alias := value\n    return \"answer\"@\nend\n"
+    comp := support::infer_source(text, -1)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count == 0:
+        mod := comp.modules[0]
+        function := mod.ast.nodes[mod.ast.get_root_module().declarations[0]].kind.FUNCTION_DECL
+        parameter := mod.ast.nodes[function.parameters[0]]
+        test::suite_assert(ts, parameter.kind.PARAMETER.is_foreign, site())
+        test::suite_assert(ts, parameter.span.start == string::find(text, "foreign"), site())
+        test::suite_assert(ts, parameter.region_source.kind == region_source::Kind.FOREIGN, site())
+        alias := mod.ast.nodes[function.body.statements[0]]
+        test::suite_assert(ts, alias.region_source.kind == region_source::Kind.FOREIGN, site())
+        returned := mod.ast.nodes[function.body.statements[1]].kind.RETURN.value?
+        test::suite_assert(ts, mod.ast.nodes[returned].allocation_target? == function.parameters[1], site())
+        regions::run(comp)
+        test::suite_assert(ts, comp.diagnostics.error_count == 0 and alias.region_source.kind == region_source::Kind.FOREIGN, site())
+    end
+    check_error(ts, "func bad(foreign value: String) -> String:\n    alias := value\n    return alias\nend\n", "cannot return foreign composite value")
+    check_error(ts, "func bad(foreign value: Vec[String], output: Vec[String]):\n    push(output, value[0])\nend\n", "region mismatch")
+    check_error(ts, "func bad(foreign value: Vec[String]):\n    value[0] = value[1]\nend\n", "region mismatch")
+    check_error(ts, "func bad(foreign value: String):\n    wrapped := Some{value}\nend\n", "region mismatch")
+    check_error(ts, "func bad(foreign value: String) -> String:\n    return \"answer\"@\nend\n", "invalid implicit allocation")
+end
+
+
+func test_single_parameter_implicit_region(ts) -> void:
+    signatures := ["owner: String", "foreign borrowed: String, owner: String, count: int",
+        "r: Region", "foreign borrowed: String, r: Region"]
+    targets := [0, 1, 0, 1]
+    for index, signature in signatures:
+        text := concat("func inspect(", signature, "):\n    values := [1]@\nend\n")
+        comp := support::infer_source(text, -1)
+        typecheck::run(comp)
+        regions::run(comp)
+        test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+        if comp.diagnostics.error_count > 0:
+            continue
+        end
+        mod := comp.modules[0]
+        function := mod.ast.nodes[mod.ast.get_root_module().declarations[0]].kind.FUNCTION_DECL
+        literal := mod.ast.nodes[mod.ast.nodes[function.body.statements[0]].kind.LOCAL_DECL.initializer?]
+        test::suite_assert(ts, function.is_region_safe, site())
+        test::suite_assert(ts, literal.allocation_target is Some, site())
+        if literal.allocation_target is Some:
+            test::suite_assert(ts, literal.allocation_target? == function.parameters[targets[index]], site())
+        end
+        test::suite_assert(ts, literal.region_source.kind == region_source::Kind.CALLER, site())
+    end
+    check_error(ts, "func bad(owner: String, r: Region):\n    value := \"value\"@\nend\n", "invalid implicit allocation")
+    check_error(ts, "func bad(left: Region, right: Region):\n    value := \"value\"@\nend\n", "invalid implicit allocation")
+    check_error(ts, "func bad(foreign owner: String):\n    value := \"value\"@\nend\n", "invalid implicit allocation")
+    check_error(ts, "func bad(owner: Vec[String]):\n    value := \"local\"\n    push(owner, value)\nend\n", "region mismatch")
+end

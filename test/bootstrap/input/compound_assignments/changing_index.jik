@@ -1,0 +1,11 @@
+func index(count: Vec[int]) -> int:
+    count[0] = count[0] + 1
+    return count[0] - 1
+end
+
+func main():
+    count := [0]
+    values := [10, 20]
+    values[index(count)] += 3
+    println(count[0], ":", values)
+end

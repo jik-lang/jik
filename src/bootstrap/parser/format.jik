@@ -1,6 +1,10 @@
-use "ast"
+//! Render parsed syntax for the diagnostic AST dump.
+
 use "jik/strbuf"
 use "jik/string"
+
+use "ast"
+use "../language/native"
 
 
 func append_indent(sb: strbuf::StrBuf, depth: int) -> void:
@@ -43,6 +47,10 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         for import in module.imports:
             format_node(ast, import, depth + 1, sb)
         end
+        for requirement in module.requirements:
+            append_indent(sb, depth + 1)
+            sb.append(concat("NATIVE ", native::KindNames[requirement.kind], " platform=", native::PlatformNames[requirement.platform], " profile=", native::ProfileNames[requirement.profile], "\n"))
+        end
         for declaration in module.declarations:
             format_node(ast, declaration, depth + 1, sb)
         end
@@ -58,7 +66,20 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
             sb.append("\"")
         end
         sb.append("\n")
+    case EMBEDDED_C{content}:
+        sb.append("EMBEDDED_C bytes=")
+        append_int(sb, len(content))
+        sb.append("\n")
     case FUNCTION_DECL{function}:
+        if function.is_initializer:
+            sb.append("INIT ")
+        end
+        if function.external_name is Some:
+            sb.append(concat("EXTERN ", function.external_name?, " "))
+        end
+        if function.is_throwing:
+            sb.append("THROWS ")
+        end
         sb.append("FUNCTION #")
         append_int(sb, id)
         sb.append(" name=")
@@ -66,6 +87,9 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         sb.append("\n")
         for parameter in function.parameters:
             format_node(ast, parameter, depth + 1, sb)
+        end
+        if function.return_annotation is Some:
+            format_node(ast, function.return_annotation?, depth + 1, sb)
         end
         for statement in function.body.statements:
             format_node(ast, statement, depth + 1, sb)
@@ -75,6 +99,9 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         append_int(sb, id)
         sb.append(" name=")
         sb.append(parameter.name)
+        if parameter.is_foreign:
+            sb.append(" foreign")
+        end
         sb.append("\n")
         if parameter.annotation is Some:
             format_node(ast, parameter.annotation?, depth + 1, sb)
@@ -89,21 +116,162 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         end
         sb.append(type_name.name)
         sb.append("\n")
+        for argument in type_name.arguments:
+            format_node(ast, argument, depth + 1, sb)
+        end
+    case TABLE_DECL{declaration}:
+        sb.append(concat("TABLE ", declaration.name, "\n"))
+        format_node(ast, declaration.key_annotation, depth + 1, sb)
+        format_node(ast, declaration.value_annotation, depth + 1, sb)
+        for entry in declaration.entries:
+            append_indent(sb, depth + 1)
+            sb.append(concat(entry.name, "\n"))
+            format_node(ast, entry.value, depth + 2, sb)
+        end
+    case TABLE_LOOKUP{value}:
+        sb.append("TABLE_LOOKUP\n")
+        format_node(ast, value.key, depth + 1, sb)
+    case TYPE_DECL{declaration}:
+        sb.append("TYPE_DECL #")
+        append_int(sb, id)
+        sb.append(" name=")
+        sb.append(declaration.name)
+        sb.append("\n")
+        for member in declaration.members:
+            format_node(ast, member, depth + 1, sb)
+        end
+    case TYPE_MEMBER{member}:
+        sb.append("TYPE_MEMBER #")
+        append_int(sb, id)
+        sb.append(" name=")
+        sb.append(member.name)
+        sb.append("\n")
+        if member.annotation is Some:
+            format_node(ast, member.annotation?, depth + 1, sb)
+        end
+    case GLOBAL_DECL{declaration}:
+        sb.append("GLOBAL #")
+        append_int(sb, id)
+        sb.append(" name=")
+        sb.append(declaration.name)
+        sb.append("\n")
+        format_node(ast, declaration.initializer, depth + 1, sb)
     case LOCAL_DECL{declaration}:
         sb.append("DECLARE #")
         append_int(sb, id)
         sb.append(" name=")
         sb.append(declaration.name)
         sb.append("\n")
-        format_node(ast, declaration.initializer, depth + 1, sb)
+        if declaration.annotation is Some:
+            format_node(ast, declaration.annotation?, depth + 1, sb)
+        end
+        if declaration.initializer is Some:
+            format_node(ast, declaration.initializer?, depth + 1, sb)
+        end
+    case ASSIGN{statement}:
+        sb.append("ASSIGN #")
+        append_int(sb, id)
+        sb.append("\n")
+        format_node(ast, statement.target, depth + 1, sb)
+        format_node(ast, statement.value, depth + 1, sb)
+    case TRY{statement}:
+        sb.append("TRY\n")
+        if statement.binding is Some:
+            format_node(ast, statement.binding?, depth + 1, sb)
+        else:
+            format_node(ast, statement.call, depth + 1, sb)
+        end
+        append_indent(sb, depth + 1)
+        sb.append("SUCCESS\n")
+        for child in statement.body.statements:
+            format_node(ast, child, depth + 2, sb)
+        end
+        append_indent(sb, depth + 1)
+        sb.append("EXCEPT\n")
+        for child in statement.except_body.statements:
+            format_node(ast, child, depth + 2, sb)
+        end
+    case MATCH{statement}:
+        sb.append("MATCH\n")
+        format_node(ast, statement.value, depth + 1, sb)
+        for arm in statement.arms:
+            append_indent(sb, depth + 1)
+            sb.append(concat("CASE ", arm.tag, "\n"))
+            if arm.binding is Some:
+                format_node(ast, arm.binding?, depth + 2, sb)
+            end
+            for child in arm.body.statements:
+                format_node(ast, child, depth + 2, sb)
+            end
+        end
+        if statement.other_body is Some:
+            append_indent(sb, depth + 1)
+            sb.append("OTHER\n")
+            for child in statement.other_body?.statements:
+                format_node(ast, child, depth + 2, sb)
+            end
+        end
+    case MATCH_BINDING{binding}:
+        sb.append(concat("MATCH_BINDING ", binding.name, "\n"))
     case IF{statement}:
         sb.append("IF #")
         append_int(sb, id)
         sb.append("\n")
-        format_node(ast, statement.condition, depth + 1, sb)
-        for body_statement in statement.body.statements:
-            format_node(ast, body_statement, depth + 1, sb)
+        for index, branch in statement.branches:
+            if index > 0:
+                append_indent(sb, depth + 1)
+                sb.append("ELIF\n")
+            end
+            format_node(ast, branch.condition, depth + 1, sb)
+            for body_statement in branch.body.statements:
+                format_node(ast, body_statement, depth + 1, sb)
+            end
         end
+        if statement.else_body is Some:
+            append_indent(sb, depth + 1)
+            sb.append("ELSE\n")
+            for body_statement in statement.else_body?.statements:
+                format_node(ast, body_statement, depth + 1, sb)
+            end
+        end
+    case WHILE{loop}:
+        sb.append("WHILE #")
+        append_int(sb, id)
+        sb.append("\n")
+        format_node(ast, loop.condition, depth + 1, sb)
+        for statement in loop.body.statements:
+            format_node(ast, statement, depth + 1, sb)
+        end
+    case FOR{loop}:
+        sb.append("FOR #")
+        append_int(sb, id)
+        sb.append("\n")
+        format_node(ast, loop.variable, depth + 1, sb)
+        format_node(ast, loop.start, depth + 1, sb)
+        format_node(ast, loop.stop, depth + 1, sb)
+        for statement in loop.body.statements:
+            format_node(ast, statement, depth + 1, sb)
+        end
+    case FOREACH{loop}:
+        sb.append("FOREACH\n")
+        format_node(ast, loop.first, depth + 1, sb)
+        if loop.second is Some:
+            format_node(ast, loop.second?, depth + 1, sb)
+        end
+        format_node(ast, loop.container, depth + 1, sb)
+        for statement in loop.body.statements:
+            format_node(ast, statement, depth + 1, sb)
+        end
+    case LOOP_VARIABLE{name}:
+        sb.append("LOOP_VARIABLE #")
+        append_int(sb, id)
+        sb.append(" name=")
+        sb.append(name)
+        sb.append("\n")
+    case BREAK:
+        sb.append("BREAK\n")
+    case CONTINUE:
+        sb.append("CONTINUE\n")
     case RETURN{statement}:
         sb.append("RETURN #")
         append_int(sb, id)
@@ -111,6 +279,74 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         if statement.value is Some:
             format_node(ast, statement.value?, depth + 1, sb)
         end
+    case STRUCT_LITERAL{literal}:
+        sb.append("STRUCT_LITERAL #")
+        append_int(sb, id)
+        sb.append("\n")
+        format_node(ast, literal.annotation, depth + 1, sb)
+        for field in literal.fields:
+            append_indent(sb, depth + 1)
+            sb.append(field.name)
+            sb.append("\n")
+            format_node(ast, field.value, depth + 2, sb)
+        end
+        if literal.destination is Some:
+            format_node(ast, literal.destination?, depth + 1, sb)
+        end
+    case DICT_LITERAL{literal}:
+        sb.append("DICT_LITERAL\n")
+        if literal.annotation is Some:
+            format_node(ast, literal.annotation?, depth + 1, sb)
+        end
+        for entry in literal.entries:
+            format_node(ast, entry.key, depth + 1, sb)
+            format_node(ast, entry.value, depth + 1, sb)
+        end
+        if literal.destination is Some:
+            format_node(ast, literal.destination?, depth + 1, sb)
+        end
+    case DEFAULT_VALUE{type_id}:
+        sb.append("DEFAULT_VALUE type=")
+        append_int(sb, type_id)
+        sb.append("\n")
+    case OPTION_LITERAL{literal}:
+        sb.append("SOME\n" if literal.value is Some else "NONE\n")
+        if literal.value is Some:
+            format_node(ast, literal.value?, depth + 1, sb)
+        end
+        if literal.annotation is Some:
+            format_node(ast, literal.annotation?, depth + 1, sb)
+        end
+        if literal.destination is Some:
+            format_node(ast, literal.destination?, depth + 1, sb)
+        end
+    case VARIANT_LITERAL{literal}:
+        sb.append("VARIANT_LITERAL ")
+        sb.append(literal.tag)
+        sb.append("\n")
+        format_node(ast, literal.annotation, depth + 1, sb)
+        if literal.value is Some:
+            format_node(ast, literal.value?, depth + 1, sb)
+        end
+        if literal.destination is Some:
+            format_node(ast, literal.destination?, depth + 1, sb)
+        end
+    case VARIANT_CHECK{check}:
+        sb.append("IS_TAG ")
+        sb.append(check.tag)
+        sb.append("\n")
+        format_node(ast, check.value, depth + 1, sb)
+    case OPTION_CHECK{check}:
+        sb.append("IS_SOME\n" if check.is_some else "IS_NONE\n")
+        format_node(ast, check.value, depth + 1, sb)
+    case UNWRAP{value}:
+        sb.append("UNWRAP\n")
+        format_node(ast, value, depth + 1, sb)
+    case FIELD{field}:
+        sb.append("FIELD ")
+        sb.append(field.name)
+        sb.append("\n")
+        format_node(ast, field.value, depth + 1, sb)
     case INTEGER_LITERAL:
         sb.append("INTEGER #")
         append_int(sb, id)
@@ -119,6 +355,68 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
         sb.append("..")
         append_int(sb, node.span.stop)
         sb.append(")\n")
+    case DOUBLE_LITERAL:
+        sb.append("DOUBLE #")
+        append_int(sb, id)
+        sb.append("\n")
+    case BOOL_LITERAL:
+        sb.append("BOOL #")
+        append_int(sb, id)
+        sb.append("\n")
+    case CHAR_LITERAL:
+        sb.append("CHAR #")
+        append_int(sb, id)
+        sb.append("\n")
+    case STRING_LITERAL:
+        sb.append("STRING\n")
+    case VECTOR_LITERAL{literal}:
+        sb.append("VECTOR\n")
+        if literal.count is Some:
+            format_node(ast, literal.count?, depth + 1, sb)
+        end
+        for element in literal.elements:
+            format_node(ast, element, depth + 1, sb)
+        end
+        if literal.destination is Some:
+            format_node(ast, literal.destination?, depth + 1, sb)
+        end
+    case INDEX{index}:
+        sb.append("INDEX\n")
+        format_node(ast, index.value, depth + 1, sb)
+        format_node(ast, index.index, depth + 1, sb)
+    case SLICE{slice}:
+        sb.append("SLICE\n")
+        format_node(ast, slice.value, depth + 1, sb)
+        if slice.start is Some:
+            format_node(ast, slice.start?, depth + 1, sb)
+        end
+        if slice.stop is Some:
+            format_node(ast, slice.stop?, depth + 1, sb)
+        end
+    case GLOBAL_REGION:
+        sb.append("GLOBAL_REGION\n")
+    case LOCAL_REGION:
+        sb.append("LOCAL_REGION\n")
+    case REGION_OF{inner}:
+        sb.append("REGION_OF\n")
+        format_node(ast, inner, depth + 1, sb)
+    case MUST{required}:
+        sb.append("MUST\n")
+        format_node(ast, required.call, depth + 1, sb)
+    case GROUP{inner}:
+        sb.append("GROUP #")
+        append_int(sb, id)
+        sb.append("\n")
+        format_node(ast, inner, depth + 1, sb)
+    case UNARY{unary}:
+        sb.append("UNARY #")
+        append_int(sb, id)
+        if unary.op == ast::UnaryOp.NEGATE:
+            sb.append(" -\n")
+        else:
+            sb.append(" not\n")
+        end
+        format_node(ast, unary.operand, depth + 1, sb)
     case IDENTIFIER_EXPR{identifier}:
         sb.append("IDENTIFIER #")
         append_int(sb, id)
@@ -132,11 +430,21 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
     case CALL{call}:
         sb.append("CALL #")
         append_int(sb, id)
+        if call.propagate:
+            sb.append(" propagate")
+        end
         sb.append("\n")
         format_node(ast, call.callee, depth + 1, sb)
         for argument in call.arguments:
             format_node(ast, argument, depth + 1, sb)
         end
+    case CONDITIONAL{conditional}:
+        sb.append("CONDITIONAL #")
+        append_int(sb, id)
+        sb.append("\n")
+        format_node(ast, conditional.condition, depth + 1, sb)
+        format_node(ast, conditional.when_true, depth + 1, sb)
+        format_node(ast, conditional.when_false, depth + 1, sb)
     case BINARY{binary}:
         sb.append("BINOP #")
         append_int(sb, id)
@@ -147,8 +455,19 @@ func format_node(foreign ast: ast::Ast, id: int, depth: int, sb: strbuf::StrBuf)
             sb.append("MINUS\n")
         elif binary.op == ast::BinaryOp.LT:
             sb.append("LT\n")
+        else:
+            sb.append(ast::BinaryOpText[binary.op])
+            sb.append("\n")
         end
         format_node(ast, binary.left, depth + 1, sb)
         format_node(ast, binary.right, depth + 1, sb)
+    case ENUM_VALUE{value}:
+        sb.append("ENUM_VALUE #")
+        append_int(sb, id)
+        sb.append(" type=")
+        append_int(sb, value.type_id)
+        sb.append(" member=")
+        append_int(sb, value.member)
+        sb.append("\n")
     end
 end

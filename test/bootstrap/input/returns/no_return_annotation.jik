@@ -1,0 +1,5 @@
+func empty() -> int:
+end
+func main():
+    return 0
+end

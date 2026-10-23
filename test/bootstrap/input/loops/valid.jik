@@ -1,0 +1,80 @@
+func in_while(flag: bool):
+    while flag:
+        return 42
+    end
+    return 0
+end
+
+func in_for():
+    for index = 0, 1:
+        return 42
+    end
+end
+
+func main():
+    sum := 0
+    for index = 2, 5:
+        sum = sum + index
+    end
+    if sum != 9:
+        return 1
+    end
+    for index = 3, 3:
+        return 2
+    end
+    for index = 4, 2:
+        return 3
+    end
+    counter := 0
+    sum = 0
+    while counter < 10:
+        counter = counter + 1
+        if counter == 2:
+            continue
+        end
+        if counter == 5:
+            break
+        end
+        sum = sum + counter
+    end
+    if counter != 5 or sum != 8:
+        return 4
+    end
+    count := 0
+    for outer = 0, 3:
+        if outer == 1:
+            continue
+        end
+        for inner = 0, 3:
+            if inner == 1:
+                break
+            end
+            count = count + 1
+        end
+    end
+    if count != 2:
+        return 5
+    end
+    limit := 5
+    count = 0
+    for index = 0, limit:
+        count = count + 1
+        limit = 2
+    end
+    if count != 2:
+        return 6
+    end
+    remaining: double = 2.0
+    count = 0
+    while remaining:
+        remaining = remaining - 1
+        count = count + 1
+    end
+    if count != 2:
+        return 8
+    end
+    if in_while(false) != 0 or in_while(true) != 42:
+        return 9
+    end
+    return in_for()
+end

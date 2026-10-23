@@ -1,0 +1,51 @@
+use "jik/testing" as test
+
+use "test_strings"
+use "../../src/bootstrap/language/types"
+
+
+func test_members_and_identity(ts) -> void:
+    text := "enum Color:\n    ZEBRA\n    APPLE\nend\nfunc pick() -> Color:\n    return Color.APPLE\nend\nfunc main():\n    value: Color\n    return 0\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    enum_type := mod.ast.nodes[root.declarations[0]].kind.TYPE_DECL.resolved_type?
+    definition := mod.type_store.types[enum_type].kind.NAMED
+    test::suite_assert(ts, types::is_enum(mod.type_store, enum_type), site())
+    test::suite_assert(ts, not types::is_allocated(mod.type_store, enum_type), site())
+    test::suite_assert(ts, len(definition.member_names) == 2 and len(definition.member_types) == 0, site())
+    test::suite_assert(ts, definition.member_names[0] == "ZEBRA" and definition.member_names[1] == "APPLE", site())
+    count := 0
+    for node in mod.ast.nodes:
+        if node.kind is ENUM_VALUE:
+            test::suite_assert(ts, node.inferred_type? == enum_type, site())
+            test::suite_assert(ts, node.allocation_target is None, site())
+            count = count + 1
+        end
+    end
+    test::suite_assert(ts, count == 2, site())
+end
+
+
+func test_errors(ts) -> void:
+    test_strings::check_error(ts, "enum E:\nend\n", "empty enum")
+    test_strings::check_error(ts, "enum E:\n    A\n    A\nend\n", "duplicate type member")
+    test_strings::check_error(ts, "enum E:\n    A\nend\nfunc bad():\n    value := E.B\nend\n", "unknown enum member")
+    test_strings::check_error(ts, "enum E:\n    A\nend\nfunc bad():\n    E.A = E.A\nend\n", "invalid assignment target")
+    test_strings::check_error(ts, "enum E:\n    A\nend\nfunc bad():\n    value := E.A < E.A\nend\n", "invalid numeric operands")
+    test_strings::check_error(ts, "enum E:\n    A\nend\nfunc bad():\n    value := E.A + E.A\nend\n", "invalid numeric operands")
+    test_strings::check_error(ts, "enum E:\n    A\nend\nenum F:\n    A\nend\nfunc bad():\n    value := E.A == F.A\nend\n", "invalid numeric operands")
+    test_strings::check_error(ts, "enum E:\n    A\nend\nfunc bad():\n    value := E.A == 0\nend\n", "invalid numeric operands")
+    test_strings::check_error(ts, "enum E:\n    A\nend\nfunc bad(r: Region):\n    value: E[r]\nend\n", "invalid enum allocation")
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_enums")
+    test_members_and_identity(ts)
+    test_errors(ts)
+end

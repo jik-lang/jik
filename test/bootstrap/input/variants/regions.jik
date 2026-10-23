@@ -1,0 +1,41 @@
+variant Data:
+    EMPTY
+    TEXT: String
+end
+
+func make(text: String, r: Region) -> Data:
+    return Data.TEXT{text}[r]
+end
+
+func empty(r: Region) -> Data:
+    return Data.EMPTY{}[r]
+end
+
+func implicit(r: Region) -> Data:
+    value := Data.TEXT{"implicit"}@
+    return value
+end
+
+func literal(r: Region) -> Data:
+    return Data.TEXT{"literal"}
+end
+
+func inspect(value: Data) -> int:
+    if value is TEXT:
+        return len(value.TEXT)
+    end
+    return 0
+end
+
+func main():
+    owner := "owner"
+    value := make("hello", .owner)
+    value.TEXT = "updated"
+    println(value, ":", inspect(value))
+    value = empty(.owner)
+    println(value)
+    value = implicit(.owner)
+    println(value)
+    value = literal(.owner)
+    println(value)
+end

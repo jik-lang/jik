@@ -1,0 +1,6 @@
+use "b"
+
+
+func value():
+    return 1
+end

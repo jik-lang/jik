@@ -1,0 +1,10 @@
+func main():
+    value := site()
+    locations := [value]
+    assert(site_line(locations[0]) == 2)
+    option := Some{value}
+    assert(site_line(option?) == 2)
+    empty: Option[Site]
+    assert(empty is None)
+    println("containers-ok")
+end

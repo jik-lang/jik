@@ -1,0 +1,8 @@
+// Test target probing without requiring an installed cross compiler.
+func main(args):
+    if len(args) == 3 and args[1] == "--target=flag-selected" and args[2] == "-dumpmachine":
+        println("x86_64-unknown-linux-gnu")
+        return 0
+    end
+    return 1
+end

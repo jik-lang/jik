@@ -1,0 +1,1310 @@
+//! Checked expression, statement, and function emission; recursive operations stay together.
+
+use "jik/string"
+
+use "backend"
+use "c_names"
+use "../language/builtin"
+use "../modules/module"
+use "../source"
+use "../parser/ast"
+use "../language/types"
+use "../diag"
+use "../language/region_source"
+use "../lexer/string_literal"
+
+
+// State for one Jik function body, or a fresh context for startup expressions.
+// Allocated in the compilation/output region because translation shares that region.
+// Error destinations stay explicit at calls; handler IDs come from the checked AST.
+// Temporary names use node IDs or nested C scopes, not a translation-wide counter.
+struct BodyContext:
+    translation: backend::Translation    // Shared writer, program views, and translation settings.
+    needs_local_region: bool    // Function-local setup/cleanup; false for startup.
+    return_type: int    // Shared type ID; read only while emitting a function return.
+    is_throwing: bool    // Selects the function's error/return cleanup convention.
+end
+
+
+throws func emit_print(body: BodyContext, mod: module::Module, node: ast::Node) -> void:
+    g := body.translation
+    call := node.kind.CALL
+    g.output.write(concat("jik_", builtin::Names[call.builtin?], "("))
+    if len(call.arguments) == 0:
+        g.output.write("NULL, 0)")
+        return
+    end
+    g.output.write("(")
+    c_names::write_atom_type(g.output, types::Atom.STRING)
+    g.output.write("[]){")
+    for index, argument in call.arguments:
+        if index > 0:
+            g.output.write(", ")
+        end
+        type_id := mod.ast.nodes[argument].inferred_type?
+        if type_id == types::atom(mod.type_store, types::Atom.STRING):
+            try emit_expression(body, mod, argument)
+        else:
+            backend::write_print_conversion(g, mod.type_store, type_id)
+            g.output.write("(")
+            try emit_expression(body, mod, argument)
+            g.output.write(", jik_local_region)")
+        end
+    end
+    g.output.write(concat("}, ", string::from_int(len(call.arguments)), ")"))
+end
+
+throws func write_allocation_target(body: BodyContext, mod: module::Module, id: int) -> void:
+    g := body.translation
+    node := mod.ast.nodes[id]
+    if node.allocation_target is None:
+        if node.region_source.kind == region_source::Kind.GLOBAL:
+            g.output.write("jik_global_region")
+            return
+        end
+        if node.region_source.kind != region_source::Kind.LOCAL or not body.needs_local_region:
+            fail("region analysis must resolve literal allocation destinations")
+        end
+        g.output.write("jik_local_region")
+        return
+    end
+    target := mod.ast.nodes[node.allocation_target?]
+    if target.kind is PARAMETER:
+        backend::write_local(g, target.kind.PARAMETER.name)
+    else:
+        try emit_expression(body, mod, node.allocation_target?)
+    end
+    if types::is_allocated(mod.type_store, target.inferred_type?):
+        g.output.write("->jik_region")
+    end
+end
+
+throws func emit_variant_default(body: BodyContext, mod: module::Module, type_id: int, allocation: int) -> void:
+    g := body.translation
+    definition := mod.type_store.types[type_id].kind.NAMED
+    backend::write_record_name(g, type_id)
+    g.output.write("_new(")
+    try write_allocation_target(body, mod, allocation)
+    g.output.write(", &(struct ")
+    backend::write_record_name(g, type_id)
+    g.output.write("){.tag = 0")
+    payload := definition.member_types[0]
+    if payload != types::atom(mod.type_store, types::Atom.VOID):
+        g.output.write(", .val.")
+        backend::write_field_name(g, definition.member_names[0])
+        g.output.write(" = ")
+        try emit_default(body, mod, payload, allocation)
+    end
+    g.output.write("})")
+end
+
+throws func emit_variant(body: BodyContext, mod: module::Module, id: int) -> void:
+    g := body.translation
+    node := mod.ast.nodes[id]
+    literal := node.kind.VARIANT_LITERAL
+    backend::write_record_name(g, node.inferred_type?)
+    g.output.write("_new(")
+    try write_allocation_target(body, mod, id)
+    g.output.write(", &(struct ")
+    backend::write_record_name(g, node.inferred_type?)
+    g.output.write(concat("){.tag = ", string::from_int(literal.member)))
+    if literal.value is Some:
+        g.output.write(", .val.")
+        backend::write_field_name(g, literal.tag)
+        g.output.write(" = ")
+        try emit_expression(body, mod, literal.value?)
+    end
+    g.output.write("})")
+end
+
+throws func emit_default(body: BodyContext, mod: module::Module, type_id: int, allocation: int) -> void:
+    g := body.translation
+    if types::is_extern_struct(mod.type_store, type_id):
+        initializer := mod.type_store.types[type_id].kind.NAMED.initializer?
+        function := g.modules[initializer.source_id].ast.nodes[initializer.declaration_id].kind.FUNCTION_DECL
+        backend::write_function_name(g, initializer.source_id, function)
+        g.output.write("(")
+        try write_allocation_target(body, mod, allocation)
+        g.output.write(")")
+    elif types::is_enum(mod.type_store, type_id):
+        backend::write_enum_member(g, type_id, 0)
+    elif types::dict_element(mod.type_store, type_id) is Some:
+        backend::write_dict_name(g, type_id)
+        g.output.write("_new(")
+        try write_allocation_target(body, mod, allocation)
+        g.output.write(")")
+    elif types::option_element(mod.type_store, type_id) is Some:
+        backend::write_option_name(g, type_id)
+        g.output.write("_none(")
+        try write_allocation_target(body, mod, allocation)
+        g.output.write(")")
+    elif types::is_variant(mod.type_store, type_id):
+        try emit_variant_default(body, mod, type_id, allocation)
+    elif types::is_record(mod.type_store, type_id):
+        definition := mod.type_store.types[type_id].kind.NAMED
+        backend::write_record_name(g, type_id)
+        g.output.write("_new(")
+        try write_allocation_target(body, mod, allocation)
+        g.output.write(", &(struct ")
+        backend::write_record_name(g, type_id)
+        g.output.write("){.jik_region = NULL")
+        for index, member in definition.member_types:
+            g.output.write(", .")
+            backend::write_field_name(g, definition.member_names[index])
+            g.output.write(" = ")
+            try emit_default(body, mod, member, allocation)
+        end
+        g.output.write("})")
+    elif type_id == types::atom(mod.type_store, types::Atom.STRING):
+        g.output.write("jik_string_new(\"\", ")
+        try write_allocation_target(body, mod, allocation)
+        g.output.write(")")
+    elif types::vector_element(mod.type_store, type_id) is Some:
+        backend::write_vector_name(g, type_id)
+        g.output.write("_new(")
+        try write_allocation_target(body, mod, allocation)
+        g.output.write(", 0)")
+    elif type_id == types::atom(mod.type_store, types::Atom.DOUBLE):
+        g.output.write("0.0")
+    elif type_id == types::atom(mod.type_store, types::Atom.BOOL):
+        g.output.write("false")
+    else:
+        g.output.write("0")
+    end
+end
+
+throws func emit_struct(body: BodyContext, mod: module::Module, id: int) -> void:
+    g := body.translation
+    node := mod.ast.nodes[id]
+    if types::is_extern_struct(mod.type_store, node.inferred_type?):
+        try emit_default(body, mod, node.inferred_type?, id)
+        return
+    end
+    literal := node.kind.STRUCT_LITERAL
+    backend::write_record_name(g, node.inferred_type?)
+    g.output.write("_new(")
+    try write_allocation_target(body, mod, id)
+    g.output.write(", &(struct ")
+    backend::write_record_name(g, node.inferred_type?)
+    g.output.write("){.jik_region = NULL")
+    definition := mod.type_store.types[node.inferred_type?].kind.NAMED
+    // Match the seed's declaration order for emitted designated fields. This
+    // does not specify the C evaluation order of initializer expressions.
+    for index, name in definition.member_names:
+        for field in literal.fields:
+            if field.member == index:
+                g.output.write(", .")
+                backend::write_field_name(g, name)
+                g.output.write(" = ")
+                try emit_expression(body, mod, field.value)
+                break
+            end
+        end
+    end
+    g.output.write("})")
+end
+
+throws func emit_dict(body: BodyContext, mod: module::Module, id: int) -> void:
+    g := body.translation
+    node := mod.ast.nodes[id]
+    literal := node.kind.DICT_LITERAL
+    backend::write_dict_name(g, node.inferred_type?)
+    if len(literal.entries) == 0:
+        g.output.write("_new(")
+        try write_allocation_target(body, mod, id)
+        g.output.write(")")
+        return
+    end
+    g.output.write("_new_from(")
+    try write_allocation_target(body, mod, id)
+    g.output.write(", (struct ")
+    backend::write_dict_name(g, node.inferred_type?)
+    g.output.write("_item[]){")
+    for index, entry in literal.entries:
+        if index > 0:
+            g.output.write(", ")
+        end
+        g.output.write("{.key = ")
+        try emit_expression(body, mod, entry.key)
+        g.output.write(", .val = ")
+        try emit_expression(body, mod, entry.value)
+        g.output.write("}")
+    end
+    g.output.write(concat("}, ", string::from_int(len(literal.entries)), ", "))
+    backend::write_debug_location(g, node)
+    g.output.write(")")
+end
+
+throws func emit_unwrap(body: BodyContext, mod: module::Module, value: int, node: ast::Node) -> void:
+    g := body.translation
+    backend::write_option_name(g, mod.ast.nodes[value].inferred_type?)
+    g.output.write("_unwrap(")
+    try emit_expression(body, mod, value)
+    g.output.write(", ")
+    backend::write_debug_location(g, node)
+    g.output.write(")")
+end
+
+throws func emit_vector(body: BodyContext, mod: module::Module, id: int) -> void:
+    g := body.translation
+    node := mod.ast.nodes[id]
+    literal := node.kind.VECTOR_LITERAL
+    if literal.count is Some:
+        // The shared macro repeats its count operand in its loop condition.
+        // Capture it once, while leaving the initializer inside the loop.
+        // Like JIK_MAKE_VEC itself, this uses a GNU statement expression.
+        g.output.write("({ ")
+        c_names::write_atom_type(g.output, types::Atom.INT)
+        g.output.write(" jik_repeat_count = ")
+        try emit_expression(body, mod, literal.count?)
+        g.output.write("; JIK_MAKE_VEC(")
+        try write_allocation_target(body, mod, id)
+        g.output.write(", ")
+        backend::write_vector_name(g, node.inferred_type?)
+        g.output.write(", ")
+        g.output.write("jik_repeat_count")
+        g.output.write(", ")
+        try emit_expression(body, mod, literal.elements[0])
+        g.output.write("); })")
+        return
+    end
+    backend::write_vector_name(g, node.inferred_type?)
+    if len(literal.elements) == 0:
+        g.output.write("_new(")
+        try write_allocation_target(body, mod, id)
+        g.output.write(", 0)")
+        return
+    end
+    g.output.write("_new_from(")
+    try write_allocation_target(body, mod, id)
+    g.output.write(concat(", ", string::from_int(len(literal.elements)), ", ("))
+    element_type := types::vector_element(mod.type_store, node.inferred_type?)
+    try backend::write_type(g, mod, element_type?, node)
+    g.output.write("[]){")
+    for index, element in literal.elements:
+        if index > 0:
+            g.output.write(", ")
+        end
+        try emit_expression(body, mod, element)
+    end
+    g.output.write("})")
+end
+
+throws func emit_builtin(body: BodyContext, mod: module::Module, node: ast::Node) -> void:
+    g := body.translation
+    call := node.kind.CALL
+    kind := call.builtin?
+    if kind == builtin::Kind.ERROR_MSG or kind == builtin::Kind.ERROR_CODE:
+        // Resolution selects the active except once, including across nested tries.
+        g.output.write(concat("jik_", builtin::Names[kind], "(&jik_try_error_", string::from_int(call.error_handler?)))
+        if kind == builtin::Kind.ERROR_MSG:
+            g.output.write(", ")
+            try emit_expression(body, mod, call.arguments[0])
+        end
+        g.output.write(")")
+        return
+    end
+    if builtin::is_output(kind):
+        try emit_print(body, mod, node)
+        return
+    end
+    if kind == builtin::Kind.SITE:
+        file := g.sources.sources[node.span.source_id]
+        line := source::line_index(file, node.span.start)
+        g.output.write("jik_site_new(")
+        backend::write_string_bytes(g, file.path)
+        g.output.write(", ")
+        backend::write_string_bytes(g, file.text[source::line_start(file, line):source::line_stop(file, line)])
+        g.output.write(concat(", ", string::from_int(line + 1), ")"))
+        return
+    end
+    if kind == builtin::Kind.SITE_LINE or builtin::is_site_text(kind):
+        g.output.write(concat("jik_", builtin::Names[kind], "("))
+        for index, value in call.arguments:
+            if index > 0:
+                g.output.write(", ")
+            end
+            try emit_expression(body, mod, value)
+        end
+        g.output.write(")")
+        return
+    end
+    if kind == builtin::Kind.CONCAT:
+        count := len(call.arguments) if call.auto_region else len(call.arguments) - 1
+        g.output.write("jik_concat((")
+        c_names::write_atom_type(g.output, types::Atom.STRING)
+        g.output.write("[]){")
+        for index, part in call.arguments:
+            if index < count:
+                if index > 0:
+                    g.output.write(", ")
+                end
+                try emit_expression(body, mod, part)
+            end
+        end
+        g.output.write(concat("}, ", string::from_int(count), ", "))
+        if call.auto_region:
+            g.output.write("jik_global_region" if node.region_source.kind == region_source::Kind.GLOBAL else "jik_local_region")
+        else:
+            try emit_expression(body, mod, call.arguments[count])
+        end
+        g.output.write(")")
+        return
+    end
+    argument := call.arguments[0]
+    if kind == builtin::Kind.ASSERT:
+        file := g.sources.sources[node.span.source_id]
+        g.output.write("jik_assert(")
+        try emit_expression(body, mod, argument)
+        g.output.write(", ")
+        backend::write_string_bytes(g, file.path)
+        g.output.write(concat(", ", string::from_int(source::line_index(file, node.span.start) + 1), ")"))
+        return
+    end
+    if kind == builtin::Kind.COPY:
+        if node.inferred_type? == types::atom(mod.type_store, types::Atom.STRING):
+            g.output.write("jik_string_new((")
+            try emit_expression(body, mod, argument)
+            g.output.write(")->data, ")
+        else:
+            backend::write_copy_name(g, node.inferred_type?)
+            g.output.write("(")
+            try emit_expression(body, mod, argument)
+            g.output.write(", ")
+        end
+        try emit_expression(body, mod, call.arguments[1])
+        g.output.write(")")
+        return
+    end
+    if kind == builtin::Kind.UNWRAP:
+        try emit_unwrap(body, mod, argument, node)
+        return
+    end
+    if kind == builtin::Kind.LEN:
+        if mod.ast.nodes[argument].inferred_type? == types::atom(mod.type_store, types::Atom.STRING):
+            g.output.write("((")
+            c_names::write_atom_type(g.output, types::Atom.INT)
+            g.output.write(")(")
+            try emit_expression(body, mod, argument)
+            g.output.write(")->size)")
+            return
+        end
+        g.output.write("((")
+        c_names::write_atom_type(g.output, types::Atom.INT)
+        g.output.write(")")
+        backend::write_collection_name(g, mod.type_store, mod.ast.nodes[argument].inferred_type?)
+        g.output.write("_size(")
+        try emit_expression(body, mod, argument)
+        g.output.write(", ")
+        backend::write_debug_location(g, node)
+        g.output.write("))")
+        return
+    end
+    backend::write_collection_name(g, mod.type_store, mod.ast.nodes[argument].inferred_type?)
+    g.output.write(concat("_", builtin::Names[kind], "("))
+    try emit_expression(body, mod, argument)
+    if kind == builtin::Kind.PUSH:
+        g.output.write(", ")
+        try emit_expression(body, mod, call.arguments[1])
+    end
+    if kind != builtin::Kind.CLEAR:
+        g.output.write(", ")
+        backend::write_debug_location(g, node)
+    end
+    g.output.write(")")
+end
+
+// A captured receiver is scoped to one compound assignment. Ordinary field
+// expressions retain their existing emission and variant runtime checks.
+throws func emit_field(body: BodyContext, mod: module::Module, node: ast::Node, captured: bool) -> void:
+    g := body.translation
+    field := node.kind.FIELD
+    receiver_type := mod.ast.nodes[field.value].inferred_type?
+    is_variant := types::is_variant(mod.type_store, receiver_type)
+    if is_variant:
+        backend::write_record_name(g, receiver_type)
+        g.output.write("_access(")
+    else:
+        g.output.write("(")
+    end
+    if captured:
+        g.output.write("jik_compound_receiver")
+    else:
+        try emit_expression(body, mod, field.value)
+    end
+    if is_variant:
+        g.output.write(concat(", ", string::from_int(field.member), ", "))
+        backend::write_debug_location(g, node)
+        g.output.write(")->val.")
+    else:
+        g.output.write(")->")
+    end
+    backend::write_field_name(g, field.name)
+end
+
+/// Emit the resolved target and checked arguments without repeating name lookup.
+/// A throwing target requires an explicit C error destination; fail if it is absent.
+/// Arguments retain ordinary C evaluation rules; only this call receives the
+/// handler's error destination. Nested throwing arguments still require handling.
+throws func emit_call(body: BodyContext, mod: module::Module, node: ast::Node, foreign error_target: String) -> void:
+    g := body.translation
+    call := node.kind.CALL
+    if call.builtin is Some:
+        try emit_builtin(body, mod, node)
+        return
+    end
+    if call.target is None:
+        diag::error(g.diagnostics, "unresolved call", "semantic analysis must resolve calls", Some{node.span})
+        fail("code generation failed")
+    end
+    target := call.target?
+    target_mod := g.modules[target.source_id]
+    function := target_mod.ast.nodes[target.origin].kind.FUNCTION_DECL
+    backend::write_function_name(g, target_mod.source_id, function)
+    g.output.write("(")
+    first := true
+    for argument in call.arguments:
+        if not first:
+            g.output.write(", ")
+        end
+        try emit_expression(body, mod, argument)
+        first = false
+    end
+    if function.is_throwing:
+        if len(error_target) == 0:
+            fail("throwing call requires an error destination")
+        end
+        if not first:
+            g.output.write(", ")
+        end
+        g.output.write(error_target)
+    end
+    g.output.write(")")
+end
+
+throws func emit_must(body: BodyContext, mod: module::Module, required: ast::MustExpr) -> void:
+    g := body.translation
+    call := mod.ast.nodes[required.call].kind.CALL
+    target := call.target?
+    backend::write_must_name(g, target.source_id, target.origin)
+    g.output.write("(")
+    for index, argument in call.arguments:
+        if index > 0:
+            g.output.write(", ")
+        end
+        try emit_expression(body, mod, argument)
+    end
+    if len(call.arguments) > 0:
+        g.output.write(", ")
+    end
+    file := g.sources.sources[required.operator_span.source_id]
+    line := source::line_index(file, required.operator_span.start)
+    column := required.operator_span.start - source::line_start(file, line) + 1
+    backend::write_string_bytes(g, concat("must failed\n  --> ", file.path, ":", string::from_int(line + 1), ":", string::from_int(column)))
+    g.output.write(")")
+end
+
+/// Emit checked syntax directly as a C expression. A propagated call refers
+/// to the temporary already declared by statement emission; it is not emitted twice.
+throws func emit_expression(body: BodyContext, mod: module::Module, id: int) -> void:
+    g := body.translation
+    node := mod.ast.nodes[id]
+    match node.kind:
+    case INTEGER_LITERAL:
+        src := g.sources.sources[node.span.source_id]
+        literal := try string::slice(src.text, node.span.start, node.span.stop)
+        literal = string::replace(literal, "_", "")
+        // Jik decimal literals keep decimal meaning despite leading zeroes.
+        first := 0
+        while first + 1 < len(literal) and literal[first] == '0':
+            first += 1
+        end
+        decimal := try string::slice(literal, first, len(literal))
+        g.output.write(decimal)
+    case DOUBLE_LITERAL:
+        src := g.sources.sources[node.span.source_id]
+        literal := try string::slice(src.text, node.span.start, node.span.stop)
+        g.output.write(string::replace(literal, "_", ""))
+    case BOOL_LITERAL:
+        src := g.sources.sources[node.span.source_id]
+        literal := try string::slice(src.text, node.span.start, node.span.stop)
+        g.output.write(literal)
+    case CHAR_LITERAL{value}:
+        // Emit a typed unsigned byte without depending on C character-literal
+        // signedness, escape spelling or the host execution character set.
+        g.output.write("((")
+        c_names::write_atom_type(g.output, types::Atom.CHAR)
+        g.output.write(concat(")", string::from_int(string_literal::byte_value(value)), ")"))
+    case STRING_LITERAL{literal}:
+        g.output.write("jik_string_new(")
+        backend::write_string_bytes(g, literal.value)
+        g.output.write(", ")
+        try write_allocation_target(body, mod, id)
+        g.output.write(")")
+    case VECTOR_LITERAL:
+        try emit_vector(body, mod, id)
+    case DICT_LITERAL:
+        try emit_dict(body, mod, id)
+    case VARIANT_LITERAL:
+        try emit_variant(body, mod, id)
+    case VARIANT_CHECK{check}:
+        g.output.write("(")
+        try emit_expression(body, mod, check.value)
+        g.output.write(concat(")->tag == ", string::from_int(check.member)))
+    case STRUCT_LITERAL:
+        try emit_struct(body, mod, id)
+    case DEFAULT_VALUE{type_id}:
+        try emit_default(body, mod, type_id, id)
+    case ENUM_VALUE{value}:
+        backend::write_enum_member(g, value.type_id, value.member)
+    case OPTION_LITERAL{literal}:
+        backend::write_option_name(g, node.inferred_type?)
+        if literal.value is Some:
+            g.output.write("_some(")
+            try emit_expression(body, mod, literal.value?)
+            g.output.write(", ")
+        else:
+            g.output.write("_none(")
+        end
+        try write_allocation_target(body, mod, id)
+        g.output.write(")")
+    case OPTION_CHECK{check}:
+        backend::write_option_name(g, mod.ast.nodes[check.value].inferred_type?)
+        g.output.write("_is_some(" if check.is_some else "_is_none(")
+        try emit_expression(body, mod, check.value)
+        g.output.write(")")
+    case UNWRAP{value}:
+        try emit_unwrap(body, mod, value, node)
+    case FIELD:
+        try emit_field(body, mod, node, false)
+    case TABLE_LOOKUP{value}:
+        declaration := g.modules[value.target.source_id].ast.nodes[value.target.origin].kind.TABLE_DECL
+        backend::write_table_name(g, value.target.source_id, declaration.name)
+        g.output.write("[")
+        if types::is_variant(mod.type_store, declaration.key_type?):
+            g.output.write("(")
+            try emit_expression(body, mod, value.key)
+            g.output.write(")->tag")
+        else:
+            try emit_expression(body, mod, value.key)
+        end
+        g.output.write("]")
+    case INDEX{index}:
+        if mod.ast.nodes[index.value].inferred_type? == types::atom(mod.type_store, types::Atom.STRING):
+            g.output.write("jik_string")
+        else:
+            backend::write_collection_name(g, mod.type_store, mod.ast.nodes[index.value].inferred_type?)
+        end
+        g.output.write("_get(")
+        try emit_expression(body, mod, index.value)
+        g.output.write(", ")
+        try emit_expression(body, mod, index.index)
+        g.output.write(", ")
+        backend::write_debug_location(g, node)
+        g.output.write(")")
+    case SLICE{slice}:
+        if mod.ast.nodes[slice.value].inferred_type? == types::atom(mod.type_store, types::Atom.STRING):
+            g.output.write("jik_string")
+        else:
+            backend::write_vector_name(g, mod.ast.nodes[slice.value].inferred_type?)
+        end
+        g.output.write("_slice(")
+        try emit_expression(body, mod, slice.value)
+        g.output.write(", ")
+        if slice.start is Some:
+            try emit_expression(body, mod, slice.start?)
+            g.output.write(", false, ")
+        else:
+            g.output.write("0, true, ")
+        end
+        if slice.stop is Some:
+            try emit_expression(body, mod, slice.stop?)
+            g.output.write(", false, ")
+        else:
+            g.output.write("0, true, ")
+        end
+        backend::write_debug_location(g, node)
+        g.output.write(")")
+    case GLOBAL_REGION:
+        g.output.write("jik_global_region")
+    case LOCAL_REGION:
+        if not body.needs_local_region:
+            fail("region analysis must classify local region use")
+        end
+        g.output.write("jik_local_region")
+    case REGION_OF{inner}:
+        g.output.write("(")
+        try emit_expression(body, mod, inner)
+        g.output.write(")->jik_region")
+    case MUST{required}:
+        try emit_must(body, mod, required)
+    case GROUP{inner}:
+        g.output.write("(")
+        try emit_expression(body, mod, inner)
+        g.output.write(")")
+    case UNARY{unary}:
+        g.output.write("(")
+        if unary.op == ast::UnaryOp.NEGATE:
+            g.output.write("-")
+        else:
+            g.output.write("!")
+        end
+        try emit_expression(body, mod, unary.operand)
+        g.output.write(")")
+    case IDENTIFIER_EXPR{identifier}:
+        if identifier.global_origin is Some:
+            target := identifier.global_origin?
+            declaration := g.modules[target.source_id].ast.nodes[target.origin].kind.GLOBAL_DECL
+            backend::write_global_name(g, target.source_id, declaration.name)
+            return
+        end
+        if identifier.local_origin is None:
+            diag::error(g.diagnostics, "unresolved value", "semantic analysis must resolve local references", Some{node.span})
+            fail("code generation failed")
+        end
+        declaration := mod.ast.nodes[identifier.local_origin?]
+        if declaration.kind is LOCAL_DECL:
+            backend::write_local(g, declaration.kind.LOCAL_DECL.name)
+        elif declaration.kind is PARAMETER:
+            backend::write_local(g, declaration.kind.PARAMETER.name)
+        elif declaration.kind is MATCH_BINDING:
+            backend::write_local(g, declaration.kind.MATCH_BINDING.name)
+        elif declaration.kind is LOOP_VARIABLE:
+            backend::write_local(g, declaration.kind.LOOP_VARIABLE)
+        else:
+            diag::error(g.diagnostics, "invalid value binding", "expected a local or parameter", Some{node.span})
+            fail("code generation failed")
+        end
+    case CALL{call}:
+        if call.propagate:
+            g.output.write(concat("jik_propagated_value_", string::from_int(id)))
+        else:
+            try emit_call(body, mod, node, "")
+        end
+    case BINARY{binary}:
+        if mod.ast.nodes[binary.left].inferred_type? == types::atom(mod.type_store, types::Atom.STRING):
+            g.output.write("(jik_string_cmp(")
+            try emit_expression(body, mod, binary.left)
+            g.output.write(", ")
+            try emit_expression(body, mod, binary.right)
+            if binary.op == ast::BinaryOp.EQ:
+                g.output.write(") == 0)")
+            else:
+                g.output.write(") != 0)")
+            end
+            return
+        end
+        g.output.write("(")
+        try emit_expression(body, mod, binary.left)
+        g.output.write(" ")
+        g.output.write(ast::BinaryOpText[binary.op])
+        g.output.write(" ")
+        try emit_expression(body, mod, binary.right)
+        g.output.write(")")
+    case CONDITIONAL{conditional}:
+        g.output.write("(")
+        try emit_expression(body, mod, conditional.condition)
+        g.output.write(" ? ")
+        try emit_expression(body, mod, conditional.when_true)
+        g.output.write(" : ")
+        try emit_expression(body, mod, conditional.when_false)
+        g.output.write(")")
+    other:
+        diag::error(g.diagnostics, "unsupported expression", "expected a value", Some{node.span})
+        fail("code generation failed")
+    end
+end
+
+/// Capture the collection, not a pointer into its storage: RHS calls can grow a
+/// vector and relocate its elements. Read the old value before evaluating RHS,
+/// then use the normal checked setter with the captured receiver and index.
+throws func emit_compound_assignment(body: BodyContext, mod: module::Module, statement: ast::AssignStmt) -> void:
+    g := body.translation
+    target := mod.ast.nodes[statement.target]
+    binary := mod.ast.nodes[statement.value].kind.BINARY
+    receiver := target.kind.FIELD.value if target.kind is FIELD else target.kind.INDEX.value
+    receiver_type := mod.ast.nodes[receiver].inferred_type?
+    g.output.line("{")
+    g.output.indent()
+    g.output.start_line()
+    try backend::write_type(g, mod, receiver_type, mod.ast.nodes[receiver])
+    g.output.write(" jik_compound_receiver = ")
+    try emit_expression(body, mod, receiver)
+    g.output.write(";")
+    g.output.end_line()
+    if target.kind is INDEX:
+        g.output.start_line()
+        c_names::write_atom_type(g.output, types::Atom.INT)
+        g.output.write(" jik_compound_index = ")
+        try emit_expression(body, mod, target.kind.INDEX.index)
+        g.output.write(";")
+        g.output.end_line()
+    end
+    g.output.start_line()
+    try backend::write_type(g, mod, target.inferred_type?, target)
+    g.output.write(" jik_compound_previous = ")
+    if target.kind is FIELD:
+        try emit_field(body, mod, target, true)
+    else:
+        backend::write_vector_name(g, receiver_type)
+        g.output.write("_get(jik_compound_receiver, jik_compound_index, ")
+        backend::write_debug_location(g, target)
+        g.output.write(")")
+    end
+    g.output.write(";")
+    g.output.end_line()
+    g.output.start_line()
+    try backend::write_type(g, mod, target.inferred_type?, target)
+    g.output.write(concat(" jik_compound_value = (jik_compound_previous ", ast::BinaryOpText[binary.op], " "))
+    try emit_expression(body, mod, binary.right)
+    g.output.write(");")
+    g.output.end_line()
+    g.output.start_line()
+    if target.kind is FIELD:
+        try emit_field(body, mod, target, true)
+        g.output.write(" = jik_compound_value")
+    else:
+        backend::write_vector_name(g, receiver_type)
+        g.output.write("_set(jik_compound_receiver, jik_compound_index, jik_compound_value, ")
+        backend::write_debug_location(g, target)
+        g.output.write(")")
+    end
+    g.output.write(";")
+    g.output.end_line()
+    g.output.dedent()
+    g.output.line("}")
+end
+
+/// Copy the message into JikError while all argument regions remain alive.
+/// Temporaries evaluate each operand exactly once before the shared cleanup.
+throws func emit_fail(body: BodyContext, mod: module::Module, node: ast::Node) -> void:
+    g := body.translation
+    call := node.kind.CALL
+    first := call.arguments[0]
+    has_message := mod.ast.nodes[first].inferred_type? == types::atom(mod.type_store, types::Atom.STRING)
+    g.output.line("{")
+    g.output.indent()
+    if has_message:
+        g.output.start_line()
+        c_names::write_atom_type(g.output, types::Atom.STRING)
+        g.output.write("jik_fail_message = ")
+        try emit_expression(body, mod, first)
+        g.output.write(";")
+        g.output.end_line()
+    end
+    g.output.start_line()
+    c_names::write_atom_type(g.output, types::Atom.INT)
+    g.output.write(" jik_fail_code = ")
+    if not has_message:
+        try emit_expression(body, mod, first)
+    elif len(call.arguments) == 2:
+        try emit_expression(body, mod, call.arguments[1])
+    else:
+        g.output.write("1")
+    end
+    g.output.write(";")
+    g.output.end_line()
+    message := "jik_fail_message->data" if has_message else "\"\""
+    g.output.line(concat("jik_error_set(jik_err_arg, jik_fail_code, ", message, ");"))
+    g.output.line("goto jik_cleanup;")
+    g.output.dedent()
+    g.output.line("}")
+end
+
+/// A handler owns a stack error value. Results become bindings only on success;
+/// the function's existing cleanup path handles returns and failures in either arm.
+throws func emit_try(body: BodyContext, mod: module::Module, id: int) -> void:
+    g := body.translation
+    statement := mod.ast.nodes[id].kind.TRY
+    call := mod.ast.nodes[statement.call]
+    error_name := concat("jik_try_error_", string::from_int(id))
+    value_name := concat("jik_try_value_", string::from_int(id))
+    g.output.line("{")
+    g.output.indent()
+    g.output.line(concat("JikError ", error_name, " = {0};"))
+    g.output.start_line()
+    if statement.binding is Some:
+        try backend::write_type(g, mod, call.inferred_type?, call)
+        g.output.write(concat(" ", value_name, " = "))
+    end
+    try emit_call(body, mod, call, concat("&", error_name))
+    g.output.write(";")
+    g.output.end_line()
+    g.output.line(concat("if (!jik_error_failed(&", error_name, ")) {"))
+    g.output.indent()
+    if statement.binding is Some:
+        binding := mod.ast.nodes[statement.binding?]
+        g.output.start_line()
+        try backend::write_type(g, mod, binding.inferred_type?, binding)
+        g.output.write(" ")
+        backend::write_local(g, binding.kind.LOCAL_DECL.name)
+        g.output.write(concat(" = ", value_name, ";"))
+        g.output.end_line()
+    end
+    for child in statement.body.statements:
+        try emit_statement(body, mod, child)
+    end
+    g.output.dedent()
+    g.output.line("} else {")
+    g.output.indent()
+    for child in statement.except_body.statements:
+        try emit_statement(body, mod, child)
+    end
+    g.output.line(concat("jik_error_clear(&", error_name, ");"))
+    g.output.dedent()
+    g.output.line("}")
+    g.output.dedent()
+    g.output.line("}")
+end
+
+/// Capture a value before any store target is evaluated. A failing call leaves
+/// through the function cleanup label, with its error message already copied.
+throws func emit_propagation(body: BodyContext, mod: module::Module, call_id: int, capture: bool) -> void:
+    g := body.translation
+    call := mod.ast.nodes[call_id]
+    g.output.start_line()
+    if capture:
+        try backend::write_type(g, mod, call.inferred_type?, call)
+        g.output.write(concat(" jik_propagated_value_", string::from_int(call_id), " = "))
+    end
+    try emit_call(body, mod, call, "jik_err_arg")
+    g.output.write(";")
+    g.output.end_line()
+    g.output.line("if (jik_error_failed(jik_err_arg)) goto jik_cleanup;")
+end
+
+throws func emit_statement(body: BodyContext, mod: module::Module, id: int) -> void:
+    g := body.translation
+    node := mod.ast.nodes[id]
+    propagation := ast::propagating_call(mod.ast, id)
+    if propagation is Some:
+        try emit_propagation(body, mod, propagation?, not (node.kind is CALL))
+        if node.kind is CALL:
+            return
+        end
+    end
+    match node.kind:
+    case MUST:
+        g.output.start_line()
+        try emit_expression(body, mod, id)
+        g.output.write(";")
+        g.output.end_line()
+    case TRY:
+        try emit_try(body, mod, id)
+    case LOCAL_DECL{local}:
+        backend::emit_source_location(g, node)
+        g.output.start_line()
+        if node.inferred_type is None:
+            fail("semantic analysis must infer local types")
+        end
+        try backend::write_type(g, mod, node.inferred_type?, node)
+        g.output.write(" ")
+        backend::write_local(g, local.name)
+        g.output.write(" = ")
+        if local.initializer is Some:
+            try emit_expression(body, mod, local.initializer?)
+        else:
+            atom := mod.type_store.types[node.inferred_type?].kind.ATOM
+            if atom == types::Atom.DOUBLE:
+                g.output.write("0.0")
+            elif atom == types::Atom.BOOL:
+                g.output.write("false")
+            else:
+                g.output.write("0")
+            end
+        end
+        g.output.write(";")
+        g.output.end_line()
+    case CALL{call}:
+        if call.builtin is Some and call.builtin? == builtin::Kind.FAIL:
+            try emit_fail(body, mod, node)
+            return
+        end
+        g.output.start_line()
+        try emit_expression(body, mod, id)
+        g.output.write(";")
+        g.output.end_line()
+    case ASSIGN{statement}:
+        target := mod.ast.nodes[statement.target]
+        if statement.compound and (target.kind is FIELD or target.kind is INDEX):
+            try emit_compound_assignment(body, mod, statement)
+            return
+        end
+        g.output.start_line()
+        if target.kind is INDEX:
+            index := target.kind.INDEX
+            backend::write_collection_name(g, mod.type_store, mod.ast.nodes[index.value].inferred_type?)
+            g.output.write("_set(")
+            try emit_expression(body, mod, index.value)
+            g.output.write(", ")
+            try emit_expression(body, mod, index.index)
+            g.output.write(", ")
+            try emit_expression(body, mod, statement.value)
+            g.output.write(", ")
+            backend::write_debug_location(g, target)
+            g.output.write(")")
+        else:
+            try emit_expression(body, mod, statement.target)
+            g.output.write(" = ")
+            try emit_expression(body, mod, statement.value)
+        end
+        g.output.write(";")
+        g.output.end_line()
+    case IF{conditional}:
+        for index, branch in conditional.branches:
+            g.output.start_line()
+            if index > 0:
+                g.output.write("else ")
+            end
+            g.output.write("if (")
+            try emit_expression(body, mod, branch.condition)
+            g.output.write(") {")
+            g.output.end_line()
+            g.output.indent()
+            for statement in branch.body.statements:
+                try emit_statement(body, mod, statement)
+            end
+            g.output.dedent()
+            g.output.line("}")
+        end
+        if conditional.else_body is Some:
+            g.output.line("else {")
+            g.output.indent()
+            for statement in conditional.else_body?.statements:
+                try emit_statement(body, mod, statement)
+            end
+            g.output.dedent()
+            g.output.line("}")
+        end
+    case WHILE{loop}:
+        g.output.start_line()
+        g.output.write("while (")
+        try emit_expression(body, mod, loop.condition)
+        g.output.write(") {")
+        g.output.end_line()
+        g.output.indent()
+        for statement in loop.body.statements:
+            try emit_statement(body, mod, statement)
+        end
+        g.output.dedent()
+        g.output.line("}")
+    case FOR{loop}:
+        name := mod.ast.nodes[loop.variable].kind.LOOP_VARIABLE
+        g.output.start_line()
+        g.output.write("for (")
+        c_names::write_atom_type(g.output, types::Atom.INT)
+        g.output.write(" ")
+        backend::write_local(g, name)
+        g.output.write(" = ")
+        try emit_expression(body, mod, loop.start)
+        g.output.write("; ")
+        backend::write_local(g, name)
+        g.output.write(" < ")
+        try emit_expression(body, mod, loop.stop)
+        g.output.write("; ")
+        backend::write_local(g, name)
+        g.output.write("++) {")
+        g.output.end_line()
+        g.output.indent()
+        for statement in loop.body.statements:
+            try emit_statement(body, mod, statement)
+        end
+        g.output.dedent()
+        g.output.line("}")
+    case MATCH:
+        try emit_match(body, mod, id)
+    case FOREACH:
+        try emit_foreach(body, mod, id)
+    case BREAK:
+        g.output.line("break;")
+    case CONTINUE:
+        g.output.line("continue;")
+    case RETURN{statement}:
+        if body.is_throwing:
+            if statement.value is Some:
+                g.output.start_line()
+                g.output.write("jik_return_value = ")
+                try emit_expression(body, mod, statement.value?)
+                g.output.write(";")
+                g.output.end_line()
+            end
+            g.output.line("goto jik_cleanup;")
+            return
+        end
+        if body.needs_local_region:
+            // Evaluate a returning call while its Region arguments are alive.
+            if statement.value is Some:
+                g.output.line("{")
+                g.output.indent()
+                g.output.start_line()
+                try backend::write_type(g, mod, body.return_type, node)
+                g.output.write(" jik_return_value = ")
+                try emit_expression(body, mod, statement.value?)
+                g.output.write(";")
+                g.output.end_line()
+                backend::emit_region_free(g, "jik_local_region")
+                g.output.line("return jik_return_value;")
+                g.output.dedent()
+                g.output.line("}")
+            else:
+                backend::emit_region_free(g, "jik_local_region")
+                g.output.line("return;")
+            end
+            return
+        end
+        g.output.start_line()
+        g.output.write("return")
+        if statement.value is Some:
+            g.output.write(" ")
+            try emit_expression(body, mod, statement.value?)
+        end
+        g.output.write(";")
+        g.output.end_line()
+    other:
+        diag::error(g.diagnostics, "unsupported statement", "expected a declaration, if, or return", Some{node.span})
+        fail("code generation failed")
+    end
+end
+
+throws func emit_match(body: BodyContext, mod: module::Module, id: int) -> void:
+    g := body.translation
+    statement := mod.ast.nodes[id].kind.MATCH
+    receiver := mod.ast.nodes[statement.value]
+    type_id := receiver.inferred_type?
+    temporary := concat("jik_match_", string::from_int(id))
+    g.output.line("{")
+    g.output.indent()
+    g.output.start_line()
+    try backend::write_type(g, mod, type_id, receiver)
+    g.output.write(concat(" ", temporary, " = "))
+    try emit_expression(body, mod, statement.value)
+    g.output.write(";")
+    g.output.end_line()
+    for index, arm in statement.arms:
+        g.output.start_line()
+        g.output.write("if (" if index == 0 else "else if (")
+        g.output.write(temporary)
+        if types::is_variant(mod.type_store, type_id):
+            g.output.write(concat("->tag == ", string::from_int(arm.member)))
+        else:
+            g.output.write(" == ")
+            backend::write_enum_member(g, type_id, arm.member)
+        end
+        g.output.write(") {")
+        g.output.end_line()
+        g.output.indent()
+        if arm.binding is Some:
+            binding := mod.ast.nodes[arm.binding?]
+            g.output.start_line()
+            try backend::write_type(g, mod, binding.inferred_type?, binding)
+            g.output.write(" ")
+            backend::write_local(g, binding.kind.MATCH_BINDING.name)
+            g.output.write(concat(" = ", temporary, "->val."))
+            backend::write_field_name(g, arm.tag)
+            g.output.write(";")
+            g.output.end_line()
+        end
+        for child in arm.body.statements:
+            try emit_statement(body, mod, child)
+        end
+        g.output.dedent()
+        g.output.line("}")
+    end
+    if statement.other_body is Some:
+        g.output.line("else {")
+        g.output.indent()
+        for child in statement.other_body?.statements:
+            try emit_statement(body, mod, child)
+        end
+        g.output.dedent()
+        g.output.line("}")
+    end
+    g.output.dedent()
+    g.output.line("}")
+end
+
+throws func emit_foreach(body: BodyContext, mod: module::Module, id: int) -> void:
+    g := body.translation
+    node := mod.ast.nodes[id]
+    loop := node.kind.FOREACH
+    type_id := mod.ast.nodes[loop.container].inferred_type?
+    suffix := string::from_int(id)
+    dictionary := types::dict_element(mod.type_store, type_id) is Some
+    receiver := concat("jik_iter_container_", suffix)
+    position := concat("jik_iter_pos_", suffix)
+    g.output.line("{")
+    g.output.indent()
+    g.output.start_line()
+    try backend::write_type(g, mod, type_id, node)
+    g.output.write(concat(" ", receiver, " = "))
+    try emit_expression(body, mod, loop.container)
+    g.output.write(";")
+    g.output.end_line()
+    limit := "capacity" if dictionary else "size"
+    g.output.line(concat("for (size_t ", position, " = 0; ", position, " < ", receiver, "->", limit, "; ", position, "++) {"))
+    g.output.indent()
+    if dictionary:
+        g.output.line(concat("if (!", receiver, "->items[", position, "].key) continue;"))
+    end
+    value := concat(receiver, "->items[", position, "].val") if dictionary else concat(receiver, "->data[", position, "]")
+    first := mod.ast.nodes[loop.first]
+    g.output.start_line()
+    try backend::write_type(g, mod, first.inferred_type?, first)
+    g.output.write(" ")
+    backend::write_local(g, first.kind.LOOP_VARIABLE)
+    first_value := value
+    if loop.second is Some:
+        first_value = concat(receiver, "->items[", position, "].key") if dictionary else concat("(", c_names::CTypeNames[types::Atom.INT], ")", position)
+    end
+    g.output.write(concat(" = ", first_value, ";"))
+    g.output.end_line()
+    if loop.second is Some:
+        second := mod.ast.nodes[loop.second?]
+        g.output.start_line()
+        try backend::write_type(g, mod, second.inferred_type?, second)
+        g.output.write(" ")
+        backend::write_local(g, second.kind.LOOP_VARIABLE)
+        g.output.write(concat(" = ", value, ";"))
+        g.output.end_line()
+    end
+    for statement in loop.body.statements:
+        try emit_statement(body, mod, statement)
+    end
+    g.output.dedent()
+    g.output.line("}")
+    g.output.dedent()
+    g.output.line("}")
+end
+
+throws func emit_signature(g: backend::Translation, mod: module::Module, id: int, required: bool) -> void:
+    node := mod.ast.nodes[id]
+    backend::emit_source_location(g, node)
+    function := node.kind.FUNCTION_DECL
+    if node.inferred_type is None:
+        fail("semantic analysis must infer function types")
+    end
+    signature := mod.type_store.types[node.inferred_type?].kind.FUNCTION
+    try backend::write_type(g, mod, signature.return_type, node)
+    g.output.write(" ")
+    if required:
+        backend::write_must_name(g, mod.source_id, id)
+    else:
+        backend::write_name(g, mod.source_id, function.name)
+    end
+    g.output.write("(")
+    if len(function.parameters) == 0 and not function.is_throwing:
+        g.output.write("void")
+    end
+    first := true
+    for index, parameter_id in function.parameters:
+        parameter_node := mod.ast.nodes[parameter_id]
+        if not first:
+            g.output.write(", ")
+        end
+        try backend::write_type(g, mod, signature.parameter_types[index], parameter_node)
+        g.output.write(" ")
+        backend::write_parameter(g, mod, parameter_id)
+        first = false
+    end
+    if required:
+        if not first:
+            g.output.write(", ")
+        end
+        g.output.write("char *jik_must_location")
+    elif function.is_throwing:
+        if not first:
+            g.output.write(", ")
+        end
+        g.output.write("JikError *jik_err_arg")
+    end
+    g.output.write(")")
+end
+
+/// Emit a checked function with fresh body state and its required local-region
+/// setup, result storage, and cleanup path. Propagate expression/statement emission errors.
+throws func emit_function(g: backend::Translation, mod: module::Module, id: int) -> void:
+    node := mod.ast.nodes[id]
+    function := node.kind.FUNCTION_DECL
+    signature := mod.type_store.types[node.inferred_type?].kind.FUNCTION
+    try emit_signature(g, mod, id, false)
+    g.output.write(" {")
+    g.output.end_line()
+    g.output.indent()
+    body := BodyContext{translation = g, needs_local_region = function.needs_local_region, return_type = signature.return_type, is_throwing = function.is_throwing}[.g]
+    if function.is_throwing and signature.return_type != types::atom(mod.type_store, types::Atom.VOID):
+        g.output.start_line()
+        try backend::write_type(g, mod, signature.return_type, node)
+        g.output.write(" jik_return_value = {0};")
+        g.output.end_line()
+    end
+    if function.needs_local_region:
+        g.output.start_line()
+        c_names::write_atom_type(g.output, types::Atom.REGION)
+        g.output.write("jik_local_region = jik_region_new(0);")
+        g.output.end_line()
+        if g.region_tree:
+            file := g.sources.sources[node.span.source_id]
+            module_path := copy(file.path)
+            if string::ends_with(module_path, ".jik"):
+                module_path = must string::slice(module_path, 0, len(module_path) - 4)
+            end
+            backend::emit_region_enter(g, concat(module_path, "::", function.name, ".local"))
+        end
+    end
+    for statement in function.body.statements:
+        try emit_statement(body, mod, statement)
+    end
+    last := len(function.body.statements) - 1
+    if function.is_throwing:
+        g.output.line("goto jik_cleanup;")
+        g.output.line("jik_cleanup:;")
+        if function.needs_local_region:
+            backend::emit_region_free(g, "jik_local_region")
+        end
+        g.output.line("return;" if signature.return_type == types::atom(mod.type_store, types::Atom.VOID) else "return jik_return_value;")
+    elif last < 0 or not (mod.ast.nodes[function.body.statements[last]].kind is RETURN):
+        if function.needs_local_region:
+            backend::emit_region_free(g, "jik_local_region")
+        end
+        if signature.return_type == types::atom(mod.type_store, types::Atom.VOID):
+            g.output.line("return;")
+        else:
+            g.output.line("return 0;")
+        end
+    end
+    g.output.dedent()
+    g.output.line("}")
+    g.output.line("")
+end
+
+/// The callee completes its own cleanup before panic. Like the seed, failure
+/// exits the process immediately; caller regions are not unwound.
+throws func emit_must_wrapper(g: backend::Translation, mod: module::Module, id: int) -> void:
+    node := mod.ast.nodes[id]
+    function := node.kind.FUNCTION_DECL
+    signature := mod.type_store.types[node.inferred_type?].kind.FUNCTION
+    returns_value := signature.return_type != types::atom(mod.type_store, types::Atom.VOID)
+    try emit_signature(g, mod, id, true)
+    g.output.line(" {")
+    g.output.indent()
+    g.output.line("JikError jik_must_error = {0};")
+    g.output.start_line()
+    if returns_value:
+        try backend::write_type(g, mod, signature.return_type, node)
+        g.output.write(" jik_must_value = ")
+    end
+    backend::write_function_name(g, mod.source_id, function)
+    g.output.write("(")
+    for parameter_id in function.parameters:
+        backend::write_parameter(g, mod, parameter_id)
+        g.output.write(", ")
+    end
+    g.output.line("&jik_must_error);")
+    g.output.line("jik_panic_on_error(&jik_must_error, jik_must_location);")
+    if returns_value:
+        g.output.line("return jik_must_value;")
+    end
+    g.output.dedent()
+    g.output.line("}")
+    g.output.line("")
+end

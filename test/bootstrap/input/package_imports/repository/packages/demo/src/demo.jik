@@ -1,0 +1,6 @@
+use "nested/offset"
+
+
+func value():
+    return 40 + offset::value()
+end

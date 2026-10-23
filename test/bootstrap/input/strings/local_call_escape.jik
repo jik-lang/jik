@@ -1,0 +1,13 @@
+func make(r: Region) -> String:
+    return "value"[r]
+end
+
+
+func bad(r: Region) -> String:
+    return make()
+end
+
+
+func main():
+    return 0
+end

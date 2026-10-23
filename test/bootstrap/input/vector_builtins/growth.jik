@@ -1,0 +1,22 @@
+func main():
+    values: Vec[int]
+    for index = 0, 64:
+        push(values, index)
+    end
+    if len(values) != 64 or values[0] != 0 or values[63] != 63:
+        return 1
+    end
+    for index = 0, 64:
+        if pop(values) != 63 - index:
+            return 2
+        end
+    end
+    if len(values) != 0:
+        return 3
+    end
+    push(values, 7)
+    clear(values)
+    clear(values)
+    push(values, 42)
+    return pop(values)
+end

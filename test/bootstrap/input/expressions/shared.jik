@@ -1,0 +1,24 @@
+struct Box:
+    values: Vec[Option[Vec[int]]]
+    name: String
+end
+
+variant Wrapped:
+    BOX: Box
+end
+
+enum Key:
+    A
+end
+
+table Fixed[Key] -> Box:
+    A: Box{values = [Some{[7, 8]}], name = "xyz"}
+end
+
+func make(r: Region) -> Vec[Box]:
+    return [Box{values = [Some{[1, 2, 3]}, None], name = "abc"}]
+end
+
+func add(left: int, right: int) -> int:
+    return left + right
+end

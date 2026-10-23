@@ -1,0 +1,6 @@
+use "../shared"
+
+
+func value():
+    return shared::value()
+end

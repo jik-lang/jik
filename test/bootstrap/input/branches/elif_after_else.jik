@@ -1,0 +1,7 @@
+func main():
+    if true:
+    else:
+    elif false:
+    end
+    return 0
+end

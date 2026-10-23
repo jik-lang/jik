@@ -1,0 +1,11 @@
+struct Label:
+    text: String
+    count: int
+end
+func bad(r: Region) -> String:
+    value := Label{}
+    return value.text
+end
+func main():
+    return 42
+end

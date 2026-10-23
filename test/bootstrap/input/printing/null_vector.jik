@@ -1,0 +1,10 @@
+func maybe(flag: bool, r: Region) -> Vec[int]:
+    if flag:
+        return [1]
+    end
+end
+
+func main():
+    println(maybe(false))
+    return 42
+end

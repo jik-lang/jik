@@ -1,0 +1,6 @@
+func bad(r: Region):
+    value: Option[int][r] = Some{1}
+end
+func main():
+    return 42
+end

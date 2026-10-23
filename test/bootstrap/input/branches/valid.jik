@@ -1,0 +1,91 @@
+func select(value):
+    if value == 0:
+        result: int = 0
+        return result
+    elif value == 1:
+        result: int = 1
+        return result
+    elif value == 2:
+        result: int = 2
+        return result
+    else:
+        result: int = 9
+        return result
+    end
+end
+
+func nested(value):
+    if value < 10:
+        if value == 2:
+            return 20
+        else:
+            return 30
+        end
+    elif value > 15:
+        return 1
+    elif value == 13:
+        return 13
+    else:
+        if value == 10:
+            return 45
+        elif value == 11:
+            return 55
+        else:
+            return 65
+        end
+    end
+end
+
+func divide(value: int):
+    return 1 / value
+end
+
+func main():
+    if select(0) != 0:
+        return 1
+    end
+    if select(1) != 1:
+        return 2
+    end
+    if select(2) != 2:
+        return 3
+    end
+    if select(3) != 9:
+        return 4
+    end
+    if nested(2) != 20:
+        return 5
+    end
+    if nested(7) != 30:
+        return 6
+    end
+    if nested(16) != 1:
+        return 7
+    end
+    if nested(13) != 13:
+        return 8
+    end
+    if nested(10) != 45:
+        return 9
+    end
+    if nested(11) != 55:
+        return 10
+    end
+    if nested(12) != 65:
+        return 11
+    end
+    result: int
+    if true:
+        result = 42
+    elif divide(0) == 1:
+        result = 1
+    else:
+        result = 2
+    end
+    if false:
+        result = 3
+    elif false:
+        result = 4
+    end
+    return result
+end

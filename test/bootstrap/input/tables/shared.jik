@@ -1,0 +1,9 @@
+enum Key:
+    A
+    B
+end
+
+table Values[Key] -> int:
+    B: 20
+    A: 10
+end

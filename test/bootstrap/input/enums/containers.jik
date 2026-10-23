@@ -1,0 +1,32 @@
+enum State:
+    OFF
+    ON
+end
+
+struct Record:
+    state: State
+    values: Vec[State]
+    maybe: Option[State]
+    entries: Dict[State]
+end
+
+func make(r: Region) -> Record:
+    value: Record[r]
+    push(value.values, State.ON)
+    value.maybe = Some{State.ON}
+    value.entries["key"] = State.ON
+    return value
+end
+
+func read(value: Record) -> State:
+    return value.state
+end
+
+func main():
+    value := make()
+    if read(value) != State.OFF or value.values[0] != State.ON:
+        return 1
+    end
+    println(value)
+    return 0
+end

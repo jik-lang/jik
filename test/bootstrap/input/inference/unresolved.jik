@@ -1,0 +1,7 @@
+func unused(value):
+    return 0
+end
+
+func main():
+    return 0
+end

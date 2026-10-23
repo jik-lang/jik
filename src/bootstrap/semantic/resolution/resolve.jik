@@ -1,0 +1,845 @@
+//! Build lexical scopes and resolve declarations, references, and entry selection.
+
+use "../context"
+use "../../program"
+use "bindings"
+use "../../language/builtin"
+use "calls"
+use "../../language/symbol"
+use "../../parser/ast"
+use "../../diag"
+use "../../source"
+use "../../language/types"
+use "type_resolution"
+use "tables"
+use "../initialization/tables" as table_initializers
+use "../initialization/globals"
+use "lookup"
+use "identifier"
+use "extern_initializers"
+
+
+
+func quote_name(foreign s: String, r: Region) -> String:
+    return concat("\"", s, "\"", r)
+end
+
+
+func collect_global_declarations(ctx: context::ModuleContext):
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    root := mod.ast.get_root_module()
+    for id in root.declarations:
+        node := mod.ast.nodes[id]
+        match node.kind:
+        case FUNCTION_DECL{function}:
+            if not bindings::add_symbol(mod.global_scope, function.name, symbol::SymbolKind.FUNCTION, id):
+                diag::error(diagnostics, "semantic analysis", concat("function ", quote_name(function.name), " already defined"), Some{node.span})
+            end
+        case GLOBAL_DECL{declaration}:
+            if not bindings::add_symbol(mod.global_scope, declaration.name, symbol::SymbolKind.GLOBAL, id):
+                diag::error(diagnostics, "global already defined", declaration.name, Some{node.span})
+            end
+        case TABLE_DECL{declaration}:
+            if not bindings::add_symbol(mod.global_scope, declaration.name, symbol::SymbolKind.TABLE, id):
+                diag::error(diagnostics, "duplicate table declaration", declaration.name, Some{node.span})
+            end
+        case TYPE_DECL{declaration}:
+            if not bindings::add_symbol(mod.global_scope, declaration.name, symbol::SymbolKind.TYPE, id):
+                diag::error(diagnostics, "semantic analysis", concat("type ", quote_name(declaration.name), " already defined"), Some{node.span})
+            end
+        other:
+        end
+    end
+end
+
+
+/// The caller initializes the parent and any parameters/loop variable first.
+/// Walk statement lists twice: register this block's locals before child scopes.
+/// This pass changes scopes only; it neither appends nodes nor rewrites statements.
+func collect_block_scopes(ctx: context::ModuleContext, block: ast::Block):
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    scope := block.scope
+    for statement_id in block.statements:
+        node := mod.ast.nodes[statement_id]
+        if node.kind is LOCAL_DECL:
+            local := node.kind.LOCAL_DECL
+            if not bindings::add_local(scope, local.name, statement_id, node.span.start):
+                diag::error(diagnostics, "semantic analysis", concat("symbol ", quote_name(local.name), " already declared"), Some{node.span})
+            end
+        end
+    end
+    // Retain complete scopes for reference resolution and loop/match checks.
+    // Ordinary local conflicts use declaration positions to ignore future locals.
+    for statement_id in block.statements:
+        node := mod.ast.nodes[statement_id]
+        match node.kind:
+        case IF{statement}:
+            for branch in statement.branches:
+                branch.body.scope.parent = Some{scope}
+                collect_block_scopes(ctx, branch.body)
+            end
+            if statement.else_body is Some:
+                statement.else_body?.scope.parent = Some{scope}
+                collect_block_scopes(ctx, statement.else_body?)
+            end
+        case TRY{statement}:
+            statement.body.scope.parent = Some{scope}
+            statement.except_body.scope.parent = Some{scope}
+            // Headers and success bodies inherit the enclosing active except;
+            // only this handler's except body introduces a new current error.
+            statement.except_body.scope.error_handler = Some{statement_id}[.statement]
+            if statement.binding is Some:
+                binding := mod.ast.nodes[statement.binding?]
+                name := binding.kind.LOCAL_DECL.name
+                if not bindings::add_local(statement.body.scope, name, statement.binding?, binding.span.start):
+                    diag::error(diagnostics, "try binding already declared", name, Some{binding.span})
+                end
+            end
+            collect_block_scopes(ctx, statement.body)
+            collect_block_scopes(ctx, statement.except_body)
+        case MATCH{statement}:
+            for arm in statement.arms:
+                arm.body.scope.parent = Some{scope}
+                if arm.binding is Some:
+                    binding := mod.ast.nodes[arm.binding?]
+                    if not bindings::add_symbol(arm.body.scope, binding.kind.MATCH_BINDING.name, symbol::SymbolKind.MATCH_BINDING, arm.binding?):
+                        diag::error(diagnostics, "match binding already declared", binding.kind.MATCH_BINDING.name, Some{binding.span})
+                    end
+                end
+                collect_block_scopes(ctx, arm.body)
+            end
+            if statement.other_body is Some:
+                statement.other_body?.scope.parent = Some{scope}
+                collect_block_scopes(ctx, statement.other_body?)
+            end
+        case WHILE{loop}:
+            loop.body.scope.parent = Some{scope}
+            collect_block_scopes(ctx, loop.body)
+        case FOR{loop}:
+            loop.body.scope.parent = Some{scope}
+            variable := mod.ast.nodes[loop.variable]
+            if not bindings::add_symbol(loop.body.scope, variable.kind.LOOP_VARIABLE, symbol::SymbolKind.LOCAL, loop.variable):
+                diag::error(diagnostics, "semantic analysis", "loop variable already declared", Some{variable.span})
+            end
+            collect_block_scopes(ctx, loop.body)
+        case FOREACH{loop}:
+            loop.body.scope.parent = Some{scope}
+            variable := mod.ast.nodes[loop.first]
+            if not bindings::add_symbol(loop.body.scope, variable.kind.LOOP_VARIABLE, symbol::SymbolKind.LOCAL, loop.first):
+                diag::error(diagnostics, "semantic analysis", "loop variable already declared", Some{variable.span})
+            end
+            if loop.second is Some:
+                second := mod.ast.nodes[loop.second?]
+                if not bindings::add_symbol(loop.body.scope, second.kind.LOOP_VARIABLE, symbol::SymbolKind.LOCAL, loop.second?):
+                    diag::error(diagnostics, "semantic analysis", "loop variable already declared", Some{second.span})
+                end
+            end
+            collect_block_scopes(ctx, loop.body)
+        other:
+        end
+    end
+end
+
+
+func collect_function_scopes(ctx: context::ModuleContext):
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    root := mod.ast.get_root_module()
+    for id in root.declarations:
+        node := mod.ast.nodes[id]
+        if node.kind is FUNCTION_DECL:
+            function := node.kind.FUNCTION_DECL
+            function.body.scope.parent = Some{mod.global_scope}
+            if function.external_name is Some:
+                continue
+            end
+            for param_id in function.parameters:
+                param_node := mod.ast.nodes[param_id]
+                parameter := param_node.kind.PARAMETER
+                if not bindings::add_symbol(function.body.scope, parameter.name, symbol::SymbolKind.PARAMETER, param_id):
+                    diag::error(diagnostics, "semantic analysis", concat("symbol ", quote_name(parameter.name), " already declared"), Some{param_node.span})
+                end
+            end
+            collect_block_scopes(ctx, function.body)
+        end
+    end
+end
+
+
+func resolve_value(ctx: context::ModuleContext, id: int, scope: symbol::Scope) -> void:
+    modules := ctx.program.modules
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    node := mod.ast.nodes[id]
+    identifier := node.kind.IDENTIFIER_EXPR
+    identifier.local_origin = None
+    identifier.global_origin = None[.identifier]
+    target_id := lookup::qualified_module(modules, mod, identifier.qualifier, diagnostics, node.span)
+    if target_id is None:
+        return
+    end
+    target_mod := modules[target_id?]
+    origin: Option[int]
+    if identifier.qualifier is None:
+        origin = copy(symbol::find_origin(scope, identifier.name), _)
+    else:
+        origin = copy(symbol::find_origin(target_mod.global_scope, identifier.name), _)
+    end
+    if origin is None:
+        diag::error(diagnostics, "semantic analysis", concat("undefined symbol: ", identifier.name), Some{node.span})
+        return
+    end
+    declaration := target_mod.ast.nodes[origin?]
+    if declaration.kind is GLOBAL_DECL:
+        identifier.global_origin = Some{ast::DeclarationRef{source_id = target_id?, origin = origin?}}[.identifier]
+        return
+    end
+    if identifier.qualifier is Some:
+        diag::error(diagnostics, "unsupported value", "expected a global binding", Some{node.span})
+        return
+    end
+    if declaration.kind is LOCAL_DECL:
+        // Scopes contain all declarations for resolution. A local is
+        // visible only after its whole declaration, including its initializer.
+        if node.span.start < declaration.span.stop:
+            diag::error(diagnostics, "semantic analysis", concat("local ", quote_name(identifier.name), " used before its declaration"), Some{node.span})
+            return
+        end
+    elif not (declaration.kind is PARAMETER or declaration.kind is LOOP_VARIABLE or declaration.kind is MATCH_BINDING):
+        diag::error(diagnostics, "unsupported value", "expected a local or parameter value", Some{node.span})
+        return
+    end
+    identifier.local_origin = copy(origin, .identifier)
+end
+
+
+func resolve_parameter_type(ctx: context::ModuleContext, id: int) -> void:
+    modules := ctx.program.modules
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    parameter := mod.ast.nodes[id].kind.PARAMETER
+    if parameter.annotation is None:
+        return
+    end
+    node := mod.ast.nodes[parameter.annotation?]
+    type_id := type_resolution::resolve(modules, mod, parameter.annotation?, diagnostics)
+    if type_id is None:
+        return
+    end
+    if type_id? == types::atom(store, types::Atom.VOID):
+        diag::error(diagnostics, "invalid parameter type", "parameters cannot have type void", Some{node.span})
+        return
+    end
+end
+
+
+func resolve_call(ctx: context::ModuleContext, call: ast::CallExpr, scope: symbol::Scope) -> void:
+    modules := ctx.program.modules
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    call.target = None
+    call.builtin = None
+    call.error_handler = None[.call]
+    if call.is_receiver:
+        return    // Resolve arguments now; receiver type determines lookup later.
+    end
+    node := mod.ast.nodes[call.callee]
+    if not (node.kind is IDENTIFIER_EXPR):
+        diag::error(diagnostics, "unsupported call target", "expected a function name", Some{node.span})
+        return
+    end
+    identifier := node.kind.IDENTIFIER_EXPR
+    if identifier.qualifier is None and identifier.name == "unwrap":
+        // The seed treats unqualified unwrap as Option extraction syntax,
+        // including when an ordinary declaration has the same name.
+        call.builtin = Some{builtin::Kind.UNWRAP}[.call]
+        return
+    end
+    if identifier.qualifier is None:
+        local_origin := symbol::find_origin(scope, identifier.name)
+        if local_origin is Some and not (mod.ast.nodes[local_origin?].kind is FUNCTION_DECL):
+            diag::error(diagnostics, "unsupported call target", "expected a function name", Some{node.span})
+            return
+        end
+    end
+    target_source_id := lookup::qualified_module(modules, mod, identifier.qualifier, diagnostics, node.span)
+    if target_source_id is None:
+        return
+    end
+    target_mod := modules[target_source_id?]
+    entry := target_mod.global_scope.symbols[identifier.name]
+    if entry is None:
+        if identifier.qualifier is None:
+            call.builtin = builtin::find(identifier.name)
+            if call.builtin is Some:
+                if call.builtin? == builtin::Kind.ERROR_MSG or call.builtin? == builtin::Kind.ERROR_CODE:
+                    call.error_handler = copy(symbol::find_error_handler(scope), .call)
+                    if call.error_handler is None:
+                        diag::error(diagnostics, "error inspection outside except", "error_msg and error_code require an enclosing except block", Some{node.span})
+                        return
+                    end
+                end
+                calls::add_missing_region_argument(modules, mod, call, node.span)
+                return
+            end
+        end
+        diag::error(diagnostics, "unknown function", identifier.name, Some{node.span})
+        return
+    end
+    if entry?.kind != symbol::SymbolKind.FUNCTION:
+        diag::error(diagnostics, "unsupported call target", "expected a function name", Some{node.span})
+        return
+    end
+    call.target = Some{ast::DeclarationRef{source_id = target_source_id?, origin = entry?.origin}}[.call]
+    calls::add_missing_region_argument(modules, mod, call, node.span)
+end
+
+
+// Resolve written fields before appending missing defaults. Those synthetic leaf
+// nodes already carry resolved type IDs and need no recursive name resolution.
+func resolve_struct(ctx: context::ModuleContext, node: ast::Node, scope: symbol::Scope) -> void:
+    modules := ctx.program.modules
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    literal := node.kind.STRUCT_LITERAL
+    resolved := type_resolution::resolve(modules, mod, literal.annotation, diagnostics)
+    if resolved is None:
+        return
+    end
+    if types::is_enum(store, resolved?) and literal.is_default:
+        if literal.destination is Some or literal.implicit:
+            diag::error(diagnostics, "invalid enum allocation", "enum values do not have allocation destinations", Some{node.span})
+        elif len(store.types[resolved?].kind.NAMED.member_names) == 0:
+            diag::error(diagnostics, "empty enum default", "enum has no first member", Some{node.span})
+        else:
+            node.kind = ast::NodeKind.ENUM_VALUE{ast::EnumValue{type_id = resolved?, member = 0}}[.node]
+        end
+        return
+    end
+    if types::is_variant(store, resolved?) and literal.is_default:
+        definition := store.types[resolved?].kind.NAMED
+        if len(definition.member_names) == 0:
+            return
+        end
+        node.kind = ast::NodeKind.VARIANT_LITERAL{ast::VariantLiteral{annotation = literal.annotation, tag = copy(definition.member_names[0], .node), member = -1, destination = literal.destination, implicit = literal.implicit}}[.node]
+        resolve_variant(ctx, node, scope)
+        return
+    end
+    if types::is_extern_struct(store, resolved?):
+        if len(literal.fields) > 0:
+            diag::error(diagnostics, "invalid extern fields", "extern structs are opaque; only empty construction is allowed", Some{node.span})
+        elif store.types[resolved?].kind.NAMED.initializer is None:
+            diag::error(diagnostics, "external struct type has no init function", store.types[resolved?].kind.NAMED.name, Some{node.span})
+        end
+        if literal.destination is Some:
+            resolve_expression(ctx, literal.destination?, scope)
+        end
+        return
+    end
+    if not types::is_struct(store, resolved?):
+        diag::error(diagnostics, "invalid struct constructor", "expected a struct type", Some{node.span})
+        return
+    end
+    definition := store.types[resolved?].kind.NAMED
+    seen := [len(definition.member_types) of false]
+    for field in literal.fields:
+        member := types::record_member(store, resolved?, field.name)
+        if member is None:
+            diag::error(diagnostics, "unknown struct field", field.name, Some{mod.ast.nodes[field.value].span})
+            return
+        end
+        if seen[member?]:
+            diag::error(diagnostics, "duplicate struct field", field.name, Some{mod.ast.nodes[field.value].span})
+            return
+        end
+        field.member = member?
+        seen[member?] = true
+        resolve_expression(ctx, field.value, scope)
+    end
+    for index, type_id in definition.member_types:
+        if not seen[index]:
+            value := mod.ast.add(copy(node.span, .mod), ast::NodeKind.DEFAULT_VALUE{type_id}[.mod])
+            literal.fields.push(ast::FieldInit{name = copy(definition.member_names[index], .literal), value, member = index}[.literal])
+        end
+    end
+    if literal.destination is Some:
+        resolve_expression(ctx, literal.destination?, scope)
+    end
+end
+
+
+// An omitted payload is appended before walking literal.value, so the same walk
+// visits its synthetic default along with any written allocation destination.
+func resolve_variant(ctx: context::ModuleContext, node: ast::Node, scope: symbol::Scope) -> void:
+    modules := ctx.program.modules
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    literal := node.kind.VARIANT_LITERAL
+    resolved := type_resolution::resolve(modules, mod, literal.annotation, diagnostics)
+    if resolved is None:
+        return
+    end
+    if not types::is_variant(store, resolved?):
+        diag::error(diagnostics, "invalid variant constructor", "expected a variant type", Some{node.span})
+        return
+    end
+    member := types::record_member(store, resolved?, literal.tag)
+    if member is None:
+        diag::error(diagnostics, "unknown variant tag", literal.tag, Some{node.span})
+        return
+    end
+    literal.member = member?
+    payload := store.types[resolved?].kind.NAMED.member_types[member?]
+    if payload == types::atom(store, types::Atom.VOID):
+        if literal.value is Some:
+            diag::error(diagnostics, "unexpected variant payload", "variant members with no value require empty braces", Some{node.span})
+            return
+        end
+    elif literal.value is None:
+        value := mod.ast.add(copy(node.span, .mod), ast::NodeKind.DEFAULT_VALUE{payload}[.mod])
+        literal.value = Some{value}[.literal]
+    end
+    if literal.value is Some:
+        resolve_expression(ctx, literal.value?, scope)
+    end
+    if literal.destination is Some:
+        resolve_expression(ctx, literal.destination?, scope)
+    end
+end
+
+
+// A type-qualified member becomes a checked scalar value. Instance fields keep
+// their receiver and are resolved once its type is known during inference.
+func resolve_enum_member(ctx: context::ModuleContext, node: ast::Node) -> bool:
+    modules := ctx.program.modules
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    field := node.kind.FIELD
+    base := mod.ast.nodes[field.value]
+    if not (base.kind is IDENTIFIER_EXPR):
+        return false
+    end
+    identifier := base.kind.IDENTIFIER_EXPR
+    target_id := lookup::qualified_module(modules, mod, identifier.qualifier, diagnostics, base.span)
+    if target_id is None:
+        return true
+    end
+    target := modules[target_id?]
+    entry := target.global_scope.symbols[identifier.name]
+    if entry is None or entry?.kind != symbol::SymbolKind.TYPE:
+        return false
+    end
+    declaration := target.ast.nodes[entry?.origin].kind.TYPE_DECL
+    if declaration.resolved_type is None or not types::is_enum(store, declaration.resolved_type?):
+        return false
+    end
+    definition := store.types[declaration.resolved_type?].kind.NAMED
+    for index, name in definition.member_names:
+        if name == field.name:
+            node.kind = ast::NodeKind.ENUM_VALUE{ast::EnumValue{type_id = declaration.resolved_type?, member = index}}[.node]
+            return true
+        end
+    end
+    diag::error(diagnostics, "unknown enum member", field.name, Some{node.span})
+    return true
+end
+
+
+/// Follow operand lists, not flat node storage. Call normalization appends omitted
+/// Region operands before the argument loop below, which visits those new operands.
+/// Rewrites retain this node's ID and source span; they do not restart the walk.
+func resolve_expression(ctx: context::ModuleContext, id: int, scope: symbol::Scope) -> void:
+    modules := ctx.program.modules
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    node := mod.ast.nodes[id]
+    match node.kind:
+    case IDENTIFIER_EXPR:
+        target := tables::find(modules, mod, node, scope, diagnostics)
+        if diagnostics.error_count > 0:
+            return
+        end
+        if target is Some:
+            diag::error(diagnostics, "table must be indexed", node.kind.IDENTIFIER_EXPR.name, Some{node.span})
+            return
+        end
+        resolve_value(ctx, id, scope)
+    case BINARY{binary}:
+        resolve_expression(ctx, binary.left, scope)
+        resolve_expression(ctx, binary.right, scope)
+    case CONDITIONAL{conditional}:
+        resolve_expression(ctx, conditional.condition, scope)
+        resolve_expression(ctx, conditional.when_true, scope)
+        resolve_expression(ctx, conditional.when_false, scope)
+    case GROUP{inner}:
+        resolve_expression(ctx, inner, scope)
+    case MUST{required}:
+        resolve_expression(ctx, required.call, scope)
+    case UNARY{unary}:
+        resolve_expression(ctx, unary.operand, scope)
+    case CALL{call}:
+        resolve_call(ctx, call, scope)
+        for argument in call.arguments:
+            resolve_expression(ctx, argument, scope)
+        end
+    case STRING_LITERAL{literal}:
+        if literal.destination is Some:
+            resolve_expression(ctx, literal.destination?, scope)
+        end
+    case VARIANT_LITERAL:
+        resolve_variant(ctx, node, scope)
+    case VARIANT_CHECK{check}:
+        resolve_expression(ctx, check.value, scope)
+    case STRUCT_LITERAL:
+        resolve_struct(ctx, node, scope)
+    case DEFAULT_VALUE:
+    case ENUM_VALUE:
+    case OPTION_LITERAL{literal}:
+        if literal.annotation is Some:
+            type_resolution::resolve(modules, mod, literal.annotation?, diagnostics)
+        end
+        if literal.value is Some:
+            resolve_expression(ctx, literal.value?, scope)
+        end
+        if literal.destination is Some:
+            resolve_expression(ctx, literal.destination?, scope)
+        end
+    case OPTION_CHECK{check}:
+        resolve_expression(ctx, check.value, scope)
+    case UNWRAP{value}:
+        resolve_expression(ctx, value, scope)
+    case FIELD{field}:
+        if resolve_enum_member(ctx, node):
+            return
+        end
+        resolve_expression(ctx, field.value, scope)
+    case VECTOR_LITERAL{literal}:
+        if literal.annotation is Some:
+            type_resolution::resolve(modules, mod, literal.annotation?, diagnostics)
+        end
+        if literal.destination is Some:
+            resolve_expression(ctx, literal.destination?, scope)
+        end
+        if literal.count is Some:
+            resolve_expression(ctx, literal.count?, scope)
+        end
+        for element in literal.elements:
+            resolve_expression(ctx, element, scope)
+        end
+    case DICT_LITERAL{literal}:
+        if literal.annotation is Some:
+            type_resolution::resolve(modules, mod, literal.annotation?, diagnostics)
+        end
+        if literal.destination is Some:
+            resolve_expression(ctx, literal.destination?, scope)
+        end
+        for entry in literal.entries:
+            resolve_expression(ctx, entry.key, scope)
+            resolve_expression(ctx, entry.value, scope)
+        end
+    case TABLE_LOOKUP{value}:
+        resolve_expression(ctx, value.key, scope)
+    case INDEX{index}:
+        target := tables::find(modules, mod, mod.ast.nodes[index.value], scope, diagnostics)
+        if diagnostics.error_count > 0:
+            return
+        end
+        if target is Some:
+            if index.is_store:
+                diag::error(diagnostics, "table entries are immutable", "lookups cannot replace table entries", Some{node.span})
+                return
+            end
+            node.kind = ast::NodeKind.TABLE_LOOKUP{ast::TableLookup{target = target?, key = index.index}}[.node]
+            resolve_expression(ctx, index.index, scope)
+            return
+        end
+        resolve_expression(ctx, index.value, scope)
+        resolve_expression(ctx, index.index, scope)
+    case SLICE{slice}:
+        resolve_expression(ctx, slice.value, scope)
+        if slice.start is Some:
+            resolve_expression(ctx, slice.start?, scope)
+        end
+        if slice.stop is Some:
+            resolve_expression(ctx, slice.stop?, scope)
+        end
+    case GLOBAL_REGION:
+    case LOCAL_REGION:
+    case REGION_OF{inner}:
+        resolve_expression(ctx, inner, scope)
+    case INTEGER_LITERAL:
+    case DOUBLE_LITERAL:
+    case BOOL_LITERAL:
+    case CHAR_LITERAL:
+    other:
+        diag::error(diagnostics, "unsupported expression", "expected a value", Some{node.span})
+    end
+end
+
+
+func resolve_block(ctx: context::ModuleContext, block: ast::Block, loop_depth: int) -> void:
+    modules := ctx.program.modules
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    for id in block.statements:
+        node := mod.ast.nodes[id]
+        match node.kind:
+        case LOCAL_DECL{local}:
+            if local.annotation is Some:
+                resolved := type_resolution::resolve(modules, mod, local.annotation?, diagnostics)
+                if resolved is None:
+                    continue
+                end
+            end
+            if local.initializer is Some:
+                resolve_expression(ctx, local.initializer?, block.scope)
+            end
+        case CALL:
+            resolve_expression(ctx, id, block.scope)
+        case MUST:
+            resolve_expression(ctx, id, block.scope)
+        case ASSIGN{statement}:
+            // Lowered compound assignments share their target node with
+            // the binary expression. Resolve it once, including on failure.
+            if not statement.compound:
+                resolve_expression(ctx, statement.target, block.scope)
+            end
+            resolve_expression(ctx, statement.value, block.scope)
+            target := mod.ast.nodes[statement.target]
+            if target.kind is IDENTIFIER_EXPR and target.kind.IDENTIFIER_EXPR.global_origin is Some:
+                diag::error(diagnostics, "global bindings are immutable", "mutate composite contents instead of replacing a global binding", Some{target.span})
+            end
+        case TRY{statement}:
+            if statement.binding is Some:
+                local := mod.ast.nodes[statement.binding?].kind.LOCAL_DECL
+                if local.annotation is Some:
+                    type_resolution::resolve(modules, mod, local.annotation?, diagnostics)
+                end
+            end
+            // The result does not exist while evaluating the call or its arguments.
+            resolve_expression(ctx, statement.call, block.scope)
+            resolve_block(ctx, statement.body, loop_depth)
+            resolve_block(ctx, statement.except_body, loop_depth)
+        case IF{statement}:
+            for branch in statement.branches:
+                resolve_expression(ctx, branch.condition, block.scope)
+                resolve_block(ctx, branch.body, loop_depth)
+            end
+            if statement.else_body is Some:
+                resolve_block(ctx, statement.else_body?, loop_depth)
+            end
+        case MATCH{statement}:
+            resolve_expression(ctx, statement.value, block.scope)
+            for arm in statement.arms:
+                resolve_block(ctx, arm.body, loop_depth)
+            end
+            if statement.other_body is Some:
+                resolve_block(ctx, statement.other_body?, loop_depth)
+            end
+        case WHILE{loop}:
+            resolve_expression(ctx, loop.condition, block.scope)
+            resolve_block(ctx, loop.body, loop_depth + 1)
+        case FOR{loop}:
+            resolve_expression(ctx, loop.start, block.scope)
+            resolve_expression(ctx, loop.stop, block.scope)
+            resolve_block(ctx, loop.body, loop_depth + 1)
+        case FOREACH{loop}:
+            resolve_expression(ctx, loop.container, block.scope)
+            resolve_block(ctx, loop.body, loop_depth + 1)
+        case BREAK:
+            if loop_depth == 0:
+                diag::error(diagnostics, "break outside loop", "break requires an enclosing loop", Some{node.span})
+            end
+        case CONTINUE:
+            if loop_depth == 0:
+                diag::error(diagnostics, "continue outside loop", "continue requires an enclosing loop", Some{node.span})
+            end
+        case RETURN{statement}:
+            if statement.value is Some:
+                resolve_expression(ctx, statement.value?, block.scope)
+            end
+        other:
+            diag::error(diagnostics, "unsupported statement", "expected a declaration, if, or return", Some{node.span})
+        end
+    end
+end
+
+
+/// Initialize the shared type store, scopes, annotations, and references.
+/// Record errors and stop before dependent work; typed receiver lookup may remain
+/// deferred until inference knows the receiver type.
+func resolve_declarations(program: program::Program):
+    modules := program.modules
+    dependency_order := program.dependency_order
+    diagnostics := program.diagnostics
+    program.type_store = types::Store{}[.program]
+    store := program.type_store
+    types::initialize(store)
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        ctx := context::ModuleContext{program, mod}[.program]
+        mod.type_store = store
+        identifier::validate(mod.ast, diagnostics)
+        if diagnostics.error_count > 0:
+            return
+        end
+        collect_global_declarations(ctx)
+        if diagnostics.error_count > 0:
+            return
+        end
+    end
+    // Register all named identities before resolving any field or annotation.
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        root := mod.ast.get_root_module()
+        for id in root.declarations:
+            if mod.ast.nodes[id].kind is TYPE_DECL:
+                type_resolution::declare(mod, id, diagnostics)
+            end
+        end
+    end
+    if diagnostics.error_count > 0:
+        return
+    end
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        ctx := context::ModuleContext{program, mod}[.program]
+        root := mod.ast.get_root_module()
+        for id in root.declarations:
+            node := mod.ast.nodes[id]
+            if node.kind is FUNCTION_DECL:
+                function := node.kind.FUNCTION_DECL
+                for parameter_id in function.parameters:
+                    resolve_parameter_type(ctx, parameter_id)
+                end
+                if function.return_annotation is Some:
+                    type_resolution::resolve(modules, mod, function.return_annotation?, diagnostics)
+                end
+            elif node.kind is TYPE_DECL:
+                type_resolution::resolve_members(modules, mod, id, diagnostics)
+            end
+        end
+        if diagnostics.error_count > 0:
+            return
+        end
+    end
+    for source_id in dependency_order:
+        extern_initializers::register(modules[source_id], diagnostics)
+    end
+    if diagnostics.error_count > 0:
+        return
+    end
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        type_resolution::check_cycles(mod, diagnostics)
+        extern_initializers::validate_members(mod, diagnostics)
+    end
+    if diagnostics.error_count > 0:
+        return
+    end
+    table_order := 0
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        root := mod.ast.get_root_module()
+        for id in root.declarations:
+            node := mod.ast.nodes[id]
+            if node.kind is TABLE_DECL:
+                node.kind.TABLE_DECL.initialization_order = table_order
+                table_order += 1
+                tables::resolve_header(modules, mod, node, diagnostics)
+            end
+        end
+    end
+    if diagnostics.error_count > 0:
+        return
+    end
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        ctx := context::ModuleContext{program, mod}[.program]
+        root := mod.ast.get_root_module()
+        for id in root.declarations:
+            node := mod.ast.nodes[id]
+            if node.kind is GLOBAL_DECL:
+                declaration := node.kind.GLOBAL_DECL
+                resolve_expression(ctx, declaration.initializer, mod.global_scope)
+                if diagnostics.error_count == 0:
+                    globals::prepare_initializer(mod, declaration, diagnostics)
+                end
+            elif node.kind is TABLE_DECL:
+                for entry in node.kind.TABLE_DECL.entries:
+                    resolve_expression(ctx, entry.value, mod.global_scope)
+                end
+                if diagnostics.error_count == 0:
+                    table_initializers::validate_initializers(modules, mod, node, diagnostics)
+                end
+            end
+        end
+        if diagnostics.error_count > 0:
+            return
+        end
+    end
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        ctx := context::ModuleContext{program, mod}[.program]
+        collect_function_scopes(ctx)
+        if diagnostics.error_count > 0:
+            return
+        end
+    end
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        ctx := context::ModuleContext{program, mod}[.program]
+        root := mod.ast.get_root_module()
+        for id in root.declarations:
+            node := mod.ast.nodes[id]
+            if node.kind is FUNCTION_DECL:
+                resolve_block(ctx, node.kind.FUNCTION_DECL.body, 0)
+            end
+        end
+        if diagnostics.error_count > 0:
+            return
+        end
+    end
+end
+
+
+/// Select a non-external, non-throwing main with at most one parameter.
+/// Record invalid entry diagnostics; inference constrains its final signature.
+func check_entry(program: program::Program, source_id: int) -> void:
+    modules := program.modules
+    sources := program.sources
+    diagnostics := program.diagnostics
+    mod := modules[source_id]
+    mod.entry_origin = None
+    entry := mod.global_scope.symbols["main"]
+    if entry is None:
+        src := sources.sources[source_id]
+        span := source::Span{source_id, start = len(src.text), stop = len(src.text)}[.mod]
+        diag::error(diagnostics, "missing main function", "the input module needs a main function", Some{span})
+        return
+    end
+    if entry?.kind != symbol::SymbolKind.FUNCTION:
+        diag::error(diagnostics, "invalid main declaration", "main must be a function", Some{mod.ast.nodes[entry?.origin].span})
+        return
+    end
+    node := mod.ast.nodes[entry?.origin]
+    if node.kind.FUNCTION_DECL.external_name is Some:
+        diag::error(diagnostics, "missing main function", "the input module needs a Jik main function", Some{node.span})
+        return
+    end
+    if node.kind.FUNCTION_DECL.is_throwing:
+        diag::error(diagnostics, "invalid main signature", "main cannot be throwing", Some{node.span})
+        return
+    end
+    if len(node.kind.FUNCTION_DECL.parameters) > 1:
+        diag::error(diagnostics, "invalid main signature", "main takes at most one Vec[String] argument", Some{node.span})
+        return
+    end
+    mod.entry_origin = Some{entry?.origin}
+end

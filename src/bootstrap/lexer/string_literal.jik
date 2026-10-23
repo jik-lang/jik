@@ -1,0 +1,85 @@
+//! Decode quoted string escapes and report invalid encodings.
+
+use "jik/strbuf"
+use "jik/string"
+
+
+extern func jik_bootstrap_byte_value as byte_value(value: char) -> int
+extern func jik_bootstrap_byte_from_value as byte_from_value(value: int) -> char
+
+
+@embed{BYTE_CONVERSIONS}
+static int32_t jik_bootstrap_byte_value(uint8_t value) { return value; }
+static uint8_t jik_bootstrap_byte_from_value(int32_t value) { return (uint8_t)value; }
+BYTE_CONVERSIONS
+
+
+func hex_digit(ch: char) -> int:
+    value := byte_value(ch)
+    if value >= 48 and value <= 57:
+        return value - 48
+    elif value >= 97 and value <= 102:
+        return value - 97 + 10
+    elif value >= 65 and value <= 70:
+        return value - 65 + 10
+    end
+    return -1
+end
+
+
+throws func decode(foreign text: String, start: int, stop: int, multiline: bool, r: Region) -> String:
+    if start < 0 or stop < start or stop > len(text):
+        fail("invalid string literal bounds")
+    end
+    if multiline:
+        for byte_index = start, stop:
+            if text[byte_index] == '\0':
+                fail("NUL is not supported in string literals")
+            end
+        end
+        value := try string::slice(text, start, stop, r)
+        return value
+    end
+    output := strbuf::new("", r)
+    pos := start
+    while pos < stop:
+        ch := text[pos]
+        pos += 1
+        if ch == '\\':
+            if pos >= stop:
+                fail("unterminated string escape")
+            end
+            escape := text[pos]
+            pos += 1
+            if escape == 'n':
+                ch = '\n'
+            elif escape == 'r':
+                ch = '\r'
+            elif escape == 't':
+                ch = '\t'
+            elif escape == '\\' or escape == '"' or escape == '\'':
+                ch = escape
+            elif escape == 'x':
+                if pos + 1 >= stop:
+                    fail("invalid hex string escape")
+                end
+                hi := hex_digit(text[pos])
+                lo := hex_digit(text[pos + 1])
+                if hi < 0 or lo < 0:
+                    fail("invalid hex string escape")
+                end
+                ch = byte_from_value(hi * 16 + lo)
+                pos += 2
+            elif escape == '0':
+                fail("NUL is not supported in string literals")
+            else:
+                fail("unknown string escape")
+            end
+        end
+        if ch == '\0':
+            fail("NUL is not supported in string literals")
+        end
+        strbuf::append_char(output, ch)
+    end
+    return strbuf::to_string(output, r)
+end

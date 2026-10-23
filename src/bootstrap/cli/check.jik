@@ -1,0 +1,27 @@
+//! Parse check options and report source-analysis errors.
+
+use "jik/argparse" as ap
+
+use "../compiler"
+use "compiler_options"
+
+
+func make_parser(r: Region) -> ap::Parser:
+    parser := ap::new("jik check", r)
+    ap::set_description(parser, "Check Jik syntax, types and regions without generating C or invoking a C compiler.")
+    ap::add_positional(parser, "input", "Input file")
+    ap::add_option(parser, "--dump-ast", "", "Print the parsed AST for each module.")
+    ap::add_option(parser, "--verbose", "", "Print analysis stages to stderr.")
+    return parser
+end
+
+
+throws func run(args: Vec[String]) -> void:
+    parser := make_parser()
+    result := try ap::parse(parser, args)
+    config := compiler::Config{input_path = result.positionals["input"]?}
+    compiler_options::configure(config, result)
+    comp := try compiler::new(config)
+    try comp.check()
+    println("check passed")
+end

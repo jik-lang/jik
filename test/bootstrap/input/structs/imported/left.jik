@@ -1,0 +1,8 @@
+struct Item:
+    value: int
+    label: String
+end
+
+func make(value: int, r: Region) -> Item:
+    return Item{value, label = "left"}
+end

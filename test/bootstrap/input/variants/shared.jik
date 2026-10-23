@@ -1,0 +1,9 @@
+variant Result:
+    OK: int
+    ERR: String
+    EOF
+end
+
+func make(r: Region) -> Result:
+    return Result.OK{9}[r]
+end

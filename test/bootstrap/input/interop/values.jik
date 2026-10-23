@@ -1,0 +1,37 @@
+use "library" as lib
+use "bridge"
+
+@embed{C}
+static int32_t ffi_local(void) { return 7; }
+C
+extern func ffi_local as local_value() -> int
+
+global_handle := lib::handle(19)
+global_text := lib::clone("global")
+
+func main():
+    assert(lib::add(local_value(), 35) == 42)
+    assert(bridge::value() == 42)
+    assert(global_handle.read() == 19 and global_text == "global")
+    assert(lib::twice(1.25) == 2.5)
+    assert(lib::invert(false) and lib::upper('a') == 'A')
+    assert(lib::inspect_site(site()))
+    lib::action()
+    text := "source"
+    copied := lib::clone(text)
+    assert(copied == "source")
+    values := [1, 2, 3]
+    kept := lib::keep_vec(values)
+    kept[1] = 42
+    assert(values[1] == 42)
+    dict := {"value": 42}
+    assert(lib::keep_dict(dict)["value"]? == 42)
+    option := Some{42}
+    assert(lib::keep_option(option)? == 42)
+    box := lib::Box{value = "boxed"}
+    kept_box := lib::keep_box(box)
+    assert(kept_box.value == "boxed")
+    h := lib::handle(42)
+    assert(h.read() == 42)
+    println("interop-ok")
+end

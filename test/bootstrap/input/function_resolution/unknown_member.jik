@@ -1,0 +1,5 @@
+use "shared"
+
+func main():
+    return shared::missing()
+end

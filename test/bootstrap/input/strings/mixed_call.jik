@@ -1,0 +1,14 @@
+func identity(value: String, r: Region) -> String:
+    return value
+end
+
+
+func bad(value: String, r: Region):
+    local := "local"
+    identity(local, r)
+end
+
+
+func main():
+    return 0
+end

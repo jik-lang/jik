@@ -1,0 +1,7 @@
+func empty():
+end
+func main():
+    while empty():
+    end
+    return 0
+end

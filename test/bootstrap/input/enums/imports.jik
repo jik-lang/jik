@@ -1,0 +1,20 @@
+use "shared" as first
+use "bridge"
+
+enum Direction:
+    WEST
+    NORTH
+end
+
+func accept(value: first::Direction) -> bool:
+    return value == first::Direction.NORTH
+end
+
+func main():
+    value: first::Direction
+    if value != first::Direction.WEST or not accept(bridge::choose()):
+        return 1
+    end
+    println(value, ":", bridge::choose(), ":", Direction.NORTH)
+    return 0
+end

@@ -1,0 +1,111 @@
+use "shared"
+
+func make_names(r: Region) -> Vec[String]:
+    names := ["ada", "grace"]
+    return copy(names, r)
+end
+
+func make_labels(r: Region) -> Dict[String]:
+    labels := {"first": "alpha", "second": "beta"}
+    return copy(labels, r)
+end
+
+func make_option(present: bool, r: Region) -> Option[String]:
+    option: Option[String]
+    if present:
+        option = Some{"present"}
+    end
+    return copy(option, r)
+end
+
+func save(saved: Vec[shared::Point]):
+    point := shared::make_point()
+    shared::retain(point, saved)
+end
+
+func transfer(foreign names: Vec[String], r: Region) -> Vec[String]:
+    local := copy(names)
+    return copy(local, r)
+end
+
+func append_copy(values: Vec[String], text: String):
+    push(values, copy(text, .values))
+end
+
+func append_local(values: Vec[String]):
+    text := "copied-local"
+    append_copy(values, text)
+end
+
+func rename(point: shared::Point):
+    text := "renamed"
+    shared::set_label(point, text)
+end
+
+func main():
+    names := make_names()
+    copied := transfer(names, _)
+    append_local(copied)
+    names[0] = "changed"
+    labels := make_labels()
+    duplicated := copy(labels)
+    labels["first"] = "changed"
+    maybe := make_option(true, _)
+    absent := make_option(false, _)
+    point := shared::make_point()
+    point_copy := copy(point)
+    rename(point)
+    point.count = 99
+    point.label = "changed"
+    message := shared::make_result()
+    numeric := shared::Result.NUMBER{7}
+    numeric_copy := copy(numeric)
+    empty := shared::Result.EMPTY{}
+    empty_copy := copy(empty)
+    mode := shared::Result.MODE{shared::Mode.ON}
+    mode_copy := copy(mode)
+    saved: Vec[shared::Point]
+    save(saved)
+    numbers := [1, 2]
+    copied_numbers := copy(numbers)
+    numbers[0] = 99
+    modes := [shared::Mode.ON]
+    modes_copy := copy(modes)
+    counts := {"one": 1}
+    counts_copy := copy(counts)
+    counts["one"] = 99
+    flags := [true, false]
+    flags_copy := copy(flags)
+    decimals := [1.5]
+    decimals_copy := copy(decimals)
+    letters := ['x']
+    letters_copy := copy(letters)
+    empty_vector: Vec[int]
+    empty_vector_copy := copy(empty_vector)
+    empty_dictionary: Dict[String]
+    empty_dictionary_copy := copy(empty_dictionary)
+    enum_option := Some{shared::Mode.ON}
+    enum_option_copy := copy(enum_option)
+    if copied[0] != "ada" or duplicated["first"]? != "alpha" or maybe? != "present" or not (absent is None):
+        return 1
+    end
+    if point_copy.count != 3 or point_copy.label != "origin" or saved[0].label != "origin" or copied_numbers[0] != 1:
+        return 2
+    end
+    if message.TEXT != "message" or numeric_copy.NUMBER != 7 or not (empty_copy is EMPTY) or mode_copy.MODE != shared::Mode.ON:
+        return 3
+    end
+    if modes_copy[0] != shared::Mode.ON or counts_copy["one"]? != 1:
+        return 4
+    end
+    if copied[2] != "copied-local":
+        return 5
+    end
+    if not flags_copy[0] or decimals_copy[0] != 1.5 or letters_copy[0] != 'x' or enum_option_copy? != shared::Mode.ON:
+        return 6
+    end
+    if len(empty_vector_copy) != 0 or len(empty_dictionary_copy) != 0:
+        return 7
+    end
+    println("copy-ok")
+end

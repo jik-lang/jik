@@ -1,0 +1,35 @@
+struct Node:
+    text: String
+    children: Option[Dict[Vec[Node]]]
+end
+
+func make(r: Region) -> Node:
+    return Node{text="root", children=Some{{"key": [Node{text="leaf"}]}}}
+end
+
+func implicit(r: Region) -> Node:
+    value := Node{text="implicit", children=Some{{"key": [Node{text="nested"}]}}}@
+    return value
+end
+
+func append(value: Node):
+    if value.children is Some:
+        push(value.children?["key"]?, Node{text="new"})
+    end
+end
+
+func main():
+    owner := "owner"
+    root := make(.owner)
+    append(root)
+    root.children?["key"]?[0].text = "updated"
+    println(root)
+    second := implicit(.owner)
+    println(second)
+    repeated := [2 of Node{}]
+    repeated[0].children = Some{{"key": [Node{text="first"}]}}
+    if repeated[1].children is Some:
+        return 1
+    end
+    println(repeated)
+end

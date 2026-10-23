@@ -1,0 +1,34 @@
+struct Counter:
+    calls: int
+end
+
+struct Item:
+    number: int
+end
+
+func produce(counter: Counter, value: Item) -> Item:
+    counter.calls += 1
+    return value
+end
+
+func increment(value: Item, amount: int) -> Item:
+    value.number += amount
+    return value
+end
+
+func number(value: Item) -> int:
+    return value.number
+end
+
+func main():
+    counter := Counter{}
+    item := Item{number = 1}
+    assert(produce(counter, item).increment(
+        2
+    ).number() == 3)
+    assert(counter.calls == 1)
+    locations := [item]
+    assert(locations.pop().number() == 3)
+    assert(locations.len() == 0)
+    println("evaluation-ok")
+end

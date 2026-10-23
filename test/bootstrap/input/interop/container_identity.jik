@@ -1,0 +1,15 @@
+use "container_left" as left
+use "container_right" as right
+
+
+func main():
+    points := [left::Point{x=42}]
+    labels := [right::Point{text="right"}]
+    first := [left::Kind.A]
+    second := [right::Kind.B]
+    assert(points[0].x == 42)
+    assert(labels[0].text == "right")
+    assert(first[0] == left::Kind.A)
+    assert(second[0] == right::Kind.B)
+    println("container-identity-ok")
+end

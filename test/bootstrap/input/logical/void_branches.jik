@@ -1,0 +1,6 @@
+func empty():
+end
+func main():
+    value := empty() if true else empty()
+    return 0
+end

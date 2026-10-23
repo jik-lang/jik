@@ -1,0 +1,40 @@
+enum State:
+    OFF
+    ON
+end
+
+struct Record:
+    text: String
+end
+
+variant Data:
+    EMPTY
+    RECORD: Record
+    STATE: State
+    MAYBE: Option[int]
+    MAP: Dict[String]
+end
+
+struct Holder:
+    value: Data
+    values: Vec[Data]
+end
+
+func main():
+    holder := Holder{}
+    println(holder.value)
+    holder.values = [Data.RECORD{Record{text="hello"}}, Data.EMPTY{}]
+    holder.values[0].RECORD.text = "updated"
+    println(holder.values)
+    holder.value = Data.STATE{}
+    println(holder.value)
+    holder.value = Data.MAYBE{None}
+    println(holder.value)
+    holder.value = Data.MAP{{"key": "text"}}
+    println(holder.value)
+    values := {"item": Data.STATE{State.ON}}
+    found := values["item"]
+    println(found?)
+    nested := Some{Data.EMPTY{}}
+    println(nested?)
+end

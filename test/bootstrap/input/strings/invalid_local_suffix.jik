@@ -1,0 +1,4 @@
+func main():
+    text := "invalid"[_]
+    return 0
+end

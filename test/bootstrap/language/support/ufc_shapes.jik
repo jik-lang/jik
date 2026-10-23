@@ -1,0 +1,28 @@
+struct Token:
+    value: int
+end
+
+func advance(t: Token, amount: int) -> Token:
+    t.value += amount
+    return t
+end
+
+func get_value(t: Token) -> int:
+    return t.value
+end
+
+variant Reading:
+    VALUE: int
+    MISSING
+end
+
+func increase(r: Reading, amount: int) -> Reading:
+    if r is VALUE:
+        r.VALUE += amount
+    end
+    return r
+end
+
+func reading_value(r: Reading) -> int:
+    return r.VALUE
+end

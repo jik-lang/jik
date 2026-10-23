@@ -1,0 +1,91 @@
+//! Discover, tokenize, parse, and connect sources without changing source IDs.
+
+use "module"
+use "import_path"
+use "../source"
+use "../diag"
+use "../lexer/lexer"
+use "../parser/parser"
+use "../parser/ast"
+use "../semantic/resolution/identifier"
+
+
+func resolve_imports(src_mngr: source::SourceManager, ast: ast::Ast, diag: diag::Diagnostics, src: source::SourceFile, r: Region) -> Vec[module::ResolvedImport]:
+    imports: Vec[module::ResolvedImport][r]
+    root_mod := ast.get_root_module()
+    seen_aliases: Dict[bool]
+    seen_paths: Dict[bool]
+    for id in root_mod.imports:
+        import_nd := ast.nodes[id]
+        import := import_nd.kind.IMPORT
+
+        resolved: import_path::ResolvedPath[.src_mngr]
+        try value := import_path::resolve_path(src_mngr, import.path, src):
+            resolved = value
+        except:
+            diag::error(diag, error_msg(), "could not resolve import", Some{import_nd.span})
+            continue
+        end
+        full_path := resolved.path
+        if seen_paths[full_path] is Some:
+            diag::error(diag, concat("reuse of module ", full_path), "import each module only once", Some{import_nd.span})
+            continue
+        end
+        seen_paths[full_path] = true
+
+        alias := ast::effective_alias(import)
+        identifier::check(alias, false, import_nd.span, diag)
+        if import.alias is Some and alias == "main":
+            diag::error(diag, "invalid import alias", "explicit alias main is not allowed", Some{import_nd.span})
+        end
+        if seen_aliases[alias] is Some:
+            diag::error(diag, concat("duplicate import alias: ", alias), "aliases should be unique across module", Some{import_nd.span})
+        else:
+            seen_aliases[alias] = true
+        end
+
+        try sid := src_mngr.add_source(full_path):
+            mod_src := src_mngr.sources[sid]
+            if mod_src.origin is LOCAL or not (resolved.origin is LOCAL):
+                mod_src.origin = resolved.origin
+            end
+            imports.push(module::ResolvedImport{
+                target_id = sid,
+                alias = copy(alias, r),
+                span = copy(import_nd.span, r)
+            }[r])
+        except:
+            diag::error(diag, error_msg(), "could not resolve import", Some{import_nd.span})
+        end
+    end
+    return imports
+end
+
+
+/// Discover reachable sources and retain parsed modules in discovery order.
+/// Return the entry source ID; fail on source I/O or recorded lex/parse/import errors.
+throws func load_modules(src_mngr: source::SourceManager, modules: Vec[module::Module], diagnostics: diag::Diagnostics, foreign input_path: String) -> int:
+    sid := try src_mngr.add_source(input_path)
+    // The source manager queues each normalized path once, in discovery order.
+    next_source := 0
+    while next_source < len(src_mngr.sources):
+        src := src_mngr.sources[next_source]
+        next_source += 1
+        tokens := lexer::tokenize(src, diagnostics)
+        if diagnostics.error_count > 0:
+            fail("compilation failed")
+        end
+        ast := parser::parse(src, tokens, diagnostics)
+        if diagnostics.error_count > 0:
+            fail("compilation failed")
+        end
+        mod := module::Module{source_id = src.id, tokens, ast}[.modules]
+        modules.push(mod)
+
+        mod.imports = resolve_imports(src_mngr, ast, diagnostics, src, .mod)
+        if diagnostics.error_count > 0:
+            fail("compilation failed")
+        end
+    end
+    return sid
+end

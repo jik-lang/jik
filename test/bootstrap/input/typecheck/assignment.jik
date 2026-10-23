@@ -1,0 +1,13 @@
+func bump(value: int):
+    value = value + 1
+    return value
+end
+
+func main():
+    value := bump(39)
+    if value < 42:
+        result := value + 2
+        value = result
+    end
+    return value
+end

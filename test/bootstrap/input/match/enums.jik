@@ -1,0 +1,43 @@
+enum Color:
+    RED
+    GREEN
+    BLUE
+end
+
+func number(value: Color):
+    match value:
+        case RED:
+            return 1
+        case GREEN:
+            return 2
+        case BLUE:
+            return 3
+    end
+end
+
+func fallback(value: Color) -> int:
+    match value:
+        case RED:
+            return 10
+        other:
+            return 20
+    end
+end
+
+func main():
+    println(number(Color.RED), ":", number(Color.GREEN), ":", number(Color.BLUE))
+    println(fallback(Color.RED), ":", fallback(Color.BLUE))
+    match Color.GREEN:
+        case RED:
+            println("wrong")
+        case GREEN:
+            match Color.BLUE:
+                case RED:
+                other:
+                    println("nested")
+            end
+        case BLUE:
+        other:
+            println("wrong fallback")
+    end
+end

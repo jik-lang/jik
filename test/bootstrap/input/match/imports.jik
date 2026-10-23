@@ -1,0 +1,30 @@
+use "shared" as first
+use "bridge" as second
+
+variant V:
+    TEXT: int
+    EOF
+end
+
+func inspect(value: first::V):
+    match value:
+        case TEXT{payload}:
+            println(payload)
+        case EOF:
+            println("eof")
+    end
+end
+
+func main():
+    inspect(second::make())
+    match first::E.B:
+        case A:
+        case B:
+            println("B")
+    end
+    match V.TEXT{7}:
+        case TEXT{payload}:
+            println(payload)
+        case EOF:
+    end
+end

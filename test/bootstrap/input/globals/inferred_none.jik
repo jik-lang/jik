@@ -1,0 +1,5 @@
+values := [Some{1}, None]
+
+func main():
+    println(values)
+end

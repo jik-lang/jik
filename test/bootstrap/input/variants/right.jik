@@ -1,0 +1,5 @@
+use "shared"
+
+func inspect(value: shared::Result) -> int:
+    return value.OK
+end

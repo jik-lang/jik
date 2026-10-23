@@ -1,0 +1,157 @@
+use "jik/path"
+use "jik/strbuf"
+use "jik/testing" as test
+
+use "../../src/bootstrap/program"
+use "../../src/bootstrap/semantic/resolution/resolve"
+use "support"
+use "../../src/bootstrap/modules/module_loader"
+use "../../src/bootstrap/compiler"
+use "../../src/bootstrap/modules/module_graph"
+use "../../src/bootstrap/semantic/typing/inference"
+use "../../src/bootstrap/semantic/typing/typecheck"
+
+
+func check_cycle(ts, foreign input_path: String, foreign cycle_names: Vec[String], foreign closing_name: String, source_count: int) -> void:
+    config := compiler::Config{input_path = copy(input_path)}
+    comp := must compiler::new(config)
+    must module_loader::load_modules(comp.program.sources, comp.program.modules, comp.program.diagnostics, comp.config.input_path)
+    ordered := module_graph::dependency_order(comp.program.modules, comp.program.sources, comp.program.diagnostics, .comp)
+    test::suite_assert(ts, len(ordered) == 0, site())
+    test::suite_assert(ts, len(comp.program.sources.sources) == source_count, site())
+    test::suite_assert(ts, comp.program.diagnostics.error_count == 1, site())
+    test::suite_assert(ts, len(comp.program.diagnostics.messages) == 1, site())
+    if len(comp.program.diagnostics.messages) != 1:
+        return
+    end
+
+    base_dir := path::dirname(input_path)
+    expected := strbuf::new("")
+    for i, name in cycle_names:
+        if i > 0:
+            expected.append(" -> ")
+        end
+        expected.append(path::normalize(path::join([base_dir, concat(name, ".jik")])))
+    end
+    message := comp.program.diagnostics.messages[0]
+    test::suite_assert(ts, message.summary == "module import cycle detected", site())
+    test::suite_assert(ts, message.detail == strbuf::to_string(expected), site())
+    test::suite_assert(ts, message.span is Some, site())
+    if message.span is None:
+        return
+    end
+    span := message.span?
+    closing_path := path::normalize(path::join([base_dir, concat(closing_name, ".jik")]))
+    test::suite_assert(ts, comp.program.sources.sources[span.source_id].path == closing_path, site())
+    closing_module := comp.program.modules[span.source_id]
+    root := closing_module.ast.get_root_module()
+    last_import := closing_module.ast.nodes[root.imports[len(root.imports) - 1]]
+    test::suite_assert(ts, span.start == last_import.span.start, site())
+    test::suite_assert(ts, span.stop == last_import.span.stop, site())
+end
+
+
+func test_dependency_order(ts) -> void:
+    config := compiler::Config{input_path = "test/bootstrap/input/local_imports/main.jik"}
+    comp := must compiler::new(config)
+    entry_id := must module_loader::load_modules(comp.program.sources, comp.program.modules, comp.program.diagnostics, comp.config.input_path)
+    test::suite_assert(ts, entry_id == 0, site())
+    test::suite_assert(ts, len(comp.program.modules) == 4, site())
+    for id, mod in comp.program.modules:
+        test::suite_assert(ts, mod.source_id == id, site())
+    end
+    root_imports := comp.program.modules[entry_id].imports
+    test::suite_assert(ts, len(root_imports) == 2, site())
+    if len(root_imports) == 2:
+        test::suite_assert(ts, root_imports[0].target_id == 1 and root_imports[0].alias == "left", site())
+        test::suite_assert(ts, root_imports[1].target_id == 2 and root_imports[1].alias == "right", site())
+    end
+
+    ordered := module_graph::dependency_order(comp.program.modules, comp.program.sources, comp.program.diagnostics, .comp)
+    repeated := module_graph::dependency_order(comp.program.modules, comp.program.sources, comp.program.diagnostics, .comp)
+    test::suite_assert(ts, comp.program.diagnostics.error_count == 0, site())
+    test::suite_assert(ts, len(ordered) == 4 and len(repeated) == 4, site())
+    if len(ordered) != 4 or len(repeated) != 4:
+        return
+    end
+    expected_ids := [3, 1, 2, 0]
+    positions := [len(ordered) of 0]
+    for i, source_id in ordered:
+        test::suite_assert(ts, source_id == expected_ids[i], site())
+        test::suite_assert(ts, repeated[i] == source_id, site())
+        positions[source_id] = i
+    end
+    for i, source_id in ordered:
+        for import in comp.program.modules[source_id].imports:
+            test::suite_assert(ts, positions[import.target_id] < i, site())
+        end
+    end
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_module_graph")
+    check_cycle(ts, "test/bootstrap/input/import_cycles/self.jik", ["self", "self"], "self", 1)
+    check_cycle(ts, "test/bootstrap/input/import_cycles/no_leaves/main.jik", ["a", "b", "a"], "b", 3)
+    check_cycle(ts, "test/bootstrap/input/import_cycles/with_leaf/main.jik", ["a", "b", "a"], "b", 4)
+    test_dependency_order(ts)
+    test_phase_diagnostics_follow_order(ts)
+end
+
+
+func test_phase_diagnostics_follow_order(ts) -> void:
+    declarations := program::Program{}
+    duplicate := "func repeated():\nend\nfunc repeated():\nend\n"
+    support::add_source(declarations, duplicate, 0)
+    support::add_source(declarations, duplicate, 1)
+    declarations.dependency_order = [1, 0][.declarations]
+    resolve::resolve_declarations(declarations)
+    test::suite_assert(ts, declarations.diagnostics.error_count == 1, site())
+    if len(declarations.diagnostics.messages) == 1:
+        span := declarations.diagnostics.messages[0].span
+        test::suite_assert(ts, span is Some, site())
+        if span is Some:
+            test::suite_assert(ts, span?.source_id == 1, site())
+        end
+    end
+
+    unresolved := program::Program{}
+    unknown := "func unknown(value):\n    return value\nend\n"
+    support::add_source(unresolved, unknown, 0)
+    support::add_source(unresolved, unknown, 1)
+    unresolved.dependency_order = [1, 0][.unresolved]
+    resolve::resolve_declarations(unresolved)
+    inference::run(unresolved, -1)
+    test::suite_assert(ts, unresolved.diagnostics.error_count == 1, site())
+    if len(unresolved.diagnostics.messages) == 1:
+        span := unresolved.diagnostics.messages[0].span
+        test::suite_assert(ts, span is Some, site())
+        if span is Some:
+            test::suite_assert(ts, span?.source_id == 1, site())
+        end
+    end
+    for mod in unresolved.modules:
+        for node in mod.ast.nodes:
+            test::suite_assert(ts, node.inferred_type is None and node.inference_slot == -1, site())
+        end
+    end
+
+    conditions := program::Program{}
+    invalid := "func inspect(value: Site):\n    while value:\n        break\n    end\nend\n"
+    support::add_source(conditions, invalid, 0)
+    support::add_source(conditions, invalid, 1)
+    conditions.dependency_order = [1, 0][.conditions]
+    resolve::resolve_declarations(conditions)
+    inference::run(conditions, -1)
+    test::suite_assert(ts, conditions.diagnostics.error_count == 0, site())
+    typecheck::run(conditions)
+    test::suite_assert(ts, conditions.diagnostics.error_count == 2, site())
+    if len(conditions.diagnostics.messages) == 2:
+        for index, message in conditions.diagnostics.messages:
+            test::suite_assert(ts, message.span is Some, site())
+            if message.span is Some:
+                test::suite_assert(ts, message.span?.source_id == 1 - index, site())
+            end
+        end
+    end
+end

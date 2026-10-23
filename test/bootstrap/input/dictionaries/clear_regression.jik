@@ -1,0 +1,8 @@
+func main():
+    value := {"key": 7}
+    clear(value)
+    if len(value) != 0 or value["key"] is Some:
+        return 1
+    end
+    return 42
+end

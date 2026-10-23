@@ -1,0 +1,10 @@
+func bad(r: Region) -> String:
+    values := {"key": "local"}
+    for key, value in values:
+        return value
+    end
+    return "fallback"[r]
+end
+func main():
+    return 42
+end

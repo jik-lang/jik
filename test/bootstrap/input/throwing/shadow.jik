@@ -1,0 +1,9 @@
+func fail(value: int) -> int:
+    return value + 1
+end
+
+func main():
+    value := fail(41)
+    println(value)
+    return value - 42
+end

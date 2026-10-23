@@ -1,0 +1,55 @@
+enum Color:
+    ZEBRA
+    APPLE
+    MIDDLE
+end
+
+struct Paint:
+    color: Color
+end
+
+func choose(flag: bool) -> Color:
+    return Color.APPLE if flag else Color.MIDDLE
+end
+
+func same(left, right) -> bool:
+    return left == right
+end
+
+func fallthrough(flag: bool) -> Color:
+    if flag:
+        return Color.MIDDLE
+    end
+end
+
+func main():
+    color: Color
+    paint: Paint
+    if not same(color, Color.ZEBRA) or paint.color != Color.ZEBRA:
+        return 1
+    end
+    if color:
+        return 4
+    end
+    if fallthrough(false) != Color.ZEBRA:
+        return 5
+    end
+    color = choose(true)
+    paint.color = choose(false)
+    values := [color, paint.color]
+    push(values, Color.ZEBRA)
+    last := pop(values)
+    defaults: Vec[Color] = [3 of Color.ZEBRA]
+    shades: Dict[Color]
+    shades["warm"] = color
+    maybe: Option[Color] = Some{paint.color}
+    missing: Option[Color]
+    if values[0] != Color.APPLE or values[1] != Color.MIDDLE or last != Color.ZEBRA:
+        return 2
+    end
+    if shades["warm"]? != color or maybe? != Color.MIDDLE or missing is Some:
+        return 3
+    end
+    println(color, ":", paint.color, ":", defaults[2])
+    return 0
+end

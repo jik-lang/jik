@@ -1,0 +1,4 @@
+func main():
+    values := [1]
+    return pop(values, 2)
+end

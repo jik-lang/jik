@@ -1,0 +1,6 @@
+use "does_not_exist"
+
+
+func main():
+    return 0
+end

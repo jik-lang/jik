@@ -1,0 +1,27 @@
+use "shared" as base
+
+func main():
+    called := base::make(
+    )[0].values[0]?[1:][0]
+    boxes := base::make()
+    boxes[0].values[0]?[1] += 7
+    dictionary := {"key": Some{boxes[0]}}
+    wrapped := base::Wrapped.BOX{boxes[0]}
+    original := dictionary["key"]??.values[0]?[0]
+    changed := (wrapped).BOX.values[0]?[1]
+    from_table := base::Fixed[base::Key.A].values[0]?[1]
+    byte := ((boxes[0]).name)[1:][0]
+    alternative := base::make()[0]
+    alternative.values[0]?[0] = 5
+    selected := (boxes[0] if false else alternative).values[0]?[0]
+    all := boxes[0].values[0]?[:]
+    head := boxes[0].values[0]?[:2]
+    tail := boxes[0].values[0]?[1:]
+    if called != 2 or original != 1 or changed != 9 or from_table != 8 or byte != 'b' or selected != 5:
+        return 1
+    end
+    if len(all) != 3 or len(head) != 2 or tail[0] != 9:
+        return 2
+    end
+    println(called, ":", original, ":", changed, ":", from_table, ":", byte, ":", selected)
+end

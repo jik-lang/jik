@@ -1,0 +1,14 @@
+// Bootstrap regression for the documented seed grouping/ownership defect.
+func identity(value: String) -> String:
+    return (value)
+end
+
+
+func main():
+    value := "grouped"
+    result := identity(value)
+    if result != "grouped":
+        return 1
+    end
+    return 42
+end

@@ -1,0 +1,37 @@
+func first(values: Vec[int]) -> int:
+    for value in values:
+        return value
+    end
+    return -1
+end
+
+func main():
+    values := [2, 4, 6]
+    total := 0
+    for value in values:
+        total += value
+    end
+    for index, value in values:
+        if index == 1:
+            continue
+        end
+        total += index + value
+    end
+    nested := 0
+    for outer in values:
+        for index, inner in values:
+            if index == 2:
+                break
+            end
+            nested += outer + inner
+        end
+    end
+    empty: Vec[int]
+    for value in empty:
+        return 1
+    end
+    for index, value in empty:
+        return 2
+    end
+    println(total, ":", nested, ":", first(values), ":", first(empty), ":", values)
+end

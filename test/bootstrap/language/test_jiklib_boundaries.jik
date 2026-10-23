@@ -1,0 +1,42 @@
+use "jik/testing" as test
+use "jik/bytes"
+use "jik/io"
+use "jik/path"
+use "jik/process"
+use "jik/string"
+
+use "../../../src/bootstrap/cli/run" as run_command
+use "utils"
+
+
+func run_tests(ts):
+    println("[test] language/test_jiklib_boundaries")
+    tool := utils::compiler_command(_)
+    workspace := must run_command::make_workspace()
+    program := path::join([workspace, "library boundaries.exe"])
+    built := must process::capture(tool, ["build", "test/bootstrap/language/input/library_boundaries/main.jik", "--out", program])
+    if built.code != 0:
+        println(must bytes::to_string_ascii(built.err))
+    end
+    test::suite_assert(ts, built.code == 0, site())
+    if built.code == 0:
+        input := path::join([workspace, "input.txt"])
+        must io::write_file(input, "one line\n")
+        read := must process::capture(program, ["input", input])
+        test::suite_assert(ts, read.code == 0 and string::trim(must bytes::to_string_ascii(read.out)) == "one line", site())
+        regions := must process::capture(program, ["regions"])
+        test::suite_assert(ts, regions.code == 0 and bytes::len(regions.err) == 0, site())
+        output := must bytes::to_string_ascii(regions.out)
+        test::suite_assert(ts, string::contains(output, "used=") and string::contains(output, "blocks=") and string::contains(output, "library"), site())
+        panic := must process::capture(program, ["panic"])
+        test::suite_assert(ts, panic.code != 0 and bytes::len(panic.out) == 0, site())
+        test::suite_assert(ts, must bytes::to_string_ascii(panic.err) == "expected library panic", site())
+        failed := must process::capture(program, ["suite-failure"])
+        test::suite_assert(ts, failed.code != 0 and string::contains(must bytes::to_string_ascii(failed.out), "1 failed"), site())
+        test::suite_assert(ts, must process::run(program, ["exit"]) == 7, site())
+        streams := must process::capture(program, ["streams", "", "two words", "a\"b", "end\\"])
+        test::suite_assert(ts, streams.code == 0, site())
+        test::suite_assert(ts, must bytes::to_string_ascii(streams.out) == "stdout" and must bytes::to_string_ascii(streams.err) == "stderr", site())
+    end
+    must run_command::cleanup(workspace)
+end

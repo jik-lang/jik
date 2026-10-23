@@ -1,0 +1,7 @@
+func bad(r: Region) -> Dict[String]:
+    text := "local"
+    return {"key": text}
+end
+func main():
+    return 42
+end

@@ -1,0 +1,63 @@
+use "jik/testing" as test
+
+use "support"
+use "test_regions"
+use "../../src/bootstrap/language/builtin"
+use "../../src/bootstrap/language/region_source"
+use "../../src/bootstrap/semantic/typing/typecheck"
+use "../../src/bootstrap/semantic/regions/regions"
+use "../../src/bootstrap/language/types"
+
+
+func test_concat_regions(ts) -> void:
+    text := "func join(foreign left: String, foreign right: String, r: Region) -> String:\n    local := concat(left, right)\n    return concat(local, right, r)\nend\n"
+    comp := support::infer_source(text, -1)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    function := mod.ast.nodes[mod.ast.get_root_module().declarations[0]].kind.FUNCTION_DECL
+    local := mod.ast.nodes[function.body.statements[0]]
+    call := mod.ast.nodes[local.kind.LOCAL_DECL.initializer?]
+    test::suite_assert(ts, call.kind.CALL.builtin? == builtin::Kind.CONCAT and call.kind.CALL.auto_region, site())
+    test::suite_assert(ts, call.inferred_type? == types::atom(mod.type_store, types::Atom.STRING), site())
+    test::suite_assert(ts, call.region_source.kind == region_source::Kind.LOCAL and function.needs_local_region, site())
+    returned := mod.ast.nodes[mod.ast.nodes[function.body.statements[1]].kind.RETURN.value?]
+    test::suite_assert(ts, not returned.kind.CALL.auto_region and returned.region_source.kind == region_source::Kind.CALLER, site())
+    test::suite_assert(ts, returned.region_source.parameter_id == function.parameters[2], site())
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0 and returned.region_source.parameter_id == function.parameters[2], site())
+end
+
+
+func test_concat_inference(ts) -> void:
+    comp := support::infer_source("func join(value, r: Region) -> String:\n    return concat(value, r)\nend\n", -1)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count == 0:
+        mod := comp.modules[0]
+        function := mod.ast.nodes[mod.ast.get_root_module().declarations[0]].kind.FUNCTION_DECL
+        test::suite_assert(ts, mod.ast.nodes[function.parameters[0]].inferred_type? == types::atom(mod.type_store, types::Atom.STRING), site())
+    end
+end
+
+
+func test_concat_restrictions(ts) -> void:
+    test_regions::check_error(ts, "func bad():\n    value := concat()\nend\n", "call arity mismatch")
+    test_regions::check_error(ts, "func bad():\n    value := concat(_)\nend\n", "call arity mismatch")
+    test_regions::check_error(ts, "func bad():\n    value := concat(1, _)\nend\n", "type inference conflict")
+    test_regions::check_error(ts, "func bad():\n    value := concat(\"x\", 1)\nend\n", "type mismatch")
+    test_regions::check_error(ts, "func bad(foreign source: String) -> String:\n    return concat(source, .source)\nend\n", "cannot return foreign composite value")
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_concat")
+    test_concat_regions(ts)
+    test_concat_inference(ts)
+    test_concat_restrictions(ts)
+end

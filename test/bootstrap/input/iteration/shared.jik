@@ -1,0 +1,18 @@
+enum Key:
+    A
+end
+
+table Numbers[Key] -> Vec[int]:
+    A: [2, 3]
+end
+
+words := ["ab", "c"]
+
+struct Box:
+    numbers: Vec[int]
+    text: String
+end
+
+func make(r: Region) -> Vec[String]:
+    return ["de", "f"]
+end

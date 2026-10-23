@@ -1,0 +1,6 @@
+use "library" as lib
+
+@embed{Bridge}
+static int32_t ffi_bridge(void) { return ffi_add(20, 22); }
+Bridge
+extern func ffi_bridge as value() -> int

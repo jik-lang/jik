@@ -1,0 +1,197 @@
+//! Parser token state, error recovery, and type syntax.
+
+use "jik/string"
+
+use "../diag"
+use "../source"
+use "../lexer/token"
+use "ast"
+use "../language/native"
+
+
+// Parsing state for one source file; builds its module AST from lexer tokens.
+struct Parser:
+    file: source::SourceFile
+    tokens: Vec[token::Token]
+    diagnostics: diag::Diagnostics
+    pos: int    // Zero-based index in tokens; stays on the EOF token at end of input.
+    ast: ast::Ast
+    // Nested literal element/payload contexts; disallows inner region suffixes.
+    container_depth: int
+    match_depth: int    // Active match contexts; allows case/other to terminate a body.
+    try_depth: int    // Active try contexts; allows except to terminate a body.
+    // Platform restriction applied to subsequently parsed native directives.
+    build_platform: native::Platform
+    // Profile restriction applied to subsequently parsed native directives.
+    build_profile: native::Profile
+end
+
+
+/// Create a cursor and module root in the inferred result region.
+/// Tokens must include EOF; subsequent grammar operations share this state.
+func new(file: source::SourceFile, tokens: Vec[token::Token], diagnostics: diag::Diagnostics) -> Parser:
+    p := Parser{file, tokens, diagnostics, ast = ast::Ast{}}@
+    span := source::Span{source_id = file.id, start = 0, stop = len(file.text)}@
+    p.ast.root = p.ast.add_module(span)
+    return p
+end
+
+
+func current(p: Parser) -> token::Token:
+    return p.tokens[p.pos]
+end
+
+
+func current_type(p: Parser) -> token::TokenType:
+    return p.tokens[p.pos].type
+end
+
+
+func at_end(p: Parser) -> bool:
+    return p.current_type() == token::TokenType.EOF
+end
+
+
+func advance(p: Parser) -> token::Token:
+    tok := p.current()
+    if not p.at_end():
+        p.pos += 1
+    end
+    return tok
+end
+
+
+/// Consume the required token or record a diagnostic and fail.
+/// A lexer ERROR token is consumed without adding a second diagnostic.
+throws func expect(p: Parser, kind: token::TokenType) -> token::Token:
+    if p.current_type() != kind:
+        actual := p.current()
+        if actual.type == token::TokenType.ERROR:
+            p.advance()
+            fail("parse error")
+        end
+        diag::error(p.diagnostics, "unexpected token", concat("expected ", token::TokenTypeNames[kind]), Some{actual.span})
+        fail("parse error")
+    end
+    return p.advance()
+end
+
+
+func skip_newlines(p: Parser) -> void:
+    while p.current_type() == token::TokenType.NEWLINE:
+        p.advance()
+    end
+end
+
+
+func synchronize_statement(p: Parser) -> void:
+    while not p.at_end():
+        if p.current_type() == token::TokenType.NEWLINE:
+            p.advance()
+            return
+        end
+        if p.current_type() == token::TokenType.KWD_END or (p.match_depth > 0 and (p.current_type() == token::TokenType.KWD_CASE or p.current_type() == token::TokenType.KWD_OTHER)):
+            return
+        end
+        if p.current_type() == token::TokenType.KWD_ELIF or p.current_type() == token::TokenType.KWD_ELSE:
+            return
+        end
+        if p.try_depth > 0 and p.current_type() == token::TokenType.KWD_EXCEPT:
+            return
+        end
+        p.advance()
+    end
+end
+
+
+func is_directive(kind: token::TokenType) -> bool:
+    return kind == token::TokenType.DIRECTIVE_PLATFORM or kind == token::TokenType.DIRECTIVE_PROFILE or kind == token::TokenType.DIRECTIVE_INCLUDEDIR or kind == token::TokenType.DIRECTIVE_LIBDIR or kind == token::TokenType.DIRECTIVE_LINK or kind == token::TokenType.DIRECTIVE_COPY
+end
+
+
+func is_declaration_start(kind: token::TokenType) -> bool:
+    if is_directive(kind):
+        return true
+    end
+    return kind == token::TokenType.KWD_INIT or kind == token::TokenType.KWD_THROWS or kind == token::TokenType.KWD_TABLE or kind == token::TokenType.KWD_FUNC or kind == token::TokenType.KWD_STRUCT or kind == token::TokenType.KWD_ENUM or kind == token::TokenType.KWD_VARIANT or kind == token::TokenType.KWD_EXTERN or kind == token::TokenType.EMBEDDED_C
+end
+
+
+func is_global_start(p: Parser) -> bool:
+    return p.current_type() == token::TokenType.IDENTIFIER and p.pos + 1 < len(p.tokens) and p.tokens[p.pos + 1].type == token::TokenType.DECLARE
+end
+
+
+func synchronize_top_level(p: Parser) -> void:
+    while not p.at_end():
+        if p.current_type() == token::TokenType.KWD_USE or is_declaration_start(p.current_type()) or is_global_start(p):
+            return
+        end
+        p.advance()
+    end
+end
+
+
+func text(p: Parser, span: source::Span) -> String:
+    return must string::slice(p.file.text, span.start, span.stop, .p)
+end
+
+
+/// Parse a type name and its type arguments into the parser AST.
+/// For a local declaration, allow_destination leaves an allocation suffix for
+/// the default literal parser; propagate malformed type-syntax errors.
+throws func parse_type_description(p: Parser, allow_destination: bool) -> int:
+    first := p.current()
+    if first.type == token::TokenType.KWD_VEC or first.type == token::TokenType.KWD_DICT or first.type == token::TokenType.KWD_OPTION:
+        p.advance()
+    else:
+        first = try p.expect(token::TokenType.IDENTIFIER)
+    end
+    qualifier: Option[String] = None@
+    name := p.text(first.span)
+    last_span := first.span
+    if first.type == token::TokenType.IDENTIFIER and p.current_type() == token::TokenType.DOUBLE_COLON:
+        p.advance()
+        qualifier = Some{name}@
+        member := try p.expect(token::TokenType.IDENTIFIER)
+        name = p.text(member.span)
+        last_span = member.span
+    end
+    arguments: Vec[int][.p]
+    applied := false
+    if p.current_type() == token::TokenType.LBRACKET and name != "String" and (not allow_destination or name == "Vec" or name == "Dict" or name == "Option"):
+        applied = true
+        p.advance()
+        if p.current_type() != token::TokenType.RBRACKET:
+            argument := try p.parse_type_name()
+            arguments.push(argument)
+            while p.current_type() == token::TokenType.COMMA:
+                p.advance()
+                argument = try p.parse_type_name()
+                arguments.push(argument)
+            end
+        end
+        close := try p.expect(token::TokenType.RBRACKET)
+        last_span = close.span
+    end
+    id := p.ast.add_type_name(first.span, last_span, qualifier, name)
+    description := p.ast.nodes[id].kind.TYPE_NAME
+    description.arguments = arguments
+    description.applied = applied
+    return id
+end
+
+
+
+throws func parse_type_name(p: Parser) -> int:
+    result := try p.parse_type_description(false)
+    return result
+end
+
+
+throws func parse_local_type_name(p: Parser) -> int:
+    result := try p.parse_type_description(true)
+    return result
+end
+
+

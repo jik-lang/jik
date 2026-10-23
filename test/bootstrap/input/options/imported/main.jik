@@ -1,0 +1,11 @@
+use "helper"
+
+func main():
+    value := helper::make(42)
+    missing: Option[helper::Item]
+    if helper::read(value) != 42 or missing is Some or value?.next is Some:
+        return 1
+    end
+    println(value, ":", missing)
+    return 42
+end

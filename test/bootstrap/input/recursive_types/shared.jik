@@ -1,0 +1,8 @@
+struct Node:
+    value: int
+    next: Option[Dict[Vec[Node]]]
+end
+
+func make(r: Region) -> Vec[Option[Dict[Node]]]:
+    return [Some{{"key": Node{value=42}}}]
+end

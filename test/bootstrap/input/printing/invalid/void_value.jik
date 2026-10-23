@@ -1,0 +1,4 @@
+func main():
+    value := println(42)
+    return 0
+end

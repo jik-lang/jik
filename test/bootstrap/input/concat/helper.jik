@@ -1,0 +1,3 @@
+func join(foreign text: String, r: Region) -> String:
+    return concat(text, "!", r)
+end

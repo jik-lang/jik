@@ -1,0 +1,188 @@
+use "jik/testing" as test
+use "jik/string"
+
+use "support"
+use "../../src/bootstrap/parser/ast"
+
+
+func initializer(tree: ast::Ast) -> int:
+    root := tree.get_root_module()
+    function := tree.nodes[root.declarations[0]].kind.FUNCTION_DECL
+    return tree.nodes[function.body.statements[0]].kind.LOCAL_DECL.initializer?
+end
+
+
+func check_span(ts, foreign text: String, foreign node: ast::Node, foreign expected: String) -> void:
+    valid := node.span.start >= 0 and node.span.stop >= node.span.start and node.span.stop <= len(text)
+    test::suite_assert(ts, valid, site())
+    if valid:
+        spelling := must string::slice(text, node.span.start, node.span.stop)
+        test::suite_assert(ts, spelling == expected and node.span.source_id == 0, site())
+    end
+end
+
+
+func test_binary_precedence_matrix(ts) -> void:
+    operators := [ast::BinaryOp.PLUS, ast::BinaryOp.MINUS, ast::BinaryOp.TIMES,
+        ast::BinaryOp.DIV, ast::BinaryOp.MOD, ast::BinaryOp.LT, ast::BinaryOp.GT,
+        ast::BinaryOp.LE, ast::BinaryOp.GE, ast::BinaryOp.EQ, ast::BinaryOp.NE,
+        ast::BinaryOp.AND, ast::BinaryOp.OR]
+    // Grammar tiers: or < and < all comparisons < addition < multiplication.
+    // Each binary tier associates left; parse-only operands need no types.
+    ranks := [3, 3, 4, 4, 4, 2, 2, 2, 2, 2, 2, 1, 0]
+    spellings := ["+", "-", "*", "/", "%", "<", ">", "<=", ">=", "==", "!=", "and", "or"]
+    for left_index, left in operators:
+        for right_index, right in operators:
+            expression := concat("a ", spellings[left_index], " b ", spellings[right_index], " c")
+            text := concat("func main():\n    value := ", expression, "\nend\n")
+            parsed := support::parse_source(text)
+            test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+            if parsed.diagnostics.error_count > 0:
+                continue
+            end
+            node := parsed.ast.nodes[initializer(parsed.ast)]
+            test::suite_assert(ts, node.kind is BINARY, site())
+            if not (node.kind is BINARY):
+                continue
+            end
+            outer := node.kind.BINARY
+            right_tighter := ranks[left_index] < ranks[right_index]
+            test::suite_assert(ts, outer.op == (left if right_tighter else right), site())
+            child := parsed.ast.nodes[outer.right if right_tighter else outer.left]
+            test::suite_assert(ts, child.kind is BINARY, site())
+            if child.kind is BINARY:
+                test::suite_assert(ts, child.kind.BINARY.op == (right if right_tighter else left), site())
+            end
+            check_span(ts, text, node, expression)
+        end
+    end
+end
+
+
+func test_postfix_chain_and_spans(ts) -> void:
+    expression := "-pkg::make(\n a,\n b\n)[i:j][k].field??"
+    text := concat("func main():\n    value := ", expression, "\nend\n")
+    parsed := support::parse_source(text)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+    if parsed.diagnostics.error_count > 0:
+        return
+    end
+    tree := parsed.ast
+    negative := tree.nodes[initializer(tree)]
+    test::suite_assert(ts, negative.kind is UNARY and negative.kind.UNARY.op == ast::UnaryOp.NEGATE, site())
+    check_span(ts, text, negative, expression)
+    outer := tree.nodes[negative.kind.UNARY.operand]
+    test::suite_assert(ts, outer.kind is UNWRAP, site())
+    inner := tree.nodes[outer.kind.UNWRAP]
+    test::suite_assert(ts, inner.kind is UNWRAP, site())
+    field := tree.nodes[inner.kind.UNWRAP]
+    test::suite_assert(ts, field.kind is FIELD and field.kind.FIELD.name == "field", site())
+    check_span(ts, text, field, "pkg::make(\n a,\n b\n)[i:j][k].field")
+    index := tree.nodes[field.kind.FIELD.value]
+    test::suite_assert(ts, index.kind is INDEX and tree.nodes[index.kind.INDEX.index].kind.IDENTIFIER_EXPR.name == "k", site())
+    slice := tree.nodes[index.kind.INDEX.value]
+    test::suite_assert(ts, slice.kind is SLICE, site())
+    test::suite_assert(ts, tree.nodes[slice.kind.SLICE.start?].kind.IDENTIFIER_EXPR.name == "i" and tree.nodes[slice.kind.SLICE.stop?].kind.IDENTIFIER_EXPR.name == "j", site())
+    call := tree.nodes[slice.kind.SLICE.value]
+    test::suite_assert(ts, call.kind is CALL and len(call.kind.CALL.arguments) == 2, site())
+    check_span(ts, text, call, "pkg::make(\n a,\n b\n)")
+    callee := tree.nodes[call.kind.CALL.callee].kind.IDENTIFIER_EXPR
+    test::suite_assert(ts, callee.qualifier? == "pkg" and callee.name == "make", site())
+    forms := ["values[:]", "values[left:]", "values[:right]", "values[left:right]"]
+    for position, form in forms:
+        sliced := support::parse_source(concat("func main():\n    value := ", form, "\nend\n"))
+        test::suite_assert(ts, sliced.diagnostics.error_count == 0, site())
+        if sliced.diagnostics.error_count > 0:
+            continue
+        end
+        node := sliced.ast.nodes[initializer(sliced.ast)]
+        test::suite_assert(ts, node.kind is SLICE, site())
+        test::suite_assert(ts, (node.kind.SLICE.start is Some) == (position == 1 or position == 3), site())
+        test::suite_assert(ts, (node.kind.SLICE.stop is Some) == (position == 2 or position == 3), site())
+    end
+end
+
+
+func test_group_checks_and_conditionals(ts) -> void:
+    expression := "not a is Some and b == c or d if flag else e if nested else f"
+    parsed := support::parse_source(concat("func main():\n    value := ", expression, "\nend\n"))
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+    if parsed.diagnostics.error_count > 0:
+        return
+    end
+    tree := parsed.ast
+    selection := tree.nodes[initializer(tree)].kind.CONDITIONAL
+    test::suite_assert(ts, tree.nodes[selection.condition].kind.IDENTIFIER_EXPR.name == "flag", site())
+    test::suite_assert(ts, tree.nodes[selection.when_false].kind is CONDITIONAL, site())
+    logical_or := tree.nodes[selection.when_true].kind.BINARY
+    test::suite_assert(ts, logical_or.op == ast::BinaryOp.OR, site())
+    logical_and := tree.nodes[logical_or.left].kind.BINARY
+    test::suite_assert(ts, logical_and.op == ast::BinaryOp.AND, site())
+    check := tree.nodes[logical_and.left].kind.OPTION_CHECK
+    test::suite_assert(ts, tree.nodes[check.value].kind.UNARY.op == ast::UnaryOp.NOT, site())
+    nested := support::parse_source("func main():\n    value := 1 if true if false else true else 2\nend\n")
+    test::suite_assert(ts, nested.diagnostics.error_count == 0, site())
+    root := nested.ast.nodes[initializer(nested.ast)].kind.CONDITIONAL
+    test::suite_assert(ts, nested.ast.nodes[root.condition].kind is CONDITIONAL, site())
+    grouped_text := "func main():\n    value := (a + b) * c\nend\n"
+    grouped := support::parse_source(grouped_text)
+    product := grouped.ast.nodes[initializer(grouped.ast)].kind.BINARY
+    test::suite_assert(ts, product.op == ast::BinaryOp.TIMES, site())
+    group := grouped.ast.nodes[product.left]
+    test::suite_assert(ts, group.kind is GROUP and grouped.ast.nodes[group.kind.GROUP].kind.BINARY.op == ast::BinaryOp.PLUS, site())
+    check_span(ts, grouped_text, group, "(a + b)")
+end
+
+
+func test_call_layouts_and_recovery(ts) -> void:
+    valid := ["f(\n)", "f(\n 1,\n 2\n)", "f(1,\n // comment\n g(\n 2\n)\n)", "unwrap(\n value\n)"]
+    for expression in valid:
+        parsed := support::parse_source(concat("func main():\n    value := ", expression, "\nend\n"))
+        test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+    end
+    invalid := ["values[]", "values[1", "values[1:2", "values[1::2]", "(values", "values.",
+        "f(1,)", "f(\n 1,\n)", "f(1\n,2)", "(f)(1)", "f()(1)", "a +", "a < < b",
+        "value is", "first if condition", "first if else fallback", "value???.", "(\n1)", "values[\n1]"]
+    for expression in invalid:
+        text := concat("func broken():\n    value := ", expression, "\n    return 1\nend\nfunc valid():\n    return 2\nend\n")
+        parsed := support::parse_source(text)
+        test::suite_assert(ts, parsed.diagnostics.error_count > 0, site())
+        test::suite_assert(ts, len(parsed.ast.get_root_module().declarations) == 2, site())
+        for message in parsed.diagnostics.messages:
+            test::suite_assert(ts, message.span is Some and message.span?.start >= 0 and message.span?.stop <= len(text), site())
+        end
+    end
+end
+
+
+func test_invalid_allocation_suffix(ts) -> void:
+    expressions := ["1@", "owner@", "identity(owner)@", "owner.identity()@",
+        "owner.value@", "values[0]@", "(owner)@", "true@"]
+    for expression in expressions:
+        text := concat("func broken():\n    value := ", expression, "\n    return 1\nend\nfunc valid():\n    return 2\nend\n")
+        parsed := support::parse_source(text)
+        test::suite_assert(ts, parsed.diagnostics.error_count == 1, site())
+        test::suite_assert(ts, len(parsed.ast.get_root_module().declarations) == 2, site())
+        if len(parsed.diagnostics.messages) != 1:
+            continue
+        end
+        message := parsed.diagnostics.messages[0]
+        test::suite_assert(ts, message.summary == "invalid implicit allocation suffix", site())
+        test::suite_assert(ts, message.detail == "implicit region allocation suffix is only valid on a composite literal", site())
+        test::suite_assert(ts, message.span is Some, site())
+        if message.span is Some:
+            position := string::find(text, "@")
+            test::suite_assert(ts, message.span?.start == position and message.span?.stop == position + 1, site())
+        end
+    end
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_expressions")
+    test_binary_precedence_matrix(ts)
+    test_postfix_chain_and_spans(ts)
+    test_group_checks_and_conditionals(ts)
+    test_call_layouts_and_recovery(ts)
+    test_invalid_allocation_suffix(ts)
+end

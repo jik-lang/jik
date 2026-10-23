@@ -1,0 +1,5 @@
+func main():
+    values: Dict[int]
+    value := values["missing"]?
+    return 42
+end

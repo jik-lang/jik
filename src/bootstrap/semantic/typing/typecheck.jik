@@ -1,0 +1,1011 @@
+//! Check inferred types, call handling, and AST data supplied by direct callers.
+
+use "jik/string"
+
+use "../context"
+use "../../program"
+use "rules"
+use "../../language/builtin"
+use "../../language/types"
+use "../../parser/ast"
+use "../../diag"
+
+
+enum Handling:
+    NONE
+    TRY
+    MUST
+end
+
+
+/// Read a stored type ID, reporting an error if it is missing or invalid.
+/// Callers can also check ASTs whose stored types or references have been changed.
+func checked_type(ctx: context::ModuleContext, node: ast::Node) -> Option[int]:
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    if node.inferred_type is None:
+        diag::error(diagnostics, "missing inferred type", "type checking requires successful inference", Some{node.span})
+        return None
+    end
+    id := node.inferred_type?
+    if not types::valid_id(store, id):
+        diag::error(diagnostics, "invalid inferred type", "type ID is outside the compilation store", Some{node.span})
+        return None
+    end
+    return node.inferred_type
+end
+
+
+func require_equal(ctx: context::ModuleContext, expected: int, actual: int, node: ast::Node) -> void:
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    if expected == actual:
+        return
+    end
+    first := must types::format(store, expected)
+    second := must types::format(store, actual)
+    diag::error(diagnostics, "type mismatch", concat("expected ", first, ", got ", second), Some{node.span})
+end
+
+
+/// Check an ordinary value position, where a void call is not permitted.
+func check_value(ctx: context::ModuleContext, id: int) -> Option[int]:
+    return check_expression(ctx, id, false, Handling.NONE)
+end
+
+
+func check_builtin(ctx: context::ModuleContext, node: ast::Node, result: int) -> Option[int]:
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    call := node.kind.CALL
+    kind := call.builtin?
+    if kind == builtin::Kind.FAIL:
+        require_equal(ctx, types::atom(store, types::Atom.VOID), result, node)
+        count := len(call.arguments)
+        if count < 1 or count > 2:
+            diag::error(diagnostics, "call arity mismatch", "fail expects one or two arguments", Some{node.span})
+            return None
+        end
+        for index, argument in call.arguments:
+            actual := check_value(ctx, argument)
+            if actual is Some:
+                integer := types::atom(store, types::Atom.INT)
+                text := types::atom(store, types::Atom.STRING)
+                valid := actual? == integer or actual? == text
+                if count == 2:
+                    valid = actual? == (text if index == 0 else integer)
+                end
+                if not valid:
+                    diag::error(diagnostics, "invalid fail argument", "expected String or int, or String followed by int", Some{mod.ast.nodes[argument].span})
+                end
+            end
+        end
+        return Some{result}
+    end
+    if kind == builtin::Kind.CONCAT:
+        count := len(call.arguments) if call.auto_region else len(call.arguments) - 1
+        if count < 1:
+            diag::error(diagnostics, "call arity mismatch", "concat expects one or more String arguments", Some{node.span})
+            return None
+        end
+        require_equal(ctx, types::atom(store, types::Atom.STRING), result, node)
+        for index, argument in call.arguments:
+            actual := check_value(ctx, argument)
+            if actual is Some:
+                expected := types::atom(store, types::Atom.STRING) if index < count else types::atom(store, types::Atom.REGION)
+                require_equal(ctx, expected, actual?, mod.ast.nodes[argument])
+            end
+        end
+        return Some{result}
+    end
+    if builtin::is_output(kind):
+        require_equal(ctx, types::atom(store, types::Atom.VOID), result, node)
+        for argument in call.arguments:
+            actual := check_value(ctx, argument)
+            if actual is Some and not rules::is_printable(store, actual?):
+                name := must types::format(store, actual?)
+                diag::error(diagnostics, "unsupported print type", concat("printing not supported for type ", name), Some{mod.ast.nodes[argument].span})
+                return None
+            end
+        end
+        return Some{result}
+    end
+    if len(call.arguments) != builtin::arity(kind):
+        detail := " expects two arguments" if builtin::arity(kind) == 2 else " expects one argument"
+        if kind == builtin::Kind.SITE or kind == builtin::Kind.ERROR_CODE:
+            detail = " expects no arguments"
+        end
+        diag::error(diagnostics, "call arity mismatch", concat(builtin::Names[kind], detail), Some{node.span})
+        return None
+    end
+    if kind == builtin::Kind.SITE:
+        require_equal(ctx, types::atom(store, types::Atom.SITE), result, node)
+        return Some{result}
+    end
+    if kind == builtin::Kind.ERROR_MSG or kind == builtin::Kind.ERROR_CODE:
+        if call.error_handler is None:
+            diag::error(diagnostics, "error inspection outside except", "error_msg and error_code require an enclosing except block", Some{node.span})
+            return None
+        end
+        handler := call.error_handler?
+        if handler < 0 or handler >= len(mod.ast.nodes):
+            diag::error(diagnostics, "invalid error handler", "handler ID is outside the module", Some{node.span})
+            return None
+        end
+        if not (mod.ast.nodes[handler].kind is TRY):
+            diag::error(diagnostics, "invalid error handler", "error inspection requires a resolved try/except handler", Some{node.span})
+            return None
+        end
+        expected := types::atom(store, types::Atom.INT)
+        if kind == builtin::Kind.ERROR_MSG:
+            expected = types::atom(store, types::Atom.STRING)
+            destination := check_value(ctx, call.arguments[0])
+            if destination is Some:
+                require_equal(ctx, types::atom(store, types::Atom.REGION), destination?, mod.ast.nodes[call.arguments[0]])
+            end
+        end
+        require_equal(ctx, expected, result, node)
+        return Some{result}
+    end
+    actual := check_value(ctx, call.arguments[0])
+    if actual is None:
+        return None
+    end
+    if kind == builtin::Kind.SITE_LINE or builtin::is_site_text(kind):
+        require_equal(ctx, types::atom(store, types::Atom.SITE), actual?, mod.ast.nodes[call.arguments[0]])
+        expected := types::atom(store, types::Atom.INT)
+        if builtin::is_site_text(kind):
+            expected = types::atom(store, types::Atom.STRING)
+            destination := check_value(ctx, call.arguments[1])
+            if destination is Some:
+                require_equal(ctx, types::atom(store, types::Atom.REGION), destination?, mod.ast.nodes[call.arguments[1]])
+            end
+        end
+        require_equal(ctx, expected, result, node)
+        return Some{result}
+    end
+    if kind == builtin::Kind.ASSERT:
+        require_equal(ctx, types::atom(store, types::Atom.BOOL), actual?, mod.ast.nodes[call.arguments[0]])
+        require_equal(ctx, types::atom(store, types::Atom.VOID), result, node)
+        return Some{result}
+    end
+    if kind == builtin::Kind.COPY:
+        if not rules::is_copyable(store, actual?):
+            diag::error(diagnostics, "unsupported copy type", "copy requires String or a supported composite with only primitive, enum or String contents", Some{mod.ast.nodes[call.arguments[0]].span})
+            return None
+        end
+        destination := check_value(ctx, call.arguments[1])
+        if destination is Some:
+            require_equal(ctx, types::atom(store, types::Atom.REGION), destination?, mod.ast.nodes[call.arguments[1]])
+        end
+        require_equal(ctx, actual?, result, node)
+        return Some{result}
+    end
+    if kind == builtin::Kind.UNWRAP:
+        element := types::option_element(store, actual?)
+        if element is None:
+            diag::error(diagnostics, "invalid unwrap", "unwrap requires Option[T]", Some{node.span})
+            return None
+        end
+        require_equal(ctx, element?, result, node)
+        return Some{result}
+    end
+    element := types::vector_element(store, actual?)
+    dictionary := types::dict_element(store, actual?)
+    if kind == builtin::Kind.LEN:
+        if element is None and dictionary is None and actual? != types::atom(store, types::Atom.STRING):
+            diag::error(diagnostics, "invalid len argument", "len requires Vec[T], Dict[T] or String", Some{node.span})
+            return None
+        end
+        require_equal(ctx, types::atom(store, types::Atom.INT), result, node)
+    else:
+        if kind == builtin::Kind.CLEAR and dictionary is Some:
+            require_equal(ctx, types::atom(store, types::Atom.VOID), result, node)
+            return Some{result}
+        end
+        if element is None:
+            diag::error(diagnostics, "invalid vector argument", concat(builtin::Names[kind], " requires Vec[T]"), Some{node.span})
+            return None
+        end
+        if kind == builtin::Kind.POP:
+            require_equal(ctx, element?, result, node)
+        else:
+            require_equal(ctx, types::atom(store, types::Atom.VOID), result, node)
+            if kind == builtin::Kind.PUSH:
+                value := check_value(ctx, call.arguments[1])
+                if value is Some:
+                    require_equal(ctx, element?, value?, mod.ast.nodes[call.arguments[1]])
+                end
+            end
+        end
+    end
+    return Some{result}
+end
+
+
+func check_destination(ctx: context::ModuleContext, destination: Option[int]) -> void:
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    if destination is Some:
+        actual := check_value(ctx, destination?)
+        if actual is Some and actual? != types::atom(store, types::Atom.REGION):
+            diag::error(diagnostics, "invalid allocation destination", "named allocation targets must have type Region", Some{mod.ast.nodes[destination?].span})
+        end
+    end
+end
+
+
+func bound_composite(ctx: context::ModuleContext, id: int) -> void:
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    base := mod.ast.nodes[id]
+    while base.kind is GROUP:
+        base = mod.ast.nodes[base.kind.GROUP]
+    end
+    if base.kind is VECTOR_LITERAL:
+        diag::error(diagnostics, "composite value must be bound", "bind a vector literal before subscripting or mutation", Some{base.span})
+    elif base.kind is STRING_LITERAL:
+        diag::error(diagnostics, "composite value must be bound", "bind a String literal before subscripting", Some{base.span})
+    elif base.kind is STRUCT_LITERAL:
+        diag::error(diagnostics, "composite value must be bound", "bind a struct literal before field access", Some{base.span})
+    elif base.kind is VARIANT_LITERAL:
+        diag::error(diagnostics, "composite value must be bound", "bind a variant literal before payload access", Some{base.span})
+    elif base.kind is DICT_LITERAL:
+        diag::error(diagnostics, "composite value must be bound", "bind a dictionary literal before subscripting or mutation", Some{base.span})
+    end
+end
+
+
+func has_vector_element_default(store: types::Store, id: int) -> bool:
+    if types::is_extern_struct(store, id):
+        return store.types[id].kind.NAMED.initializer is Some
+    end
+    if types::option_element(store, id) is Some or types::dict_element(store, id) is Some:
+        return rules::is_data_value(store, id)
+    end
+    if rules::has_scalar_default(store, id) or id == types::atom(store, types::Atom.STRING):
+        return true
+    end
+    element := types::vector_element(store, id)
+    if types::is_record(store, id):
+        for member in store.types[id].kind.NAMED.member_types:
+            if types::is_variant(store, id):
+                return member == types::atom(store, types::Atom.VOID) or has_vector_element_default(store, member)
+            end
+            if not has_vector_element_default(store, member):
+                return false
+            end
+        end
+        return true
+    end
+    return element is Some and has_vector_element_default(store, element?)
+end
+
+
+func check_extern_default(ctx: context::ModuleContext, type_id: int, node: ast::Node) -> bool:
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    missing := types::missing_extern_initializer(store, type_id)
+    if missing is Some:
+        diag::error(diagnostics, "external struct type has no init function", store.types[missing?].kind.NAMED.name, Some{node.span})
+        return false
+    end
+    return true
+end
+
+
+/// Check an expression, including whether void results and throwing calls are allowed here.
+/// Return its stored type when available; callers must also check for diagnostics.
+/// Only the outer try operand is handled; arguments use ordinary expression checks.
+func check_expression(ctx: context::ModuleContext, id: int, allow_void: bool, handling: Handling) -> Option[int]:
+    modules := ctx.program.modules
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    node := mod.ast.nodes[id]
+    result := checked_type(ctx, node)
+    if result is None:
+        return None
+    end
+    if not allow_void and result? == types::atom(store, types::Atom.VOID):
+        diag::error(diagnostics, "void value", "a void call cannot be used as a value", Some{node.span})
+        return None
+    end
+    match node.kind:
+    case INTEGER_LITERAL:
+        require_equal(ctx, types::atom(store, types::Atom.INT), result?, node)
+    case DOUBLE_LITERAL:
+        require_equal(ctx, types::atom(store, types::Atom.DOUBLE), result?, node)
+    case BOOL_LITERAL:
+        require_equal(ctx, types::atom(store, types::Atom.BOOL), result?, node)
+    case CHAR_LITERAL:
+        require_equal(ctx, types::atom(store, types::Atom.CHAR), result?, node)
+    case STRING_LITERAL{literal}:
+        require_equal(ctx, types::atom(store, types::Atom.STRING), result?, node)
+        check_destination(ctx, literal.destination)
+    case DEFAULT_VALUE{type_id}:
+        require_equal(ctx, type_id, result?, node)
+        if not check_extern_default(ctx, type_id, node):
+            return None
+        end
+        if not has_vector_element_default(store, type_id):
+            diag::error(diagnostics, "unsupported field default", "field defaults require currently supported scalar, String, vector or struct types", Some{node.span})
+            return None
+        end
+    case ENUM_VALUE{value}:
+        require_equal(ctx, value.type_id, result?, node)
+    case OPTION_LITERAL{literal}:
+        element := types::option_element(store, result?)
+        if element is None or not rules::is_data_value(store, result?):
+            diag::error(diagnostics, "invalid option type", "Options require a supported data payload type", Some{node.span})
+            return None
+        end
+        if literal.annotation is Some:
+            declared := mod.ast.nodes[literal.annotation?].kind.TYPE_NAME.resolved_type
+            if declared is Some:
+                require_equal(ctx, declared?, result?, node)
+            end
+        end
+        check_destination(ctx, literal.destination)
+        if literal.value is Some:
+            actual := check_value(ctx, literal.value?)
+            if actual is Some:
+                require_equal(ctx, element?, actual?, mod.ast.nodes[literal.value?])
+            end
+        end
+    case VARIANT_LITERAL{literal}:
+        if not types::is_variant(store, result?) or not rules::is_data_value(store, result?):
+            diag::error(diagnostics, "invalid variant type", "variant payloads require supported data types", Some{node.span})
+            return None
+        end
+        check_destination(ctx, literal.destination)
+        if literal.value is Some:
+            actual := check_value(ctx, literal.value?)
+            if actual is Some:
+                expected := store.types[result?].kind.NAMED.member_types[literal.member]
+                require_equal(ctx, expected, actual?, mod.ast.nodes[literal.value?])
+            end
+        end
+    case VARIANT_CHECK{check}:
+        actual := check_value(ctx, check.value)
+        if actual is Some:
+            if not types::is_variant(store, actual?):
+                diag::error(diagnostics, "invalid variant check", "tag tests require a variant value", Some{node.span})
+                return None
+            end
+            member := types::record_member(store, actual?, check.tag)
+            if member is None:
+                diag::error(diagnostics, "unknown variant tag", check.tag, Some{node.span})
+                return None
+            end
+            check.member = member?
+        end
+        require_equal(ctx, types::atom(store, types::Atom.BOOL), result?, node)
+    case OPTION_CHECK{check}:
+        actual := check_value(ctx, check.value)
+        if actual is Some and types::option_element(store, actual?) is None:
+            diag::error(diagnostics, "invalid option check", "is Some/None requires Option[T]", Some{node.span})
+            return None
+        end
+        require_equal(ctx, types::atom(store, types::Atom.BOOL), result?, node)
+    case UNWRAP{value}:
+        actual := check_value(ctx, value)
+        if actual is Some:
+            element := types::option_element(store, actual?)
+            if element is None:
+                diag::error(diagnostics, "invalid unwrap", "unwrap requires Option[T]", Some{node.span})
+                return None
+            end
+            require_equal(ctx, element?, result?, node)
+        end
+    case STRUCT_LITERAL{literal}:
+        declared := mod.ast.nodes[literal.annotation].kind.TYPE_NAME.resolved_type
+        if declared is None or (not types::is_struct(store, result?) and not types::is_extern_struct(store, result?)):
+            diag::error(diagnostics, "invalid struct type", "a struct literal requires a resolved struct type", Some{node.span})
+            return None
+        end
+        require_equal(ctx, declared?, result?, node)
+        if types::is_extern_struct(store, result?) and not check_extern_default(ctx, result?, node):
+            return None
+        end
+        definition := store.types[result?].kind.NAMED
+        check_destination(ctx, literal.destination)
+        if len(literal.fields) != len(definition.member_types):
+            diag::error(diagnostics, "invalid struct fields", "every field must have an initializer after default expansion", Some{node.span})
+            return None
+        end
+        seen := [len(definition.member_types) of false]
+        for field in literal.fields:
+            member := types::record_member(store, result?, field.name)
+            if member is None or field.member != member?:
+                diag::error(diagnostics, "invalid struct field", field.name, Some{node.span})
+                return None
+            end
+            if seen[member?]:
+                diag::error(diagnostics, "duplicate struct field", field.name, Some{node.span})
+                return None
+            end
+            seen[member?] = true
+            actual := check_value(ctx, field.value)
+            if actual is Some:
+                require_equal(ctx, definition.member_types[member?], actual?, mod.ast.nodes[field.value])
+            end
+        end
+    case FIELD{field}:
+        base_type := check_value(ctx, field.value)
+        if base_type is Some:
+            member := types::record_member(store, base_type?, field.name)
+            if member is None or field.member != member?:
+                diag::error(diagnostics, "invalid struct field", field.name, Some{node.span})
+                return None
+            end
+            require_equal(ctx, store.types[base_type?].kind.NAMED.member_types[member?], result?, node)
+        end
+        bound_composite(ctx, field.value)
+    case VECTOR_LITERAL{literal}:
+        element_type := types::vector_element(store, result?)
+        if element_type is None:
+            diag::error(diagnostics, "invalid vector type", "a vector literal requires Vec[T]", Some{node.span})
+            return None
+        end
+        if len(literal.elements) == 0 and not check_extern_default(ctx, element_type?, node):
+            return None
+        end
+        if len(literal.elements) == 0 and not has_vector_element_default(store, element_type?):
+            diag::error(diagnostics, "unsupported vector element default", "vector defaults currently support scalar, String and nested vector elements", Some{node.span})
+            return None
+        end
+        check_destination(ctx, literal.destination)
+        if literal.count is Some:
+            actual := check_value(ctx, literal.count?)
+            if actual is Some:
+                require_equal(ctx, types::atom(store, types::Atom.INT), actual?, mod.ast.nodes[literal.count?])
+            end
+        end
+        for element in literal.elements:
+            actual := check_value(ctx, element)
+            if actual is Some:
+                require_equal(ctx, element_type?, actual?, mod.ast.nodes[element])
+            end
+        end
+    case DICT_LITERAL{literal}:
+        element := types::dict_element(store, result?)
+        if element is None or not rules::is_data_value(store, result?):
+            diag::error(diagnostics, "invalid dictionary type", "dictionaries require a supported data value type", Some{node.span})
+            return None
+        end
+        if len(literal.entries) == 0 and not check_extern_default(ctx, element?, node):
+            return None
+        end
+        check_destination(ctx, literal.destination)
+        if literal.annotation is Some:
+            declared := mod.ast.nodes[literal.annotation?].kind.TYPE_NAME.resolved_type
+            if declared is Some:
+                require_equal(ctx, declared?, result?, node)
+            end
+        end
+        for entry in literal.entries:
+            key := check_value(ctx, entry.key)
+            value := check_value(ctx, entry.value)
+            if key is Some:
+                require_equal(ctx, types::atom(store, types::Atom.STRING), key?, mod.ast.nodes[entry.key])
+            end
+            if value is Some:
+                require_equal(ctx, element?, value?, mod.ast.nodes[entry.value])
+            end
+        end
+    case TABLE_LOOKUP{value}:
+        declaration := modules[value.target.source_id].ast.nodes[value.target.origin].kind.TABLE_DECL
+        actual := check_value(ctx, value.key)
+        if actual is Some:
+            require_equal(ctx, declaration.key_type?, actual?, mod.ast.nodes[value.key])
+        end
+        require_equal(ctx, declaration.value_type?, result?, node)
+    case INDEX{index}:
+        value_type := check_value(ctx, index.value)
+        actual := check_value(ctx, index.index)
+        if value_type is Some:
+            key_type := types::atom(store, types::Atom.STRING) if types::dict_element(store, value_type?) is Some else types::atom(store, types::Atom.INT)
+            if actual is Some:
+                require_equal(ctx, key_type, actual?, mod.ast.nodes[index.index])
+            end
+            element_type := rules::index_result(store, value_type?, index.is_store)
+            if element_type is None:
+                diag::error(diagnostics, "invalid subscript", "indexing requires Vec[T], String or Dict[T]", Some{node.span})
+                return None
+            end
+            require_equal(ctx, element_type?, result?, node)
+        end
+        bound_composite(ctx, index.value)
+    case SLICE{slice}:
+        actual := check_value(ctx, slice.value)
+        if actual is Some:
+            if types::vector_element(store, actual?) is None and actual? != types::atom(store, types::Atom.STRING):
+                diag::error(diagnostics, "unsupported slice", "slicing requires Vec[T] or String", Some{node.span})
+                return None
+            end
+            require_equal(ctx, actual?, result?, node)
+            if actual? == types::atom(store, types::Atom.STRING):
+                bound_composite(ctx, slice.value)
+            end
+        end
+        if slice.start is Some:
+            first := check_value(ctx, slice.start?)
+            if first is Some:
+                require_equal(ctx, types::atom(store, types::Atom.INT), first?, mod.ast.nodes[slice.start?])
+            end
+        end
+        if slice.stop is Some:
+            last := check_value(ctx, slice.stop?)
+            if last is Some:
+                require_equal(ctx, types::atom(store, types::Atom.INT), last?, mod.ast.nodes[slice.stop?])
+            end
+        end
+    case GLOBAL_REGION:
+        require_equal(ctx, types::atom(store, types::Atom.REGION), result?, node)
+    case LOCAL_REGION:
+        require_equal(ctx, types::atom(store, types::Atom.REGION), result?, node)
+    case REGION_OF{inner}:
+        actual := check_value(ctx, inner)
+        if actual is Some and not types::is_allocated(store, actual?):
+            diag::error(diagnostics, "invalid region target", "region arguments require a composite value", Some{node.span})
+            return None
+        end
+        require_equal(ctx, types::atom(store, types::Atom.REGION), result?, node)
+    case MUST{required}:
+        if not (mod.ast.nodes[required.call].kind is CALL):
+            diag::error(diagnostics, "invalid must operand", "must and ! require a function call", Some{node.span})
+            return None
+        end
+        actual := check_expression(ctx, required.call, allow_void, Handling.MUST)
+        if actual is Some:
+            require_equal(ctx, actual?, result?, node)
+        end
+    case GROUP{inner}:
+        actual := check_value(ctx, inner)
+        if actual is Some:
+            require_equal(ctx, actual?, result?, node)
+        end
+    case UNARY{unary}:
+        actual := check_value(ctx, unary.operand)
+        if actual is None:
+            return None
+        end
+        expected := rules::unary_result(store, unary.op, actual?)
+        if expected is None:
+            diag::error(diagnostics, "invalid unary operand", "unary minus requires int/double; not requires bool", Some{node.span})
+            return None
+        end
+        require_equal(ctx, expected?, result?, node)
+    case IDENTIFIER_EXPR{identifier}:
+        if identifier.global_origin is Some:
+            target := identifier.global_origin?
+            declaration := modules[target.source_id].ast.nodes[target.origin]
+            expected := checked_type(ctx, declaration)
+            if expected is Some:
+                require_equal(ctx, expected?, result?, node)
+            end
+            return result
+        end
+        if identifier.local_origin is None:
+            diag::error(diagnostics, "unresolved value", "value references must be resolved before checking", Some{node.span})
+            return None
+        end
+        if identifier.local_origin? < 0 or identifier.local_origin? >= len(mod.ast.nodes):
+            diag::error(diagnostics, "invalid value binding", "declaration ID is outside the module", Some{node.span})
+            return None
+        end
+        declaration := mod.ast.nodes[identifier.local_origin?]
+        if not (declaration.kind is LOCAL_DECL or declaration.kind is PARAMETER or declaration.kind is LOOP_VARIABLE or declaration.kind is MATCH_BINDING):
+            diag::error(diagnostics, "invalid value binding", "expected a local or parameter", Some{node.span})
+            return None
+        end
+        expected := checked_type(ctx, declaration)
+        if expected is Some:
+            require_equal(ctx, expected?, result?, node)
+        end
+    case BINARY{binary}:
+        left := check_value(ctx, binary.left)
+        right := check_value(ctx, binary.right)
+        if left is None or right is None:
+            return None
+        end
+        expected := rules::binary_result(store, binary.op, left?, right?)
+        if expected is None:
+            diag::error(diagnostics, "invalid numeric operands", "operator does not support these operand types", Some{node.span})
+            return None
+        end
+        require_equal(ctx, expected?, result?, node)
+    case CONDITIONAL{conditional}:
+        condition := check_value(ctx, conditional.condition)
+        if condition is Some:
+            require_equal(ctx, types::atom(store, types::Atom.BOOL), condition?, mod.ast.nodes[conditional.condition])
+        end
+        when_true := check_value(ctx, conditional.when_true)
+        when_false := check_value(ctx, conditional.when_false)
+        if when_true is None or when_false is None:
+            return None
+        end
+        expected := rules::conditional_result(store, when_true?, when_false?)
+        if expected is None:
+            diag::error(diagnostics, "incompatible conditional branches", "expected matching types or int/double branches", Some{node.span})
+            return None
+        end
+        require_equal(ctx, expected?, result?, node)
+    case CALL{call}:
+        if call.propagate:
+            handling = Handling.TRY
+        end
+        handled := handling != Handling.NONE
+        form := "must" if handling == Handling.MUST else "try"
+        // Receiver builtin fallback can retain a caller's function signature.
+        // Its throwing contract follows that target, as for ordinary call checks.
+        if handled and call.target is None:
+            diag::error(diagnostics, concat("invalid ", form, " call"), concat(form, " requires a throwing function"), Some{node.span})
+            return None
+        end
+        if call.target is Some:
+            target := call.target?
+            if target.source_id < 0 or target.source_id >= len(modules):
+                diag::error(diagnostics, "invalid call target", "module index is outside the compilation", Some{node.span})
+                return None
+            end
+            target_mod := modules[target.source_id]
+            if target.origin < 0 or target.origin >= len(target_mod.ast.nodes):
+                diag::error(diagnostics, "invalid call target", "declaration ID is outside the module", Some{node.span})
+                return None
+            end
+            declaration := target_mod.ast.nodes[target.origin]
+            if not (declaration.kind is FUNCTION_DECL):
+                diag::error(diagnostics, "invalid call target", "expected a function declaration", Some{node.span})
+                return None
+            end
+            if declaration.kind.FUNCTION_DECL.is_throwing and not handled:
+                diag::error(diagnostics, "unhandled throwing call", "throwing functions require try or must", Some{node.span})
+                return None
+            end
+            if handled and not declaration.kind.FUNCTION_DECL.is_throwing:
+                diag::error(diagnostics, concat("invalid ", form, " call"), concat(form, " requires a throwing function"), Some{node.span})
+                return None
+            end
+        end
+        if call.builtin is Some:
+            return check_builtin(ctx, node, result?)
+        end
+        if call.target is None:
+            diag::error(diagnostics, "unresolved call", "call targets must be resolved before checking", Some{node.span})
+            return None
+        end
+        target := call.target?
+        target_mod := modules[target.source_id]
+        function_node := target_mod.ast.nodes[target.origin]
+        function_type := checked_type(ctx, function_node)
+        if function_type is None:
+            return None
+        end
+        if not (store.types[function_type?].kind is FUNCTION):
+            diag::error(diagnostics, "invalid call target", "expected a function declaration and signature", Some{node.span})
+            return None
+        end
+        signature := store.types[function_type?].kind.FUNCTION
+        supplied := len(call.arguments)
+        required := len(signature.parameter_types)
+        if supplied != required:
+            diag::error(diagnostics, "call arity mismatch", concat("expected ", string::from_int(required), " arguments, got ", string::from_int(supplied)), Some{node.span})
+            return None
+        end
+        for index, argument in call.arguments:
+            actual := check_value(ctx, argument)
+            if actual is Some:
+                require_equal(ctx, signature.parameter_types[index], actual?, mod.ast.nodes[argument])
+            end
+        end
+        require_equal(ctx, signature.return_type, result?, node)
+    other:
+        diag::error(diagnostics, "unsupported expression", "type checker has no rule for this expression", Some{node.span})
+        return None
+    end
+    return result
+end
+
+
+func check_match(ctx: context::ModuleContext, node: ast::Node, return_type: int, is_throwing: bool) -> void:
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    statement := node.kind.MATCH
+    actual := check_value(ctx, statement.value)
+    if actual is None:
+        return
+    end
+    if not types::is_enum(store, actual?) and not types::is_variant(store, actual?):
+        diag::error(diagnostics, "invalid match type", "match requires an enum or variant value", Some{node.span})
+        return
+    end
+    if len(statement.arms) == 0:
+        diag::error(diagnostics, "empty match", "a match requires at least one case", Some{node.span})
+        return
+    end
+    definition := store.types[actual?].kind.NAMED
+    seen := [len(definition.member_names) of false]
+    for arm in statement.arms:
+        if arm.member < 0 or arm.member >= len(seen):
+            diag::error(diagnostics, "unknown match case", arm.tag, Some{arm.span})
+            return
+        end
+        if seen[arm.member]:
+            diag::error(diagnostics, "duplicate match case", arm.tag, Some{arm.span})
+        end
+        seen[arm.member] = true
+        if arm.binding is Some:
+            binding := mod.ast.nodes[arm.binding?]
+            bound := checked_type(ctx, binding)
+            if bound is Some:
+                require_equal(ctx, definition.member_types[arm.member], bound?, binding)
+            end
+        end
+        check_block(ctx, arm.body, return_type, is_throwing)
+    end
+    if statement.other_body is Some:
+        check_block(ctx, statement.other_body?, return_type, is_throwing)
+    else:
+        missing := ""
+        for index, name in definition.member_names:
+            if not seen[index]:
+                missing = concat(missing, definition.name, ".", name, " ")
+            end
+        end
+        if len(missing) > 0:
+            diag::error(diagnostics, "non-exhaustive match", concat("unhandled cases: ", missing, "; add cases or a final other arm"), Some{node.span})
+        end
+    end
+end
+
+
+// Statement order determines handling context and unreachable-code diagnostics.
+// Type checking reads the resolved tree; it does not append or replace nodes.
+func check_block(ctx: context::ModuleContext, body: ast::Block, return_type: int, is_throwing: bool) -> void:
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    after_fail := false
+    for id in body.statements:
+        node := mod.ast.nodes[id]
+        if after_fail:
+            diag::error(diagnostics, "unreachable statement after fail", "a direct call named fail must be the final statement in its block", Some{node.span})
+            return
+        end
+        if not is_throwing and ast::propagating_call(mod.ast, id) is Some:
+            diag::error(diagnostics, "propagation outside throwing function", "propagating try requires throws func", Some{node.span})
+        end
+        match node.kind:
+        case LOCAL_DECL{local}:
+            expected := checked_type(ctx, node)
+            if local.annotation is Some and expected is Some:
+                annotation := mod.ast.nodes[local.annotation?].kind.TYPE_NAME
+                if annotation.resolved_type is Some:
+                    require_equal(ctx, annotation.resolved_type?, expected?, node)
+                end
+            end
+            if local.initializer is Some:
+                actual := check_value(ctx, local.initializer?)
+                if actual is Some and expected is Some:
+                    require_equal(ctx, expected?, actual?, node)
+                end
+            elif expected is Some:
+                if local.annotation is None:
+                    diag::error(diagnostics, "missing local annotation", "a default initializer requires an explicit type", Some{node.span})
+                elif not rules::has_scalar_default(store, expected?):
+                    diag::error(diagnostics, "unsupported local default", "bootstrap currently supports int, double, bool and char defaults", Some{node.span})
+                end
+            end
+        case CALL{call}:
+            // Preserve the seed's name-based rule, including shadowing declarations.
+            callee := mod.ast.nodes[call.callee].kind.IDENTIFIER_EXPR
+            after_fail = callee.name == "fail"
+            if call.builtin is Some and call.builtin? == builtin::Kind.FAIL:
+                if not is_throwing:
+                    diag::error(diagnostics, "fail outside throwing function", "fail requires throws func", Some{node.span})
+                end
+            end
+            check_expression(ctx, id, true, Handling.NONE)
+        case MUST:
+            check_expression(ctx, id, true, Handling.NONE)
+        case ASSIGN{statement}:
+            target_node := mod.ast.nodes[statement.target]
+            if target_node.kind is INDEX:
+                base_type := mod.ast.nodes[target_node.kind.INDEX.value].inferred_type
+                if base_type is Some and base_type? == types::atom(store, types::Atom.STRING):
+                    diag::error(diagnostics, "strings are immutable", "String bytes cannot be assigned to", Some{target_node.span})
+                    continue
+                end
+                if statement.compound and base_type is Some and types::dict_element(store, base_type?) is Some:
+                    diag::error(diagnostics, "invalid compound assignment", "dictionary lookup returns Option[T], not a numeric value", Some{target_node.span})
+                    continue
+                end
+            end
+            if not (target_node.kind is IDENTIFIER_EXPR or target_node.kind is INDEX or target_node.kind is FIELD):
+                diag::error(diagnostics, "invalid assignment target", "expected a local, parameter, vector element or struct field", Some{target_node.span})
+                continue
+            end
+            expected := check_value(ctx, statement.target)
+            actual := check_value(ctx, statement.value)
+            if actual is Some and expected is Some:
+                require_equal(ctx, expected?, actual?, node)
+            end
+        case TRY{statement}:
+            actual := check_expression(ctx, statement.call, statement.binding is None, Handling.TRY)
+            if statement.binding is Some:
+                binding := mod.ast.nodes[statement.binding?]
+                expected := checked_type(ctx, binding)
+                if actual is Some and expected is Some:
+                    require_equal(ctx, expected?, actual?, binding)
+                end
+                local := binding.kind.LOCAL_DECL
+                if local.annotation is Some and expected is Some:
+                    annotation := mod.ast.nodes[local.annotation?].kind.TYPE_NAME
+                    if annotation.resolved_type is Some:
+                        require_equal(ctx, annotation.resolved_type?, expected?, binding)
+                    end
+                end
+            end
+            check_block(ctx, statement.body, return_type, is_throwing)
+            check_block(ctx, statement.except_body, return_type, is_throwing)
+        case IF{statement}:
+            for branch in statement.branches:
+                condition := check_value(ctx, branch.condition)
+                if condition is Some and not rules::is_condition_type(store, condition?):
+                    name := must types::format(store, condition?)
+                    diag::error(diagnostics, "invalid condition type", concat(name, " cannot be used as an if condition"), Some{mod.ast.nodes[branch.condition].span})
+                end
+                check_block(ctx, branch.body, return_type, is_throwing)
+            end
+            if statement.else_body is Some:
+                check_block(ctx, statement.else_body?, return_type, is_throwing)
+            end
+        case MATCH:
+            check_match(ctx, node, return_type, is_throwing)
+        case WHILE{loop}:
+            condition := check_value(ctx, loop.condition)
+            if condition is Some and not rules::is_condition_type(store, condition?):
+                diag::error(diagnostics, "invalid condition type", "while requires a scalar or pointer condition", Some{mod.ast.nodes[loop.condition].span})
+            end
+            check_block(ctx, loop.body, return_type, is_throwing)
+        case FOR{loop}:
+            int_type := types::atom(store, types::Atom.INT)
+            variable := checked_type(ctx, mod.ast.nodes[loop.variable])
+            first := check_value(ctx, loop.start)
+            last := check_value(ctx, loop.stop)
+            if variable is Some:
+                require_equal(ctx, int_type, variable?, mod.ast.nodes[loop.variable])
+            end
+            if first is Some:
+                require_equal(ctx, int_type, first?, mod.ast.nodes[loop.start])
+            end
+            if last is Some:
+                require_equal(ctx, int_type, last?, mod.ast.nodes[loop.stop])
+            end
+            check_block(ctx, loop.body, return_type, is_throwing)
+        case FOREACH{loop}:
+            actual := check_value(ctx, loop.container)
+            if actual is Some:
+                element := types::iteration_element(store, actual?)
+                if element is None:
+                    diag::error(diagnostics, "unsupported iteration", "iteration requires String, Vec[T] or Dict[T]", Some{node.span})
+                    continue
+                end
+                first := checked_type(ctx, mod.ast.nodes[loop.first])
+                first_type := types::iteration_key(store, actual?) if loop.second is Some else element?
+                if first is Some:
+                    require_equal(ctx, first_type, first?, mod.ast.nodes[loop.first])
+                end
+                if loop.second is Some:
+                    second := checked_type(ctx, mod.ast.nodes[loop.second?])
+                    if second is Some:
+                        require_equal(ctx, element?, second?, mod.ast.nodes[loop.second?])
+                    end
+                end
+            end
+            bound_composite(ctx, loop.container)
+            check_block(ctx, loop.body, return_type, is_throwing)
+        case BREAK:
+        case CONTINUE:
+        case RETURN{statement}:
+            if statement.value is Some:
+                actual := check_value(ctx, statement.value?)
+                if actual is Some:
+                    require_equal(ctx, return_type, actual?, node)
+                end
+            else:
+                require_equal(ctx, return_type, types::atom(store, types::Atom.VOID), node)
+            end
+        other:
+            diag::error(diagnostics, "unsupported statement", "type checker has no rule for this statement", Some{node.span})
+        end
+    end
+end
+
+
+/// Check inferred types and language rules in dependency order.
+/// Report missing or invalid stored types; do not try to infer them here.
+func run(program: program::Program) -> void:
+    modules := program.modules
+    dependency_order := program.dependency_order
+    diagnostics := program.diagnostics
+    if diagnostics.error_count > 0:
+        return
+    end
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        ctx := context::ModuleContext{program, mod}[.program]
+        root := mod.ast.get_root_module()
+        for id in root.declarations:
+            node := mod.ast.nodes[id]
+            if node.kind is GLOBAL_DECL:
+                actual := check_value(ctx, node.kind.GLOBAL_DECL.initializer)
+                if actual is Some and not rules::is_data_value(mod.type_store, actual?):
+                    diag::error(diagnostics, "invalid global value", "globals require ordinary data values", Some{node.span})
+                end
+                continue
+            end
+            if node.kind is TABLE_DECL:
+                declaration := node.kind.TABLE_DECL
+                if not rules::is_data_value(mod.type_store, declaration.value_type?):
+                    diag::error(diagnostics, "invalid table value type", "tables require supported ordinary data values", Some{node.span})
+                    continue
+                end
+                for entry in declaration.entries:
+                    actual := check_value(ctx, entry.value)
+                    if actual is Some:
+                        require_equal(ctx, declaration.value_type?, actual?, mod.ast.nodes[entry.value])
+                    end
+                end
+                continue
+            end
+            if not (node.kind is FUNCTION_DECL):
+                continue
+            end
+            function := node.kind.FUNCTION_DECL
+            signature_type := checked_type(ctx, node)
+            if signature_type is None:
+                continue
+            end
+            if not (mod.type_store.types[signature_type?].kind is FUNCTION):
+                diag::error(diagnostics, "invalid function type", "expected a complete function signature", Some{node.span})
+                continue
+            end
+            signature := mod.type_store.types[signature_type?].kind.FUNCTION
+            if signature.is_throwing != function.is_throwing:
+                diag::error(diagnostics, "invalid function type", "signature throwing flag differs from its declaration", Some{node.span})
+                continue
+            end
+            if len(signature.parameter_types) != len(function.parameters):
+                diag::error(diagnostics, "invalid function type", "signature parameter count differs from its declaration", Some{node.span})
+                continue
+            end
+            for index, parameter_id in function.parameters:
+                parameter_node := mod.ast.nodes[parameter_id]
+                actual := checked_type(ctx, parameter_node)
+                if actual is Some:
+                    require_equal(ctx, signature.parameter_types[index], actual?, parameter_node)
+                    parameter := parameter_node.kind.PARAMETER
+                    if parameter.annotation is Some:
+                        annotation := mod.ast.nodes[parameter.annotation?].kind.TYPE_NAME
+                        if annotation.resolved_type is Some:
+                            require_equal(ctx, annotation.resolved_type?, actual?, parameter_node)
+                        end
+                    end
+                end
+            end
+            if function.return_annotation is Some:
+                annotation := mod.ast.nodes[function.return_annotation?].kind.TYPE_NAME
+                if annotation.resolved_type is Some:
+                    require_equal(ctx, annotation.resolved_type?, signature.return_type, node)
+                end
+            end
+            check_block(ctx, function.body, signature.return_type, function.is_throwing)
+        end
+    end
+end

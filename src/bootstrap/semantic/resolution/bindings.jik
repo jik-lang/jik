@@ -1,0 +1,56 @@
+//! Insert lexical bindings with declaration-position and shadowing rules.
+
+use "../../language/symbol"
+use "../../language/builtin"
+
+
+func add_symbol(sc: symbol::Scope, name: String, kind: symbol::SymbolKind, origin: int) -> bool:
+    return insert_symbol(sc, name, kind, origin, None)
+end
+
+
+func add_local(sc: symbol::Scope, name: String, origin: int, start: int) -> bool:
+    return insert_symbol(sc, name, symbol::SymbolKind.LOCAL, origin, Some{start})
+end
+
+
+func insert_symbol(sc: symbol::Scope, name: String, kind: symbol::SymbolKind, origin: int, local_start: Option[int]) -> bool:
+    // Callable declarations can override builtins; ordinary bindings cannot.
+    if kind != symbol::SymbolKind.FUNCTION and builtin::find(name) is Some:
+        return false
+    end
+    if conflicts(sc, name, kind, local_start):
+        return false
+    end
+    sc.symbols[name] = symbol::Symbol{name, kind, origin, local_start}
+    return true
+end
+
+
+func conflicts(sc: symbol::Scope, name: String, kind: symbol::SymbolKind, local_start: Option[int]) -> bool:
+    // The parentless scope is the module. Match payloads may reuse module
+    // names; their no-shadowing checks apply only to this function's locals.
+    if kind == symbol::SymbolKind.MATCH_BINDING and sc.parent is None:
+        return false
+    end
+    entry := sc.symbols[name]
+    if entry is Some:
+        // Collection preloads parent scopes. A later ordinary local does not
+        // exist yet at an earlier child declaration; keep searching ancestors.
+        if local_start is Some and entry?.local_start is Some and entry?.local_start? > local_start?:
+            return sc.parent is Some and conflicts(sc.parent?, name, kind, local_start)
+        end
+        if sc.parent is None:
+            // Local and loop bindings may hide module functions, but not globals.
+            if kind == symbol::SymbolKind.LOCAL and entry?.kind == symbol::SymbolKind.FUNCTION:
+                return false
+            end
+            // Parameters may also hide module globals.
+            if kind == symbol::SymbolKind.PARAMETER and (entry?.kind == symbol::SymbolKind.GLOBAL or entry?.kind == symbol::SymbolKind.FUNCTION):
+                return false
+            end
+        end
+        return true
+    end
+    return sc.parent is Some and conflicts(sc.parent?, name, kind, local_start)
+end

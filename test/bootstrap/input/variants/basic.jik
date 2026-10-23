@@ -1,0 +1,23 @@
+variant Value:
+    INT: int
+    TEXT: String
+    NUMS: Vec[int]
+    EOF
+end
+
+func main():
+    value := Value.INT{7}
+    println(value, ":", value is INT, ":", value is EOF)
+    value.INT = 8
+    println(value.INT)
+    value = Value.TEXT{"hello"}
+    println(value)
+    value = Value.NUMS{}
+    value.NUMS = [1, 2]
+    push(value.NUMS, 3)
+    println(value)
+    value = Value.EOF{}
+    println(value)
+    default_value: Value
+    println(default_value)
+end

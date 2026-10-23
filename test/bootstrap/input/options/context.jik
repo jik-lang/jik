@@ -1,0 +1,38 @@
+func missing(r: Region) -> Option[int]:
+    return None
+end
+
+func present(value: int, r: Region) -> Option[int]:
+    return Some{value}@
+end
+
+func read(value: Option[int]) -> int:
+    return value? if value is Some else 0
+end
+
+struct Holder:
+    value: Option[int]
+end
+
+func main():
+    yes: Option[int] = Some{42}
+    no: Option[int] = None
+    no = None
+    empty := missing()
+    full := present(7)
+    contextual: Option[int] = None if true else None
+    alternative: Option[int] = None if false else None
+    holder := Holder{value = None}
+    holder.value = Some{5}
+    values: Vec[Option[int]] = [Some{3}, None, None]
+    values[1] = no
+    push(values, no)
+    if read(yes) != 42 or read(None) != 0 or contextual is Some or alternative is Some or empty is Some or full? != 7 or holder.value? != 5:
+        return 1
+    end
+    if len(values) != 4 or values[1] is Some or values[3] is Some:
+        return 2
+    end
+    println(read(yes), ":", read(no), ":", holder.value, ":", values)
+    return 42
+end

@@ -1,0 +1,78 @@
+use "library" as lib
+
+
+func remember(box: lib::Box):
+    try box.load(-17):
+        assert(false)
+    except:
+        box.message = error_msg(.box)
+        box.code = error_code()
+    end
+end
+
+
+// Neither this function nor code_only needs a local region. The message is
+// copied directly into the caller's destination before the stack error expires.
+func message_for(code: int, r: Region) -> String:
+    try lib::code_only(code):
+        return "unexpected"[r]
+    except:
+        return error_msg(r)
+    end
+end
+
+
+throws func relay(box: lib::Box, r: Region) -> String:
+    try box.load(0):
+        return "unexpected"[r]
+    except:
+        fail(error_msg(), error_code())
+    end
+end
+
+
+func main():
+    box := lib::Box{}
+    remember(box)
+    assert(box.message == "imported-error" and box.code == -17)
+    for i = 0, 3:
+        code := 0 if i == 0 else (-7 if i == 1 else 19)
+        try lib::code_only(code):
+            assert(false)
+        except:
+            assert(error_code() == code)
+            assert(error_msg() == "" and error_msg(_) == "")
+            if true:
+                for j = 0, 2:
+                    assert(error_code() == code)
+                end
+            end
+        end
+    end
+    saved := ""
+    try lib::default_error():
+        assert(false)
+    except:
+        saved = error_msg()
+        assert(saved == "default-message" and error_code() == 1)
+    end
+    try box.load(0):
+        assert(false)
+    except:
+        assert(error_msg() == "imported-error" and error_code() == 0)
+        assert(saved == "default-message")
+        // Calls requiring success have their own fresh error state.
+        assert(box.load(42)! == 42)
+        assert(error_msg() == "imported-error" and error_code() == 0)
+    end
+    try result := relay(box):
+        assert(false)
+    except:
+        assert(error_msg() == "imported-error" and error_code() == 0)
+    end
+    assert(message_for(0) == "")
+    assert(message_for(-7) == "")
+    assert(lib::maybe(false)! == 42)
+    assert(saved == "default-message")
+    println("inspection-ok")
+end

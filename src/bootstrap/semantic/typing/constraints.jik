@@ -1,0 +1,521 @@
+//! Initialize inference slots and collect constraints from resolved syntax.
+
+use "jik/string"
+
+use "solver"
+use "rules"
+use "../../program"
+use "../../language/builtin"
+use "../../language/types"
+use "../../parser/ast"
+use "../../modules/module"
+use "../../diag"
+
+
+func block_has_return(foreign mod: module::Module, foreign block: ast::Block) -> bool:
+    for id in block.statements:
+        node := mod.ast.nodes[id]
+        match node.kind:
+        case RETURN:
+            return true
+        case TRY{statement}:
+            if block_has_return(mod, statement.body) or block_has_return(mod, statement.except_body):
+                return true
+            end
+        case IF{statement}:
+            for branch in statement.branches:
+                if block_has_return(mod, branch.body):
+                    return true
+                end
+            end
+            if statement.else_body is Some and block_has_return(mod, statement.else_body?):
+                return true
+            end
+        case MATCH{statement}:
+            for arm in statement.arms:
+                if block_has_return(mod, arm.body):
+                    return true
+                end
+            end
+            if statement.other_body is Some and block_has_return(mod, statement.other_body?):
+                return true
+            end
+        case WHILE{loop}:
+            if block_has_return(mod, loop.body):
+                return true
+            end
+        case FOR{loop}:
+            if block_has_return(mod, loop.body):
+                return true
+            end
+        case FOREACH{loop}:
+            if block_has_return(mod, loop.body):
+                return true
+            end
+        other:
+        end
+    end
+    return false
+end
+
+
+func collect_expression_constraints(solver: solver::Solver, foreign modules: Vec[module::Module], foreign mod: module::Module, node_id: int, foreign diagnostics: diag::Diagnostics) -> int:
+    node := mod.ast.nodes[node_id]
+    expression_slot := solver::ensure_inference_slot(solver, node)
+    store := mod.type_store
+    match node.kind:
+    case INTEGER_LITERAL:
+        solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.INT), store, diagnostics, node)
+    case DOUBLE_LITERAL:
+        solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.DOUBLE), store, diagnostics, node)
+    case BOOL_LITERAL:
+        solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.BOOL), store, diagnostics, node)
+    case CHAR_LITERAL:
+        solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.CHAR), store, diagnostics, node)
+    case STRING_LITERAL{literal}:
+        solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.STRING), store, diagnostics, node)
+        if literal.destination is Some:
+            collect_expression_constraints(solver, modules, mod, literal.destination?, diagnostics)
+        end
+    case DEFAULT_VALUE{type_id}:
+        solver::bind_type(solver, expression_slot, type_id, store, diagnostics, node)
+    case ENUM_VALUE{value}:
+        solver::bind_type(solver, expression_slot, value.type_id, store, diagnostics, node)
+    case OPTION_LITERAL{literal}:
+        annotated := annotation_type(mod, literal.annotation)
+        if annotated is Some:
+            solver::bind_type(solver, expression_slot, annotated?, store, diagnostics, node)
+        end
+        if literal.value is Some:
+            collect_expression_constraints(solver, modules, mod, literal.value?, diagnostics)
+        end
+        if literal.destination is Some:
+            collect_expression_constraints(solver, modules, mod, literal.destination?, diagnostics)
+        end
+    case VARIANT_LITERAL{literal}:
+        type_id := mod.ast.nodes[literal.annotation].kind.TYPE_NAME.resolved_type?
+        solver::bind_type(solver, expression_slot, type_id, store, diagnostics, node)
+        if literal.value is Some:
+            value := mod.ast.nodes[literal.value?]
+            slot := collect_expression_constraints(solver, modules, mod, literal.value?, diagnostics)
+            solver::bind_type(solver, slot, store.types[type_id].kind.NAMED.member_types[literal.member], store, diagnostics, value)
+        end
+        if literal.destination is Some:
+            collect_expression_constraints(solver, modules, mod, literal.destination?, diagnostics)
+        end
+    case VARIANT_CHECK{check}:
+        collect_expression_constraints(solver, modules, mod, check.value, diagnostics)
+        solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.BOOL), store, diagnostics, node)
+    case OPTION_CHECK{check}:
+        collect_expression_constraints(solver, modules, mod, check.value, diagnostics)
+        solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.BOOL), store, diagnostics, node)
+    case UNWRAP{value}:
+        collect_expression_constraints(solver, modules, mod, value, diagnostics)
+    case STRUCT_LITERAL{literal}:
+        type_id := mod.ast.nodes[literal.annotation].kind.TYPE_NAME.resolved_type?
+        solver::bind_type(solver, expression_slot, type_id, store, diagnostics, node)
+        definition := store.types[type_id].kind.NAMED
+        for field in literal.fields:
+            slot := collect_expression_constraints(solver, modules, mod, field.value, diagnostics)
+            solver::bind_type(solver, slot, definition.member_types[field.member], store, diagnostics, mod.ast.nodes[field.value])
+        end
+        if literal.destination is Some:
+            collect_expression_constraints(solver, modules, mod, literal.destination?, diagnostics)
+        end
+    case FIELD{field}:
+        collect_expression_constraints(solver, modules, mod, field.value, diagnostics)
+    case GLOBAL_REGION:
+        solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.REGION), store, diagnostics, node)
+    case LOCAL_REGION:
+        solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.REGION), store, diagnostics, node)
+    case VECTOR_LITERAL{literal}:
+        annotated := annotation_type(mod, literal.annotation)
+        if annotated is Some:
+            solver::bind_type(solver, expression_slot, annotated?, store, diagnostics, node)
+        end
+        if literal.destination is Some:
+            collect_expression_constraints(solver, modules, mod, literal.destination?, diagnostics)
+        end
+        if literal.count is Some:
+            count_slot := collect_expression_constraints(solver, modules, mod, literal.count?, diagnostics)
+            solver::bind_type(solver, count_slot, types::atom(store, types::Atom.INT), store, diagnostics, mod.ast.nodes[literal.count?])
+        end
+        first_slot := -1
+        for element in literal.elements:
+            element_slot := collect_expression_constraints(solver, modules, mod, element, diagnostics)
+            if first_slot < 0:
+                first_slot = element_slot
+            else:
+                solver::unify_slots(solver, first_slot, element_slot, store, diagnostics, mod.ast.nodes[element])
+            end
+        end
+    case DICT_LITERAL{literal}:
+        annotated := annotation_type(mod, literal.annotation)
+        if annotated is Some:
+            solver::bind_type(solver, expression_slot, annotated?, store, diagnostics, node)
+        end
+        if literal.destination is Some:
+            collect_expression_constraints(solver, modules, mod, literal.destination?, diagnostics)
+        end
+        first_slot := -1
+        for entry in literal.entries:
+            key_slot := collect_expression_constraints(solver, modules, mod, entry.key, diagnostics)
+            solver::bind_type(solver, key_slot, types::atom(store, types::Atom.STRING), store, diagnostics, mod.ast.nodes[entry.key])
+            value_slot := collect_expression_constraints(solver, modules, mod, entry.value, diagnostics)
+            if first_slot < 0:
+                first_slot = value_slot
+            else:
+                solver::unify_slots(solver, first_slot, value_slot, store, diagnostics, mod.ast.nodes[entry.value])
+            end
+        end
+    case TABLE_LOOKUP{value}:
+        declaration := modules[value.target.source_id].ast.nodes[value.target.origin].kind.TABLE_DECL
+        solver::bind_type(solver, expression_slot, declaration.value_type?, store, diagnostics, node)
+        key_slot := collect_expression_constraints(solver, modules, mod, value.key, diagnostics)
+        solver::bind_type(solver, key_slot, declaration.key_type?, store, diagnostics, mod.ast.nodes[value.key])
+    case INDEX{index}:
+        collect_expression_constraints(solver, modules, mod, index.value, diagnostics)
+        collect_expression_constraints(solver, modules, mod, index.index, diagnostics)
+    case SLICE{slice}:
+        value_slot := collect_expression_constraints(solver, modules, mod, slice.value, diagnostics)
+        solver::unify_slots(solver, expression_slot, value_slot, store, diagnostics, node)
+        if slice.start is Some:
+            first_slot := collect_expression_constraints(solver, modules, mod, slice.start?, diagnostics)
+            solver::bind_type(solver, first_slot, types::atom(store, types::Atom.INT), store, diagnostics, mod.ast.nodes[slice.start?])
+        end
+        if slice.stop is Some:
+            last_slot := collect_expression_constraints(solver, modules, mod, slice.stop?, diagnostics)
+            solver::bind_type(solver, last_slot, types::atom(store, types::Atom.INT), store, diagnostics, mod.ast.nodes[slice.stop?])
+        end
+    case REGION_OF{inner}:
+        collect_expression_constraints(solver, modules, mod, inner, diagnostics)
+        solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.REGION), store, diagnostics, node)
+    case GROUP{inner}:
+        operand_slot := collect_expression_constraints(solver, modules, mod, inner, diagnostics)
+        solver::unify_slots(solver, expression_slot, operand_slot, store, diagnostics, node)
+    case MUST{required}:
+        operand_slot := collect_expression_constraints(solver, modules, mod, required.call, diagnostics)
+        solver::unify_slots(solver, expression_slot, operand_slot, store, diagnostics, node)
+    case UNARY{unary}:
+        operand_slot := collect_expression_constraints(solver, modules, mod, unary.operand, diagnostics)
+        solver::unify_slots(solver, expression_slot, operand_slot, store, diagnostics, node)
+        if unary.op == ast::UnaryOp.NOT:
+            solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.BOOL), store, diagnostics, node)
+        end
+    case IDENTIFIER_EXPR{identifier}:
+        origin_slot := -1
+        if identifier.global_origin is Some:
+            target := identifier.global_origin?
+            origin_slot = solver::ensure_inference_slot(solver, modules[target.source_id].ast.nodes[target.origin])
+        else:
+            origin_slot = solver::ensure_inference_slot(solver, mod.ast.nodes[identifier.local_origin?])
+        end
+        solver::unify_slots(solver, expression_slot, origin_slot, store, diagnostics, node)
+    case BINARY{binary}:
+        left_slot := collect_expression_constraints(solver, modules, mod, binary.left, diagnostics)
+        right_slot := collect_expression_constraints(solver, modules, mod, binary.right, diagnostics)
+        if binary.op == ast::BinaryOp.AND or binary.op == ast::BinaryOp.OR:
+            bool_type := types::atom(store, types::Atom.BOOL)
+            solver::bind_type(solver, left_slot, bool_type, store, diagnostics, mod.ast.nodes[binary.left])
+            solver::bind_type(solver, right_slot, bool_type, store, diagnostics, mod.ast.nodes[binary.right])
+            solver::bind_type(solver, expression_slot, bool_type, store, diagnostics, node)
+        end
+        if ast::is_comparison(binary.op):
+            solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.BOOL), store, diagnostics, node)
+        end
+        if binary.op == ast::BinaryOp.MOD:
+            solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.INT), store, diagnostics, node)
+        end
+    case CONDITIONAL{conditional}:
+        condition_slot := collect_expression_constraints(solver, modules, mod, conditional.condition, diagnostics)
+        solver::bind_type(solver, condition_slot, types::atom(store, types::Atom.BOOL), store, diagnostics, mod.ast.nodes[conditional.condition])
+        collect_expression_constraints(solver, modules, mod, conditional.when_true, diagnostics)
+        collect_expression_constraints(solver, modules, mod, conditional.when_false, diagnostics)
+    case CALL{call}:
+        if call.is_receiver and call.target is None and call.builtin is None:
+            for argument in call.arguments:
+                collect_expression_constraints(solver, modules, mod, argument, diagnostics)
+            end
+            return expression_slot
+        end
+        if call.builtin is Some:
+            kind := call.builtin?
+            if kind == builtin::Kind.LEN or kind == builtin::Kind.SITE_LINE or kind == builtin::Kind.ERROR_CODE:
+                solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.INT), store, diagnostics, node)
+            elif kind == builtin::Kind.SITE:
+                solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.SITE), store, diagnostics, node)
+            elif kind == builtin::Kind.CONCAT or builtin::is_site_text(kind) or kind == builtin::Kind.ERROR_MSG:
+                solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.STRING), store, diagnostics, node)
+            elif kind == builtin::Kind.PUSH or kind == builtin::Kind.CLEAR or kind == builtin::Kind.ASSERT or kind == builtin::Kind.FAIL or builtin::is_output(kind):
+                solver::bind_type(solver, expression_slot, types::atom(store, types::Atom.VOID), store, diagnostics, node)
+            end
+            if builtin::arity(kind) >= 0 and len(call.arguments) != builtin::arity(kind):
+                detail := " expects two arguments" if builtin::arity(kind) == 2 else " expects one argument"
+                if kind == builtin::Kind.SITE or kind == builtin::Kind.ERROR_CODE:
+                    detail = " expects no arguments"
+                end
+                if kind == builtin::Kind.COPY:
+                    detail = " expects a source and optional destination Region"
+                end
+                solver::report(solver, diagnostics, node, "call arity mismatch", concat(builtin::Names[kind], detail))
+                return expression_slot
+            end
+            for argument in call.arguments:
+                collect_expression_constraints(solver, modules, mod, argument, diagnostics)
+            end
+            if kind == builtin::Kind.ERROR_MSG:
+                destination := mod.ast.nodes[call.arguments[0]]
+                solver::bind_type(solver, destination.inference_slot, types::atom(store, types::Atom.REGION), store, diagnostics, destination)
+            end
+            if kind == builtin::Kind.SITE_LINE or builtin::is_site_text(kind):
+                value := mod.ast.nodes[call.arguments[0]]
+                solver::bind_type(solver, value.inference_slot, types::atom(store, types::Atom.SITE), store, diagnostics, value)
+                if builtin::is_site_text(kind):
+                    destination := mod.ast.nodes[call.arguments[1]]
+                    solver::bind_type(solver, destination.inference_slot, types::atom(store, types::Atom.REGION), store, diagnostics, destination)
+                end
+            end
+            if kind == builtin::Kind.CONCAT:
+                if len(call.arguments) == 0:
+                    solver::report(solver, diagnostics, node, "call arity mismatch", "concat expects one or more String arguments")
+                end
+                // The final argument is overloaded: wait for its inferred type.
+                // Earlier arguments always constrain their inputs to String.
+                for index, argument in call.arguments:
+                    if index < len(call.arguments) - 1:
+                        value := mod.ast.nodes[argument]
+                        solver::bind_type(solver, value.inference_slot, types::atom(store, types::Atom.STRING), store, diagnostics, value)
+                    end
+                end
+            end
+            if kind == builtin::Kind.FAIL:
+                if len(call.arguments) < 1 or len(call.arguments) > 2:
+                    solver::report(solver, diagnostics, node, "call arity mismatch", "fail expects one or two arguments")
+                end
+                // Like the seed, validate overloads after inferring operands;
+                // fail alone does not infer an unannotated parameter's type.
+            end
+            if kind == builtin::Kind.ASSERT:
+                condition := mod.ast.nodes[call.arguments[0]]
+                solver::bind_type(solver, condition.inference_slot, types::atom(store, types::Atom.BOOL), store, diagnostics, condition)
+            end
+            if kind == builtin::Kind.COPY:
+                solver::unify_slots(solver, expression_slot, mod.ast.nodes[call.arguments[0]].inference_slot, store, diagnostics, node)
+                destination := mod.ast.nodes[call.arguments[1]]
+                solver::bind_type(solver, destination.inference_slot, types::atom(store, types::Atom.REGION), store, diagnostics, destination)
+            end
+            if call.target is Some:
+                collect_target_constraints(solver, modules, mod, node, diagnostics)
+            end
+            return expression_slot
+        end
+        collect_target_constraints(solver, modules, mod, node, diagnostics)
+    other:
+        solver::report(solver, diagnostics, node, "unsupported inference", "expected a value expression")
+    end
+    return expression_slot
+end
+
+
+func collect_target_constraints(solver: solver::Solver, foreign modules: Vec[module::Module], foreign mod: module::Module, foreign node: ast::Node, foreign diagnostics: diag::Diagnostics) -> void:
+    call := node.kind.CALL
+    target := call.target?
+    target_mod := modules[target.source_id]
+    target_node := target_mod.ast.nodes[target.origin]
+    function := target_node.kind.FUNCTION_DECL
+    return_slot := solver::ensure_inference_slot(solver, target_node)
+    solver::unify_slots(solver, node.inference_slot, return_slot, mod.type_store, diagnostics, node)
+    supplied := len(call.arguments)
+    required := len(function.parameters)
+    if supplied != required:
+        solver::report(solver, diagnostics, node, "call arity mismatch", concat("expected ", string::from_int(required), " arguments, got ", string::from_int(supplied)))
+        return
+    end
+    for index, argument in call.arguments:
+        argument_slot := collect_expression_constraints(solver, modules, mod, argument, diagnostics)
+        parameter_slot := solver::ensure_inference_slot(solver, target_mod.ast.nodes[function.parameters[index]])
+        solver::unify_slots(solver, parameter_slot, argument_slot, mod.type_store, diagnostics, mod.ast.nodes[argument])
+    end
+end
+
+
+func collect_block_constraints(solver: solver::Solver, foreign modules: Vec[module::Module], foreign mod: module::Module, foreign body: ast::Block, return_slot: int, foreign diagnostics: diag::Diagnostics) -> void:
+    for id in body.statements:
+        node := mod.ast.nodes[id]
+        match node.kind:
+        case LOCAL_DECL{local}:
+            slot := solver::ensure_inference_slot(solver, node)
+            annotated := annotation_type(mod, local.annotation)
+            if annotated is Some:
+                solver::bind_type(solver, slot, annotated?, mod.type_store, diagnostics, node)
+            end
+            if local.initializer is Some:
+                initializer_slot := collect_expression_constraints(solver, modules, mod, local.initializer?, diagnostics)
+                solver::unify_slots(solver, slot, initializer_slot, mod.type_store, diagnostics, node)
+            end
+        case CALL:
+            collect_expression_constraints(solver, modules, mod, id, diagnostics)
+        case MUST:
+            collect_expression_constraints(solver, modules, mod, id, diagnostics)
+        case ASSIGN{statement}:
+            target_slot := collect_expression_constraints(solver, modules, mod, statement.target, diagnostics)
+            assigned_slot := collect_expression_constraints(solver, modules, mod, statement.value, diagnostics)
+            solver::unify_slots(solver, target_slot, assigned_slot, mod.type_store, diagnostics, node)
+        case TRY{statement}:
+            call_slot := collect_expression_constraints(solver, modules, mod, statement.call, diagnostics)
+            if statement.binding is Some:
+                binding := mod.ast.nodes[statement.binding?]
+                slot := solver::ensure_inference_slot(solver, binding)
+                annotated := annotation_type(mod, binding.kind.LOCAL_DECL.annotation)
+                if annotated is Some:
+                    solver::bind_type(solver, slot, annotated?, mod.type_store, diagnostics, binding)
+                end
+                solver::unify_slots(solver, slot, call_slot, mod.type_store, diagnostics, binding)
+            end
+            collect_block_constraints(solver, modules, mod, statement.body, return_slot, diagnostics)
+            collect_block_constraints(solver, modules, mod, statement.except_body, return_slot, diagnostics)
+        case IF{statement}:
+            for branch in statement.branches:
+                collect_expression_constraints(solver, modules, mod, branch.condition, diagnostics)
+                collect_block_constraints(solver, modules, mod, branch.body, return_slot, diagnostics)
+            end
+            if statement.else_body is Some:
+                collect_block_constraints(solver, modules, mod, statement.else_body?, return_slot, diagnostics)
+            end
+        case MATCH{statement}:
+            collect_expression_constraints(solver, modules, mod, statement.value, diagnostics)
+            for arm in statement.arms:
+                if arm.binding is Some:
+                    solver::ensure_inference_slot(solver, mod.ast.nodes[arm.binding?])
+                end
+                collect_block_constraints(solver, modules, mod, arm.body, return_slot, diagnostics)
+            end
+            if statement.other_body is Some:
+                collect_block_constraints(solver, modules, mod, statement.other_body?, return_slot, diagnostics)
+            end
+        case WHILE{loop}:
+            collect_expression_constraints(solver, modules, mod, loop.condition, diagnostics)
+            collect_block_constraints(solver, modules, mod, loop.body, return_slot, diagnostics)
+        case FOR{loop}:
+            int_type := types::atom(mod.type_store, types::Atom.INT)
+            solver::bind_type(solver, solver::ensure_inference_slot(solver, mod.ast.nodes[loop.variable]), int_type, mod.type_store, diagnostics, mod.ast.nodes[loop.variable])
+            start_slot := collect_expression_constraints(solver, modules, mod, loop.start, diagnostics)
+            stop_slot := collect_expression_constraints(solver, modules, mod, loop.stop, diagnostics)
+            solver::bind_type(solver, start_slot, int_type, mod.type_store, diagnostics, mod.ast.nodes[loop.start])
+            solver::bind_type(solver, stop_slot, int_type, mod.type_store, diagnostics, mod.ast.nodes[loop.stop])
+            collect_block_constraints(solver, modules, mod, loop.body, return_slot, diagnostics)
+        case FOREACH{loop}:
+            solver::ensure_inference_slot(solver, mod.ast.nodes[loop.first])
+            if loop.second is Some:
+                solver::ensure_inference_slot(solver, mod.ast.nodes[loop.second?])
+            end
+            collect_expression_constraints(solver, modules, mod, loop.container, diagnostics)
+            collect_block_constraints(solver, modules, mod, loop.body, return_slot, diagnostics)
+        case BREAK:
+        case CONTINUE:
+        case RETURN{statement}:
+            if statement.value is Some:
+                returned_slot := collect_expression_constraints(solver, modules, mod, statement.value?, diagnostics)
+                solver::unify_slots(solver, return_slot, returned_slot, mod.type_store, diagnostics, node)
+            else:
+                solver::bind_type(solver, return_slot, types::atom(mod.type_store, types::Atom.VOID), mod.type_store, diagnostics, node)
+            end
+        other:
+            solver::report(solver, diagnostics, node, "unsupported inference", "expected a statement")
+        end
+    end
+end
+
+
+// Annotation types are inputs. Final value/signature types live only on Node.
+func annotation_type(foreign mod: module::Module, foreign annotation: Option[int], r: Region) -> Option[int]:
+    if annotation is None:
+        return None[r]
+    end
+    resolved := mod.ast.nodes[annotation?].kind.TYPE_NAME.resolved_type
+    if resolved is Some:
+        return Some{resolved?}[r]
+    end
+    return None[r]
+end
+
+
+/// Reset prior inferred metadata and create slots constrained by annotations
+/// and entry requirements. Use entry_source_id = -1 when no entry is being checked.
+func initialize(foreign solver: solver::Solver, program: program::Program, entry_source_id: int) -> void:
+    modules := program.modules
+    dependency_order := program.dependency_order
+    diagnostics := program.diagnostics
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        for node in mod.ast.nodes:
+            node.inference_slot = -1
+            node.inferred_type = None
+        end
+        root_module := mod.ast.get_root_module()
+        for id in root_module.declarations:
+            node := mod.ast.nodes[id]
+            if not (node.kind is FUNCTION_DECL):
+                continue
+            end
+            function := node.kind.FUNCTION_DECL
+            is_entry := mod.source_id == entry_source_id and function.name == "main"
+            return_slot := solver::ensure_inference_slot(solver, node)
+            annotated_result := annotation_type(mod, function.return_annotation)
+            if annotated_result is Some:
+                solver::bind_type(solver, return_slot, annotated_result?, mod.type_store, diagnostics, node)
+            end
+            if is_entry:
+                solver::bind_type(solver, return_slot, types::atom(mod.type_store, types::Atom.INT), mod.type_store, diagnostics, node)
+            elif function.external_name is None and not block_has_return(mod, function.body):
+                solver::bind_type(solver, return_slot, types::atom(mod.type_store, types::Atom.VOID), mod.type_store, diagnostics, node)
+            end
+            for parameter_id in function.parameters:
+                parameter_node := mod.ast.nodes[parameter_id]
+                parameter := parameter_node.kind.PARAMETER
+                parameter_slot := solver::ensure_inference_slot(solver, parameter_node)
+                annotated_parameter := annotation_type(mod, parameter.annotation)
+                if annotated_parameter is Some:
+                    solver::bind_type(solver, parameter_slot, annotated_parameter?, mod.type_store, diagnostics, parameter_node)
+                end
+                if is_entry and len(function.parameters) == 1:
+                    argument_type := must types::container(mod.type_store, types::Container.VECTOR, types::atom(mod.type_store, types::Atom.STRING))
+                    solver::bind_type(solver, parameter_slot, argument_type, mod.type_store, diagnostics, parameter_node)
+                end
+            end
+        end
+    end
+end
+
+
+/// Collect constraints from globals, tables, and function bodies in dependency
+/// order. Retain all temporary bindings in the supplied Solver.
+func collect_constraints(solver: solver::Solver, foreign program: program::Program) -> void:
+    modules := program.modules
+    dependency_order := program.dependency_order
+    diagnostics := program.diagnostics
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        root_module := mod.ast.get_root_module()
+        for id in root_module.declarations:
+            node := mod.ast.nodes[id]
+            if node.kind is GLOBAL_DECL:
+                slot := solver::ensure_inference_slot(solver, node)
+                initializer_slot := collect_expression_constraints(solver, modules, mod, node.kind.GLOBAL_DECL.initializer, diagnostics)
+                solver::unify_slots(solver, slot, initializer_slot, mod.type_store, diagnostics, node)
+            elif node.kind is TABLE_DECL:
+                declaration := node.kind.TABLE_DECL
+                slot := solver::ensure_inference_slot(solver, node)
+                solver::bind_type(solver, slot, declaration.value_type?, mod.type_store, diagnostics, node)
+                for entry in declaration.entries:
+                    entry_slot := collect_expression_constraints(solver, modules, mod, entry.value, diagnostics)
+                    solver::bind_type(solver, entry_slot, declaration.value_type?, mod.type_store, diagnostics, mod.ast.nodes[entry.value])
+                end
+            elif node.kind is FUNCTION_DECL:
+                collect_block_constraints(solver, modules, mod, node.kind.FUNCTION_DECL.body, node.inference_slot, diagnostics)
+            end
+        end
+    end
+end
+
+

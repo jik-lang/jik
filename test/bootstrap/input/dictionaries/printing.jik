@@ -1,0 +1,24 @@
+struct Entry:
+    value: int
+end
+
+struct Tree:
+    children: Option[Dict[Tree]]
+end
+
+func main():
+    integers := {"only": 7}
+    nested := {"outer": {"inner": 2}}
+    objects := {"entry": Entry{value = 3}}
+    optional: Dict[Option[String]] = {"key": None}
+    empty: Dict[int]
+    tree := Tree{children = Some{{"leaf": Tree{}}}}
+    println(integers)
+    println(nested)
+    println(objects)
+    println(optional)
+    println(empty)
+    println(tree)
+    println(Some{{"values": [1, 2]}})
+    return 42
+end

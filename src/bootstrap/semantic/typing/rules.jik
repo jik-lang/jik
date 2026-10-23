@@ -1,0 +1,199 @@
+//! Shared type checks and operand/result rules used by inference and checking.
+
+use "../../language/types"
+use "../../parser/ast"
+
+
+// Inference and checking share these rules without depending on either traversal.
+func binary_result(store: types::Store, op: ast::BinaryOp, left: int, right: int) -> Option[int]:
+    int_type := types::atom(store, types::Atom.INT)
+    double_type := types::atom(store, types::Atom.DOUBLE)
+    numeric := (left == int_type or left == double_type) and (right == int_type or right == double_type)
+    if op == ast::BinaryOp.AND or op == ast::BinaryOp.OR:
+        bool_type := types::atom(store, types::Atom.BOOL)
+        if left == bool_type and right == bool_type:
+            return Some{bool_type}
+        end
+        return None
+    end
+    if op == ast::BinaryOp.EQ or op == ast::BinaryOp.NE:
+        if numeric or (left == right and (types::is_enum(store, left) or left == types::atom(store, types::Atom.BOOL) or left == types::atom(store, types::Atom.CHAR) or left == types::atom(store, types::Atom.STRING))):
+            return Some{types::atom(store, types::Atom.BOOL)}
+        end
+        return None
+    end
+    if not numeric:
+        return None
+    end
+    if ast::is_comparison(op):
+        return Some{types::atom(store, types::Atom.BOOL)}
+    end
+    if op == ast::BinaryOp.MOD:
+        if left == int_type and right == int_type:
+            return Some{int_type}
+        end
+        return None
+    end
+    if op == ast::BinaryOp.PLUS or op == ast::BinaryOp.MINUS or op == ast::BinaryOp.TIMES or op == ast::BinaryOp.DIV:
+        if left == double_type or right == double_type:
+            return Some{double_type}
+        end
+        return Some{int_type}
+    end
+    return None
+end
+
+
+func conditional_result(store: types::Store, when_true: int, when_false: int) -> Option[int]:
+    if when_true == types::atom(store, types::Atom.VOID) or when_false == types::atom(store, types::Atom.VOID):
+        return None
+    end
+    if when_true == when_false:
+        return Some{when_true}
+    end
+    int_type := types::atom(store, types::Atom.INT)
+    double_type := types::atom(store, types::Atom.DOUBLE)
+    if (when_true == int_type or when_true == double_type) and (when_false == int_type or when_false == double_type):
+        return Some{double_type}
+    end
+    return None
+end
+
+
+func unary_result(store: types::Store, op: ast::UnaryOp, operand: int) -> Option[int]:
+    if op == ast::UnaryOp.NOT and operand == types::atom(store, types::Atom.BOOL):
+        return Some{operand}
+    end
+    if op == ast::UnaryOp.NEGATE and (operand == types::atom(store, types::Atom.INT) or operand == types::atom(store, types::Atom.DOUBLE)):
+        return Some{operand}
+    end
+    return None
+end
+
+
+func has_scalar_default(store: types::Store, id: int) -> bool:
+    if types::is_enum(store, id):
+        return len(store.types[id].kind.NAMED.member_names) > 0
+    end
+    kind := store.types[id].kind
+    if not (kind is ATOM):
+        return false
+    end
+    atom := kind.ATOM
+    return atom == types::Atom.INT or atom == types::Atom.DOUBLE or atom == types::Atom.BOOL or atom == types::Atom.CHAR
+end
+
+
+func is_condition_type(store: types::Store, id: int) -> bool:
+    kind := store.types[id].kind
+    match kind:
+    case ATOM{atom}:
+        // Statement conditions preserve scalar/pointer truth testing in the seed.
+        // Site is a by-value C struct; it is not a scalar condition.
+        return atom != types::Atom.VOID and atom != types::Atom.SITE
+    case CONTAINER:
+        return true
+    case NAMED:
+        return true
+    case FUNCTION:
+        return false
+    end
+end
+
+
+func supported_data_type(store: types::Store, id: int, visited: Vec[bool], printable: bool) -> bool:
+    if types::is_enum(store, id):
+        return true
+    end
+    if types::is_extern_struct(store, id):
+        return true
+    end
+    if visited[id]:
+        return true
+    end
+    visited[id] = true
+    kind := store.types[id].kind
+    if types::is_record(store, id):
+        for member in kind.NAMED.member_types:
+            if types::is_variant(store, id) and member == types::atom(store, types::Atom.VOID):
+                continue
+            end
+            if not supported_data_type(store, member, visited, printable):
+                return false
+            end
+        end
+        return true
+    end
+    if kind is ATOM:
+        atom := kind.ATOM
+        return atom == types::Atom.INT or atom == types::Atom.DOUBLE or atom == types::Atom.BOOL or atom == types::Atom.CHAR or atom == types::Atom.STRING or (atom == types::Atom.SITE and not printable)
+    end
+    element := types::vector_element(store, id)
+    if element is None:
+        element = types::option_element(store, id)
+    end
+    if element is None:
+        element = types::dict_element(store, id)
+    end
+    return element is Some and supported_data_type(store, element?, visited, printable)
+end
+
+
+func is_printable(store: types::Store, id: int) -> bool:
+    return supported_data_type(store, id, [len(store.types) of false], true)
+end
+
+
+func is_data_value(store: types::Store, id: int) -> bool:
+    return supported_data_type(store, id, [len(store.types) of false], false)
+end
+
+
+func index_result(store: types::Store, id: int, is_store: bool) -> Option[int]:
+    dictionary := types::dict_element(store, id)
+    if dictionary is Some:
+        if is_store:
+            return dictionary
+        end
+        return Some{must types::container(store, types::Container.OPTION, dictionary?)}
+    end
+    if id == types::atom(store, types::Atom.STRING):
+        return Some{types::atom(store, types::Atom.CHAR)}
+    end
+    return types::vector_element(store, id)
+end
+
+
+func is_copy_atom(store: types::Store, id: int) -> bool:
+    kind := store.types[id].kind
+    if types::is_enum(store, id):
+        return true
+    end
+    if kind is ATOM:
+        value := kind.ATOM
+        return value == types::Atom.INT or value == types::Atom.DOUBLE or value == types::Atom.BOOL or value == types::Atom.CHAR or value == types::Atom.STRING
+    end
+    return false
+end
+
+
+func is_copyable(store: types::Store, id: int) -> bool:
+    if id == types::atom(store, types::Atom.STRING):
+        return true
+    end
+    kind := store.types[id].kind
+    if kind is CONTAINER:
+        return is_copy_atom(store, kind.CONTAINER.element_type)
+    elif types::is_record(store, id):
+        for member in kind.NAMED.member_types:
+            if types::is_variant(store, id) and member == types::atom(store, types::Atom.VOID):
+                continue
+            end
+            if not is_copy_atom(store, member):
+                return false
+            end
+        end
+        return true
+    end
+    return false
+end

@@ -1,0 +1,54 @@
+enum Key:
+    A
+    B
+end
+
+struct Record:
+    value: int
+    text: String
+end
+
+variant Data:
+    TEXT: String
+    EOF
+end
+
+table Records[Key] -> Record:
+    B: Record{value=2, text="second"}
+    A: Record{value=1, text="first"}
+end
+
+table Options[Key] -> Option[int]:
+    A: Some{10}
+    B: None
+end
+
+table Vectors[Key] -> Vec[int]:
+    A: [1, 2]
+    B: [3]
+end
+
+table Dictionaries[Key] -> Dict[String]:
+    A: {"key": "value"}
+    B: {"key": "second"}
+end
+
+table Variants[Key] -> Data:
+    A: Data.TEXT{"hello"}
+    B: Data.EOF{}
+end
+
+func main():
+    first := Records[Key.A]
+    second := Records[Key.A]
+    first.value = 9
+    println(second)
+    println(Options[Key.A], ":", Options[Key.B])
+    Vectors[Key.A][0] = 7
+    println(Vectors[Key.A])
+    println(Dictionaries[Key.A]["key"]?)
+    println(Variants[Key.A], ":", Variants[Key.B])
+    text := "updated"[.first]
+    first.text = text
+    println(second.text)
+end

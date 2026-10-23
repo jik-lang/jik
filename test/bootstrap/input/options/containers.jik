@@ -1,0 +1,28 @@
+struct Item:
+    value: Option[int]
+end
+
+func main():
+    values: Vec[Option[String]]
+    push(values, Some{"first"})
+    empty: Option[String]
+    push(values, empty)
+    push(values, Some{"last"})
+    popped := pop(values)
+    sliced := values[:1]
+    if popped? != "last" or sliced[0]? != "first" or values[1] is Some:
+        return 1
+    end
+    repeated := [2 of Item{}]
+    repeated[0].value = Some{7}
+    if repeated[1].value is Some or repeated[0].value? != 7:
+        return 2
+    end
+    multi := Some{[Some{Some{9}}]}
+    if multi?[0]?? != 9:
+        return 3
+    end
+    clear(values)
+    println(popped, ":", sliced, ":", repeated, ":", multi, ":", len(values))
+    return 42
+end

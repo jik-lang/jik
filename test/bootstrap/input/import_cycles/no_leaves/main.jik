@@ -1,0 +1,6 @@
+use "a"
+
+
+func main():
+    return 0
+end

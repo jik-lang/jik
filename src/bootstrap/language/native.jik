@@ -1,0 +1,107 @@
+//! Native directive data and platform/profile compatibility rules.
+
+use "jik/string"
+
+use "../source"
+
+
+enum Platform:
+    ALL
+    WINDOWS
+    LINUX
+end
+
+
+enum Profile:
+    ALL
+    WINDOWS_X64_MINGW
+    LINUX_X64_GNU
+    UNKNOWN
+end
+
+
+table PlatformNames[Platform] -> String:
+    ALL: "all"
+    WINDOWS: "windows"
+    LINUX: "linux"
+end
+
+
+table ProfileNames[Profile] -> String:
+    ALL: "all"
+    WINDOWS_X64_MINGW: "windows-x64-mingw"
+    LINUX_X64_GNU: "linux-x64-gnu"
+    UNKNOWN: "unknown"
+end
+
+
+enum Kind:
+    INCLUDE_DIR
+    LIB_DIR
+    LINK
+    COPY
+end
+
+
+table KindNames[Kind] -> String:
+    INCLUDE_DIR: "@includedir"
+    LIB_DIR: "@libdir"
+    LINK: "@link"
+    COPY: "@copy"
+end
+
+
+// Parsed native build directive, including its target restrictions and source location.
+struct Requirement:
+    kind: Kind
+    platform: Platform    // ALL applies to every host platform.
+    profile: Profile    // ALL applies to every native compiler profile.
+    // Directive operands in source order; their interpretation depends on kind.
+    arguments: Vec[String]
+    span: source::Span
+end
+
+
+func platform_active(required: Platform, host: Platform) -> bool:
+    return required == Platform.ALL or required == host
+end
+
+
+func active(requirement: Requirement, host: Platform, profile: Profile) -> bool:
+    return platform_active(requirement.platform, host) and (requirement.profile == Profile.ALL or requirement.profile == profile)
+end
+
+
+func normalize_target(target: String) -> Profile:
+    if string::find(target, "x86_64") < 0:
+        return Profile.UNKNOWN
+    end
+    if string::find(target, "mingw") >= 0 or string::find(target, "windows-gnu") >= 0:
+        return Profile.WINDOWS_X64_MINGW
+    elif string::find(target, "linux") >= 0 and string::find(target, "gnu") >= 0:
+        return Profile.LINUX_X64_GNU
+    end
+    return Profile.UNKNOWN
+end
+
+
+func requires_profile(requirements: Vec[Requirement], host: Platform) -> bool:
+    for requirement in requirements:
+        if platform_active(requirement.platform, host) and requirement.profile != Profile.ALL:
+            return true
+        end
+    end
+    return false
+end
+
+
+// Profile alternatives within one physical module are ORed. Each reachable
+// module with platform-active restricted requirements must have a match.
+func supports_profile(requirements: Vec[Requirement], host: Platform, selected: Profile) -> bool:
+    for requirement in requirements:
+        if platform_active(requirement.platform, host) and requirement.profile == selected and selected != Profile.ALL:
+            return true
+        end
+    end
+    return not requires_profile(requirements, host)
+end

@@ -1,0 +1,14 @@
+func main():
+    return first(4) + 38
+end
+
+func first(n):
+    if n < 1:
+        return 0
+    end
+    return second(n - 1)
+end
+
+func second(n):
+    return first(n) + 1
+end

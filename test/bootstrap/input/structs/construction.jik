@@ -1,0 +1,53 @@
+struct Settings:
+    host: String
+    port: int
+    verbose: bool
+    ratio: double
+    byte: char
+end
+
+struct Label:
+    text: String
+end
+
+struct Holder:
+    label: Label
+    settings: Settings
+    tags: Vec[String]
+end
+
+struct Empty:
+end
+
+func main():
+    host := "localhost"
+    port := 8080
+    verbose := true
+    explicit := Settings{host = "explicit", port = 9000}
+    shorthand := Settings{verbose, host, port}
+    mixed := Settings{port, host = "mixed", verbose}
+    defaults := Settings{}
+    typed: Settings
+    empty := Empty{}
+    holder := Holder{}
+    if explicit.host != "explicit" or explicit.port != 9000 or explicit.verbose:
+        return 1
+    end
+    if shorthand.host != host or shorthand.port != port or not shorthand.verbose:
+        return 2
+    end
+    if mixed.host != "mixed" or defaults.host != "" or defaults.port != 0 or defaults.ratio != 0.0 or defaults.verbose:
+        return 3
+    end
+    if typed.host != "" or holder.label.text != "" or len(holder.tags) != 0 or holder.settings.port != 0:
+        return 4
+    end
+    explicit.ratio = 1.5
+    explicit.verbose = true
+    explicit.byte = host[0]
+    if explicit.ratio != 1.5 or not explicit.verbose or explicit.byte != host[0] or defaults.byte != typed.byte:
+        return 5
+    end
+    println(explicit.host, ":", shorthand.port, ":", mixed.host, ":", holder.label.text)
+    return 42
+end

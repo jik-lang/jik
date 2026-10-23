@@ -1,0 +1,56 @@
+func main():
+    text := "A\x01\xC5\xBD\xFFZ"
+    count := 0
+    for byte in text:
+        expected := text[count]
+        if byte != expected:
+            return 1
+        end
+        count += 1
+    end
+    bytes := [text[0], text[2], text[4]]
+    for index, byte in bytes:
+        expected := text[0] if index == 0 else text[2] if index == 1 else text[4]
+        if byte != expected:
+            return 7
+        end
+    end
+    pairs := 0
+    for index, byte in text:
+        expected := text[index]
+        if byte != expected:
+            return 2
+        end
+        pairs += 1
+    end
+    empty := ""
+    for byte in empty:
+        return 3
+    end
+    for index, byte in empty:
+        return 4
+    end
+    sliced := text[1:5]
+    for index, byte in sliced:
+        expected := text[index + 1]
+        if byte != expected:
+            return 5
+        end
+    end
+    ascii := "Jik"
+    for index, byte in ascii:
+        print(index, ":", byte, ";")
+    end
+    skipped := 0
+    for index, byte in ascii:
+        if index == 0:
+            continue
+        end
+        skipped += 1
+        break
+    end
+    if skipped != 1:
+        return 8
+    end
+    println(count, ":", pairs)
+end

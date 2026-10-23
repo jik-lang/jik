@@ -1,0 +1,41 @@
+struct Holder:
+    payload: Option[Vec[String]]
+end
+
+func make(r: Region) -> Option[Vec[String]]:
+    scratch := "scratch"
+    return Some{["caller", "nested"]}
+end
+
+func take(value: Option[Vec[String]]) -> Vec[String]:
+    return unwrap(value)
+end
+
+func same(left: Option[String], right: Option[String]) -> bool:
+    return left is Some and right is Some and left? == right?
+end
+
+func main():
+    value := make()
+    defaulted: Option[String][.value]
+    explicit := Some{"explicit"}[.value]
+    implicit: Option[int][.value]
+    if defaulted is Some or implicit is Some or value?[0] != "caller" or take(value)[1] != "nested":
+        return 1
+    end
+    holder := Holder{payload = value}[.value]
+    holder.payload = Some{["stored"]}
+    if holder.payload?[0] != "stored":
+        return 2
+    end
+    independent := Some{"explicit"}
+    if not same(explicit, independent):
+        return 3
+    end
+    holder.payload = None
+    if holder.payload is Some:
+        return 4
+    end
+    println(value, ":", defaulted, ":", explicit, ":", holder)
+    return 42
+end

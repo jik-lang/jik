@@ -1,0 +1,29 @@
+func produce(counter: Vec[int]) -> Option[int]:
+    counter[0] = counter[0] + 1
+    return Some{counter[0]}[.counter]
+end
+
+func main():
+    counter := [0]
+    if produce(counter) is None or counter[0] != 1:
+        return 1
+    end
+    value := produce(counter)?
+    if counter[0] != 2 or value != 2:
+        return 2
+    end
+    value = unwrap(produce(counter))
+    if counter[0] != 3 or value != 3:
+        return 3
+    end
+    absent: Option[int]
+    if absent is Some and produce(counter)? > 0:
+        return 4
+    end
+    skipped := produce(counter) if false else absent
+    if counter[0] != 3 or skipped is Some:
+        return 5
+    end
+    println(value, ":", counter[0], ":", skipped)
+    return 42
+end

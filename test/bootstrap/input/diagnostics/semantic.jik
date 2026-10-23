@@ -1,0 +1,7 @@
+func main():
+    return 0
+end
+
+func main():
+    return 1
+end

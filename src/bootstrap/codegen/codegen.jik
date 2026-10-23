@@ -1,279 +1,274 @@
-use "writer"
-use "../diag"
-use "../module"
-use "../source"
-use "../parser/ast"
-use "jik/path"
+//! Generate the C file and its program startup code.
+
 use "jik/string"
 
+use "../program"
+use "../version"
+use "backend"
+use "c_names"
+use "type_support"
+use "operations"
+use "writer"
+use "../modules/module"
+use "../language/types"
+use "../language/region_source"
 
-struct Generator:
-    output: writer::Writer
-    modules: Vec[module::Module]
-    sources: source::SourceManager
-    diagnostics: diag::Diagnostics
-    main_source_id: int
+
+// C generation settings supplied by the compiler driver.
+struct Options:
+    core_source: Option[String]    // Support header contents to embed; None emits a core.h include.
+    emit_source_loc: bool
+    unsafe_no_bounds_checks: bool
+    region_stats: bool
+    region_tree: bool
 end
 
 
-func write_name(g: Generator, source_id: int, foreign name: String) -> void:
-    g.output.write("jik_m")
-    g.output.write(string::from_int(source_id))
-    g.output.write("_")
-    g.output.write(name)
-end
-
-
-func write_local(g: Generator, foreign name: String) -> void:
-    g.output.write("jik_v_")
-    g.output.write(name)
-end
-
-
-func has_function(g: Generator, source_id: int, foreign name: String) -> bool:
-    for mod in g.modules:
-        if mod.source_id == source_id:
-            return mod.global_scope.symbols[name] is Some
-        end
-    end
-    return false
-end
-
-
-throws func module_for_qualifier(g: Generator, mod: module::Module, foreign qualifier: String, span: source::Span) -> int:
-    root := mod.ast.get_root_module()
-    src := g.sources.sources[mod.source_id]
-    found := -1
-    for import_id in root.imports:
-        import := mod.ast.nodes[import_id].kind.IMPORT
-        alias := path::basename(import.path)
-        if import.alias is Some:
-            alias = copy(import.alias?, _)
-        end
-        if alias != qualifier:
-            continue
-        end
-        if found >= 0:
-            diag::error(g.diagnostics, "ambiguous import alias", qualifier, Some{span})
-            fail("code generation failed")
-        end
-        full_path := g.sources.construct_full_path(import.path, src)
-        source_id := g.sources.source_id_by_path[full_path]
-        if source_id is Some:
-            found = source_id?
-        end
-    end
-    if found < 0:
-        diag::error(g.diagnostics, "unknown import alias", qualifier, Some{span})
-        fail("code generation failed")
-    end
-    return found
-end
-
-
-throws func write_callee(g: Generator, mod: module::Module, id: int) -> void:
-    node := mod.ast.nodes[id]
-    if not (node.kind is IDENTIFIER_EXPR):
-        diag::error(g.diagnostics, "unsupported call target", "expected a function name", Some{node.span})
-        fail("code generation failed")
-    end
-    identifier := node.kind.IDENTIFIER_EXPR
-    target := mod.source_id
-    if identifier.qualifier is Some:
-        target = try module_for_qualifier(g, mod, identifier.qualifier?, node.span)
-    end
-    if not has_function(g, target, identifier.name):
-        diag::error(g.diagnostics, "unknown function", identifier.name, Some{node.span})
-        fail("code generation failed")
-    end
-    write_name(g, target, identifier.name)
-end
-
-
-throws func emit_expression(g: Generator, mod: module::Module, id: int) -> void:
-    node := mod.ast.nodes[id]
-    match node.kind:
-    case INTEGER_LITERAL:
-        src := g.sources.sources[node.span.source_id]
-        literal := try string::slice(src.text, node.span.start, node.span.stop)
-        g.output.write(literal)
-    case IDENTIFIER_EXPR{identifier}:
-        if identifier.qualifier is Some:
-            diag::error(g.diagnostics, "unsupported value", "qualified names must be called", Some{node.span})
-            fail("code generation failed")
-        end
-        write_local(g, identifier.name)
-    case CALL{call}:
-        try write_callee(g, mod, call.callee)
-        g.output.write("(")
-        first := true
-        for argument in call.arguments:
-            if not first:
-                g.output.write(", ")
-            end
-            try emit_expression(g, mod, argument)
-            first = false
-        end
-        g.output.write(")")
-    case BINARY{binary}:
-        g.output.write("(")
-        try emit_expression(g, mod, binary.left)
-        if binary.op == ast::BinaryOp.PLUS:
-            g.output.write(" + ")
-        elif binary.op == ast::BinaryOp.MINUS:
-            g.output.write(" - ")
-        else:
-            g.output.write(" < ")
-        end
-        try emit_expression(g, mod, binary.right)
-        g.output.write(")")
-    other:
-        diag::error(g.diagnostics, "unsupported expression", "expected a value", Some{node.span})
-        fail("code generation failed")
-    end
-end
-
-
-throws func emit_statement(g: Generator, mod: module::Module, id: int) -> void:
-    node := mod.ast.nodes[id]
-    match node.kind:
-    case LOCAL_DECL{local}:
-        g.output.start_line()
-        g.output.write("int32_t ")
-        write_local(g, local.name)
-        g.output.write(" = ")
-        try emit_expression(g, mod, local.initializer)
-        g.output.write(";")
-        g.output.end_line()
-    case IF{branch}:
-        g.output.start_line()
-        g.output.write("if (")
-        try emit_expression(g, mod, branch.condition)
-        g.output.write(") {")
-        g.output.end_line()
-        g.output.indent()
-        for statement in branch.body.statements:
-            try emit_statement(g, mod, statement)
-        end
-        g.output.dedent()
-        g.output.line("}")
-    case RETURN{statement}:
-        g.output.start_line()
-        g.output.write("return ")
-        if statement.value is Some:
-            try emit_expression(g, mod, statement.value?)
-        else:
-            g.output.write("0")
-        end
-        g.output.write(";")
-        g.output.end_line()
-    other:
-        diag::error(g.diagnostics, "unsupported statement", "expected a declaration, if, or return", Some{node.span})
-        fail("code generation failed")
-    end
-end
-
-
-throws func emit_signature(g: Generator, mod: module::Module, id: int) -> void:
-    node := mod.ast.nodes[id]
-    function := node.kind.FUNCTION_DECL
-    g.output.write("int32_t ")
-    write_name(g, mod.source_id, function.name)
-    g.output.write("(")
-    if len(function.parameters) == 0:
-        g.output.write("void")
-    end
-    first := true
-    for parameter_id in function.parameters:
-        parameter_node := mod.ast.nodes[parameter_id]
-        parameter := parameter_node.kind.PARAMETER
-        if parameter.annotation is Some:
-            type_node := mod.ast.nodes[parameter.annotation?]
-            type_name := type_node.kind.TYPE_NAME
-            if type_name.qualifier is Some or type_name.name != "int":
-                diag::error(g.diagnostics, "unsupported parameter type", "bootstrap tran currently supports int", Some{type_node.span})
-                fail("code generation failed")
-            end
-        end
-        if not first:
-            g.output.write(", ")
-        end
-        g.output.write("int32_t ")
-        write_local(g, parameter.name)
-        first = false
-    end
-    g.output.write(")")
-end
-
-
-throws func emit_function(g: Generator, mod: module::Module, id: int) -> void:
-    function := mod.ast.nodes[id].kind.FUNCTION_DECL
-    try emit_signature(g, mod, id)
-    g.output.write(" {")
-    g.output.end_line()
-    g.output.indent()
-    for statement in function.body.statements:
-        try emit_statement(g, mod, statement)
-    end
-    last := len(function.body.statements) - 1
-    if last < 0 or not (mod.ast.nodes[function.body.statements[last]].kind is RETURN):
-        g.output.line("return 0;")
-    end
-    g.output.dedent()
-    g.output.line("}")
-    g.output.line("")
-end
-
-
-throws func emit_program(g: Generator) -> void:
-    g.output.line("#include \"core.h\"")
-    g.output.line("")
-    for mod in g.modules:
+throws func emit_table_storage(g: backend::Translation) -> void:
+    for source_id in g.dependency_order:
+        mod := g.modules[source_id]
         root := mod.ast.get_root_module()
         for id in root.declarations:
-            try emit_signature(g, mod, id)
-            g.output.write(";")
+            node := mod.ast.nodes[id]
+            if not (node.kind is TABLE_DECL):
+                continue
+            end
+            declaration := node.kind.TABLE_DECL
+            backend::emit_source_location(g, node)
+            g.output.write("static ")
+            try backend::write_type(g, mod, declaration.value_type?, node)
+            g.output.write(" ")
+            backend::write_table_name(g, source_id, declaration.name)
+            g.output.write(concat("[", string::from_int(len(declaration.ordered_values)), "];"))
             g.output.end_line()
-        end
-    end
-    g.output.line("")
-    for mod in g.modules:
-        root := mod.ast.get_root_module()
-        for id in root.declarations:
-            try emit_function(g, mod, id)
-        end
-    end
-    if not has_function(g, g.main_source_id, "main"):
-        diag::error(g.diagnostics, "missing main function", "the input module needs a main function", None)
-        fail("code generation failed")
-    end
-    for mod in g.modules:
-        if mod.source_id == g.main_source_id:
-            root := mod.ast.get_root_module()
-            for id in root.declarations:
-                function := mod.ast.nodes[id].kind.FUNCTION_DECL
-                if function.name == "main" and len(function.parameters) > 0:
-                    diag::error(g.diagnostics, "unsupported main signature", "bootstrap tran requires main()", Some{mod.ast.nodes[id].span})
-                    fail("code generation failed")
+            for value in declaration.initializer_nodes:
+                if types::is_allocated(mod.type_store, mod.ast.nodes[value].inferred_type?):
+                    g.needs_global_region = true
                 end
             end
         end
     end
-    g.output.line("int main(void) {")
+end
+
+throws func emit_table_initializers(body: operations::BodyContext) -> void:
+    g := body.translation
+    // Resolution validates table references against this declaration order.
+    // Tables are initialized before ordinary globals, whose expressions may read them.
+    for source_id in g.dependency_order:
+        mod := g.modules[source_id]
+        root := mod.ast.get_root_module()
+        for id in root.declarations:
+            node := mod.ast.nodes[id]
+            if node.kind is TABLE_DECL:
+                declaration := node.kind.TABLE_DECL
+                for member, value in declaration.ordered_values:
+                    g.output.start_line()
+                    backend::write_table_name(g, source_id, declaration.name)
+                    g.output.write(concat("[", string::from_int(member), "] = "))
+                    try operations::emit_expression(body, mod, value)
+                    g.output.write(";")
+                    g.output.end_line()
+                end
+            end
+        end
+    end
+end
+
+throws func emit_global_storage(g: backend::Translation) -> void:
+    for source_id in g.dependency_order:
+        mod := g.modules[source_id]
+        for id in mod.ast.get_root_module().declarations:
+            node := mod.ast.nodes[id]
+            if not (node.kind is GLOBAL_DECL):
+                continue
+            end
+            declaration := node.kind.GLOBAL_DECL
+            backend::emit_source_location(g, node)
+            g.output.write("static ")
+            try backend::write_type(g, mod, node.inferred_type?, node)
+            g.output.write(" ")
+            backend::write_global_name(g, source_id, declaration.name)
+            g.output.write(";")
+            g.output.end_line()
+            for value in declaration.initializer_nodes:
+                child := mod.ast.nodes[value]
+                if child.region_source.kind == region_source::Kind.GLOBAL:
+                    g.needs_global_region = true
+                end
+            end
+        end
+    end
+end
+
+throws func emit_global_initializers(body: operations::BodyContext) -> void:
+    g := body.translation
+    // Module scheduling is prepared by the driver; declarations retain source order.
+    for source_id in g.initialization_order:
+        mod := g.modules[source_id]
+        for id in mod.ast.get_root_module().declarations:
+            node := mod.ast.nodes[id]
+            if node.kind is GLOBAL_DECL:
+                g.output.start_line()
+                backend::write_global_name(g, source_id, node.kind.GLOBAL_DECL.name)
+                g.output.write(" = ")
+                try operations::emit_expression(body, mod, node.kind.GLOBAL_DECL.initializer)
+                g.output.write(";")
+                g.output.end_line()
+            end
+        end
+    end
+end
+
+throws func emit_program(g: backend::Translation, foreign options: Options) -> void:
+    // C dependencies constrain these phases even in one translation unit.
+    // See README.md for the declaration/helper and runtime initialization orders.
+    g.output.line(concat("// Generated with Jik version: ", version::VERSION))
+    if options.unsafe_no_bounds_checks:
+        g.output.line("#define JIK_UNSAFE_NO_BOUNDS_CHECKS")
+    end
+    if options.region_stats:
+        g.output.line("#define JIK_REGION_STATS")
+    end
+    if options.region_tree:
+        g.output.line("#define JIK_REGION_TREE")
+    end
+    if options.core_source is Some:
+        g.output.write(options.core_source?)
+        g.output.line("")
+        g.output.line("// JIK TRANSLATION")
+    else:
+        g.output.line("#include \"core.h\"")
+    end
+    g.output.line("")
+    // Embedded headers/C own external names and prototypes used by generated types.
+    for source_id in g.dependency_order:
+        mod := g.modules[source_id]
+        for id in mod.ast.get_root_module().declarations:
+            if mod.ast.nodes[id].kind is EMBEDDED_C:
+                g.output.write(mod.ast.nodes[id].kind.EMBEDDED_C)
+                g.output.line("")
+            end
+        end
+    end
+    type_support::emit_enums(g)
+    try type_support::emit_data_types(g)
+    try type_support::emit_copy_functions(g)
+    type_support::emit_printers(g)
+    try emit_table_storage(g)
+    try emit_global_storage(g)
+    // User prototypes and throwing-wrapper prototypes precede all Jik function bodies.
+    for source_id in g.dependency_order:
+        mod := g.modules[source_id]
+        root := mod.ast.get_root_module()
+        for id in root.declarations:
+            if mod.ast.nodes[id].kind is FUNCTION_DECL:
+                // The C header/embed owns external prototypes, including C's
+                // permitted conversions (for example toupper(int) for char).
+                if mod.ast.nodes[id].kind.FUNCTION_DECL.external_name is None:
+                    try operations::emit_signature(g, mod, id, false)
+                    g.output.write(";")
+                    g.output.end_line()
+                end
+                if mod.ast.nodes[id].kind.FUNCTION_DECL.is_throwing:
+                    try operations::emit_signature(g, mod, id, true)
+                    g.output.write(";")
+                    g.output.end_line()
+                end
+            end
+        end
+    end
+    g.output.line("")
+    for source_id in g.dependency_order:
+        mod := g.modules[source_id]
+        root := mod.ast.get_root_module()
+        for id in root.declarations:
+            if mod.ast.nodes[id].kind is FUNCTION_DECL:
+                if mod.ast.nodes[id].kind.FUNCTION_DECL.external_name is None:
+                    try operations::emit_function(g, mod, id)
+                end
+                if mod.ast.nodes[id].kind.FUNCTION_DECL.is_throwing:
+                    try operations::emit_must_wrapper(g, mod, id)
+                end
+            end
+        end
+    end
+    entry := g.modules[g.main_source_id]
+    if entry.entry_origin is None:
+        fail("semantic analysis must validate the entry function")
+    end
+    function := entry.ast.nodes[entry.entry_origin?].kind.FUNCTION_DECL
+    has_arguments := len(function.parameters) == 1
+    g.output.line("int main(int argc, char **argv) {" if has_arguments else "int main(void) {")
     g.output.indent()
+    if options.region_stats:
+        g.output.line("jik_region_register_global_stats_printer();")
+    end
+    if options.region_tree:
+        g.output.line("jik_region_register_tree_printer();")
+    end
+    if g.needs_global_region:
+        g.output.start_line()
+        c_names::write_atom_type(g.output, types::Atom.REGION)
+        g.output.write("jik_global_region = jik_region_new(0);")
+        g.output.end_line()
+        backend::emit_region_enter(g, "global")
+    end
+    // Table dependencies use semantic declaration order; ordinary globals use
+    // the retained seed-compatible startup schedule. Both precede the Jik entry.
+    startup := operations::BodyContext{translation = g}[.g]
+    try emit_table_initializers(startup)
+    try emit_global_initializers(startup)
+    if has_arguments:
+        argument_type := entry.ast.nodes[function.parameters[0]].inferred_type?
+        g.output.start_line()
+        c_names::write_atom_type(g.output, types::Atom.REGION)
+        g.output.write("jik_argument_region = jik_region_new(0);")
+        g.output.end_line()
+        backend::emit_region_enter(g, "main.arguments")
+        g.output.start_line()
+        g.output.write("struct ")
+        backend::write_vector_name(g, argument_type)
+        g.output.write(" *jik_args = ")
+        backend::write_vector_name(g, argument_type)
+        g.output.write("_new(jik_argument_region, (size_t)argc);")
+        g.output.end_line()
+        g.output.line("for (int jik_i = 0; jik_i < argc; jik_i++) {")
+        g.output.indent()
+        g.output.line("jik_args->data[jik_i] = jik_string_new(argv[jik_i], jik_argument_region);")
+        g.output.dedent()
+        g.output.line("}")
+    end
     g.output.start_line()
-    g.output.write("return ")
-    write_name(g, g.main_source_id, "main")
-    g.output.write("();")
+    needs_cleanup := g.needs_global_region or has_arguments
+    g.output.write("int jik_status = " if needs_cleanup else "return ")
+    backend::write_name(g, entry.source_id, function.name)
+    g.output.write("(jik_args);" if has_arguments else "();")
     g.output.end_line()
+    if has_arguments:
+        backend::emit_region_free(g, "jik_argument_region")
+    end
+    if g.needs_global_region:
+        backend::emit_region_free(g, "jik_global_region")
+    end
+    if needs_cleanup:
+        g.output.line("return jik_status;")
+    end
     g.output.dedent()
     g.output.line("}")
 end
 
-
-throws func generate(modules: Vec[module::Module], sources: source::SourceManager, diagnostics: diag::Diagnostics, main_source_id: int, r: Region) -> String:
+/// Return one C translation in r, propagating emission failures.
+/// Requires successful semantic analysis and both prepared Program schedules.
+/// Copy the integer schedules into the output region, not the modules or ASTs.
+throws func generate(program: program::Program, main_source_id: int, foreign options: Options, r: Region) -> String:
+    modules := program.modules
+    dependency_order := program.dependency_order
+    sources := program.sources
+    diagnostics := program.diagnostics
     output := writer::new(r)
-    g := Generator{output, modules, sources, diagnostics, main_source_id}[r]
-    try emit_program(g)
+    g := backend::Translation{output, modules, dependency_order = copy(dependency_order, r), initialization_order = copy(program.initialization_order, r), sources, diagnostics, main_source_id}[r]
+    g.emit_source_loc = options.emit_source_loc
+    g.region_tree = options.region_tree
+    try emit_program(g, options)
     return writer::finish(g.output, r)
 end

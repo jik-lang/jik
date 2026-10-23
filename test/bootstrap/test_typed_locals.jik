@@ -1,0 +1,71 @@
+use "jik/string"
+use "jik/testing" as test
+
+use "support"
+use "../../src/bootstrap/parser/format"
+use "../../src/bootstrap/language/types"
+use "../../src/bootstrap/semantic/typing/typecheck"
+
+
+func test_declaration_shapes(ts) -> void:
+    parsed := support::parse_source("func main():\n    count: int\n    flag: bool = true\n    value := 42\nend\n", _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+    root := parsed.ast.get_root_module()
+    body := parsed.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL.body
+    test::suite_assert(ts, len(body.statements) == 3, site())
+    first := parsed.ast.nodes[body.statements[0]]
+    local := first.kind.LOCAL_DECL
+    test::suite_assert(ts, local.initializer is None and local.annotation is Some, site())
+    test::suite_assert(ts, first.span.start == 17 and first.span.stop == 27, site())
+    typed := parsed.ast.nodes[body.statements[1]].kind.LOCAL_DECL
+    test::suite_assert(ts, typed.initializer is Some and typed.annotation is Some, site())
+    inferred := parsed.ast.nodes[body.statements[2]].kind.LOCAL_DECL
+    test::suite_assert(ts, inferred.initializer is Some and inferred.annotation is None, site())
+    text := format::format(parsed.ast)
+    test::suite_assert(ts, string::find(text, "TYPE_NAME") >= 0, site())
+end
+
+
+func test_scalar_defaults(ts) -> void:
+    comp := support::infer_source("func main():\n    count: int\n    ratio: double\n    flag: bool\n    letter: char\n    return count\nend\n", 0)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    mod := comp.modules[0]
+    body := mod.ast.nodes[mod.global_scope.symbols["main"]?.origin].kind.FUNCTION_DECL.body
+    expected := [types::Atom.INT, types::Atom.DOUBLE, types::Atom.BOOL, types::Atom.CHAR]
+    for index, atom in expected:
+        node := mod.ast.nodes[body.statements[index]]
+        test::suite_assert(ts, node.inferred_type? == types::atom(mod.type_store, atom), site())
+    end
+    translation := must support::translate("func main():\n    count: int\n    ratio: double\n    flag: bool\n    letter: char\n    return count\nend\n", "", _)
+    test::suite_assert(ts, string::find(translation, "int32_t jik_v_count = 0;") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "double jik_v_ratio = 0.0;") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "bool jik_v_flag = false;") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "uint8_t jik_v_letter = 0;") >= 0, site())
+end
+
+
+func test_annotations_constrain_calls(ts) -> void:
+    comp := support::infer_source("func identity(value):\n    return value\nend\nfunc main():\n    count: int = identity(42)\n    count = identity(count)\n    return count\nend\n", 0)
+    support::check_signature(ts, comp, "identity", "func(int) -> int")
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    mod := comp.modules[0]
+    body := mod.ast.nodes[mod.global_scope.symbols["main"]?.origin].kind.FUNCTION_DECL.body
+    declaration := mod.ast.nodes[body.statements[0]]
+    // An independent checker must also compare annotations with final metadata.
+    annotation := declaration.kind.LOCAL_DECL.annotation?
+    mod.ast.nodes[annotation].kind.TYPE_NAME.resolved_type = Some{types::atom(mod.type_store, types::Atom.BOOL)}[.mod]
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 1, site())
+    test::suite_assert(ts, comp.diagnostics.messages[0].summary == "type mismatch", site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_typed_locals")
+    test_declaration_shapes(ts)
+    test_scalar_defaults(ts)
+    test_annotations_constrain_calls(ts)
+end

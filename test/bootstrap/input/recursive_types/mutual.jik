@@ -1,0 +1,50 @@
+struct PairRoot:
+    left: PairChild
+    right: PairChild
+end
+
+struct PairChild:
+    parent: Option[PairRoot]
+end
+
+struct Box:
+    value: Choice
+end
+
+variant Choice:
+    BOX: Option[Box]
+    EMPTY
+end
+
+variant Wrapper:
+    NODE: Branch
+end
+
+struct Branch:
+    parent: Option[Wrapper]
+end
+
+variant First:
+    SECOND: Option[Second]
+    END
+end
+
+variant Second:
+    FIRST: First
+    END
+end
+
+func main():
+    pair := PairRoot{}
+    pair.left.parent = Some{PairRoot{}}
+    if pair.right.parent is Some:
+        return 1
+    end
+    println(pair)
+    box := Box{value=Choice.BOX{Some{Box{value=Choice.EMPTY{}}}}}
+    println(box)
+    wrapper := Wrapper.NODE{Branch{parent=Some{Wrapper.NODE{Branch{}}}}}
+    println(wrapper)
+    first := First.SECOND{Some{Second.FIRST{First.END{}}}}
+    println(first)
+end

@@ -1,0 +1,36 @@
+struct Node:
+    value: int
+    next: Option[Node]
+end
+
+struct Forest:
+    branches: Option[Vec[Forest]]
+end
+
+func make(r: Region) -> Node:
+    return Node{value = 1, next = Some{Node{value = 2, next = Some{Node{value = 3}}}}}
+end
+
+func main():
+    root := make()
+    current := root
+    total := current.value
+    while current.next is Some:
+        current = current.next?
+        total = total + current.value
+    end
+    if total != 6 or current.next is Some:
+        return 1
+    end
+    root.next?.value = 20
+    if root.next?.value != 20:
+        return 2
+    end
+    forests := [Forest{branches = Some{[Forest{}]}}]
+    if len(forests[0].branches?) != 1 or forests[0].branches?[0].branches is Some:
+        return 3
+    end
+    println(root)
+    println(forests)
+    return 42
+end

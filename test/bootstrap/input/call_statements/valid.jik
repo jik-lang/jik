@@ -1,0 +1,17 @@
+use "helper" as h
+
+func main():
+    walk(3)
+    if 1 < 2:
+        h::consume(h::answer())
+    end
+    h::answer()
+    return 42
+end
+
+func walk(remaining):
+    if remaining < 1:
+        return
+    end
+    walk(remaining - 1)
+end

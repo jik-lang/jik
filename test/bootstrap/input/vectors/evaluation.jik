@@ -1,0 +1,33 @@
+func receiver(values: Vec[int], counts: Vec[int]) -> Vec[int]:
+    counts[0] = counts[0] + 1
+    return values
+end
+
+func index(counts: Vec[int]) -> int:
+    counts[1] = counts[1] + 1
+    return 0
+end
+
+func tick(counts: Vec[int]) -> int:
+    counts[2] = counts[2] + 1
+    return counts[2]
+end
+
+func main():
+    counts := [0, 0, 0]
+    values := [0]
+    receiver(values, counts)[index(counts)] = tick(counts)
+    if values[0] != 1 or counts[0] != 1 or counts[1] != 1 or counts[2] != 1:
+        return 1
+    end
+    sliced := receiver(values, counts)[:]
+    size := len(receiver(values, counts))
+    if size != 1 or sliced[0] != 1 or counts[0] != 3:
+        return 2
+    end
+    repeated := [3 of tick(counts)]
+    if repeated[0] != 2 or repeated[1] != 3 or repeated[2] != 4 or counts[2] != 4:
+        return 3
+    end
+    return 42
+end

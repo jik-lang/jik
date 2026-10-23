@@ -1,0 +1,67 @@
+use "library" as lib
+
+global_default := lib::Handle{}
+
+func explicit(r: Region) -> lib::Handle:
+    scratch := [1, 2, 3]
+    value := lib::Handle{}[r]
+    assert(value.owned_by(r) and len(scratch) == 3)
+    return value
+end
+
+func implicit(r: Region) -> lib::Handle:
+    scratch := [1, 2, 3]
+    value := lib::Handle{}@
+    assert(value.owned_by(r) and len(scratch) == 3)
+    return value
+end
+
+func typed(r: Region) -> lib::Handle:
+    scratch := [1, 2, 3]
+    value: lib::Handle[r]
+    assert(value.owned_by(r) and len(scratch) == 3)
+    return value
+end
+
+func contextual(r: Region) -> lib::Handle:
+    scratch := [1, 2, 3]
+    assert(len(scratch) == 3)
+    return lib::Handle{}
+end
+
+func nested(r: Region) -> lib::Holder:
+    scratch := [1, 2, 3]
+    assert(len(scratch) == 3)
+    return lib::Holder{}[r]
+end
+
+func replace(holder: lib::Holder):
+    scratch := [1, 2, 3]
+    holder.handle = lib::Handle{}
+    assert(len(scratch) == 3)
+end
+
+func main():
+    anchor := ["caller"]
+    assert(global_default.get() == 0)
+    first := explicit(.anchor)
+    second := implicit(.anchor)
+    third := typed(.anchor)
+    fourth := contextual(.anchor)
+    holder := nested(.anchor)
+    fifth := lib::Handle{}[.anchor]
+    assert(first.owned_by(.anchor) and second.owned_by(.anchor))
+    assert(third.owned_by(.anchor) and fourth.owned_by(.anchor))
+    assert(holder.handle.owned_by(.holder) and fifth.owned_by(.anchor))
+    replace(holder)
+    assert(holder.handle.owned_by(.holder))
+    first.set(11)
+    second.set(22)
+    third.set(33)
+    fourth.set(44)
+    fifth.set(55)
+    assert(first.get() == 11 and second.get() == 22)
+    assert(third.get() == 33 and fourth.get() == 44 and fifth.get() == 55)
+    assert(holder.handle.get() == 0)
+    println("extern-regions-ok")
+end

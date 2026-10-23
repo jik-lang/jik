@@ -1,0 +1,3 @@
+func main(words):
+    return len(words)
+end

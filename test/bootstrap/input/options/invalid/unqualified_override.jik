@@ -1,0 +1,9 @@
+func unwrap(value: int) -> int:
+    return value
+end
+func bad():
+    value := unwrap(42)
+end
+func main():
+    return 42
+end

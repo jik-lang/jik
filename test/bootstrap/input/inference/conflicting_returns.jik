@@ -1,0 +1,10 @@
+func choose(value: int):
+    if value < 1:
+        return 1
+    end
+    return 1 < 2
+end
+
+func main():
+    return 0
+end

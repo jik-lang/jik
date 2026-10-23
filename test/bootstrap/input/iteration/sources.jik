@@ -1,0 +1,35 @@
+use "shared" as base
+
+func main():
+    total := 0
+    for value in base::Numbers[base::Key.A]:
+        total += value
+    end
+    for index, word in base::words:
+        for byte in word:
+            total += 1
+        end
+    end
+    box := base::Box{numbers = [4, 5], text = "gh"}
+    for value in box.numbers:
+        total += value
+    end
+    for byte in box.text:
+        total += 1
+    end
+    optional := Some{[6]}
+    for value in optional?:
+        total += value
+    end
+    dictionary := {"key": [7]}
+    for index, value in dictionary["key"]?:
+        total += value
+    end
+    for value in box.numbers[1:]:
+        total += value
+    end
+    for word in base::make():
+        total += len(word)
+    end
+    println(total)
+end

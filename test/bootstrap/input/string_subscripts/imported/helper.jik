@@ -1,0 +1,7 @@
+func middle(value: String) -> String:
+    return value[1:3]
+end
+
+func first(value: String) -> char:
+    return value[0]
+end

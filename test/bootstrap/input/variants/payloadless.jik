@@ -1,0 +1,21 @@
+variant Marker:
+    START
+    END
+end
+
+func make(r: Region) -> Marker:
+    return Marker.END{}[r]
+end
+
+struct Holder:
+    value: Marker
+end
+
+func main():
+    value: Marker
+    println(value, ":", value is START)
+    value = make()
+    println(value, ":", value is END)
+    holder := Holder{}
+    println(holder.value)
+end

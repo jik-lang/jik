@@ -1,0 +1,36 @@
+enum Key:
+    A
+    B
+end
+
+struct Record:
+    values: Vec[String]
+end
+
+table Originals[Key] -> Record:
+    A: Record{values=["first"]}
+    B: Record{values=["second"]}
+end
+
+table Aliases[Key] -> Record:
+    A: Originals[Key.B]
+    B: Originals[Key.A]
+end
+
+func append(value: Record):
+    push(value.values, "caller")
+end
+
+func length() -> int:
+    return len(Originals[Key.A].values)
+end
+
+func main():
+    append(Aliases[Key.B])
+    println(Originals[Key.A])
+    println(length())
+    first := Originals[Key.B]
+    text := "global"[.first]
+    push(first.values, text)
+    println(Aliases[Key.A])
+end

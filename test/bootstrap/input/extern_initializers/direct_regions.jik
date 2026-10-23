@@ -1,0 +1,19 @@
+use "library" as lib
+
+// Explicit calls already support caller regions in the seed. The defect is
+// in lowering the default syntax, not in the external initializer's C ABI.
+func create(r: Region) -> lib::Handle:
+    scratch := [1, 2, 3]
+    result := lib::arbitrary(r)
+    assert(result.owned_by(r) and len(scratch) == 3)
+    return result
+end
+
+func main():
+    anchor := ["caller"]
+    value := create(.anchor)
+    assert(value.owned_by(.anchor))
+    value.set(42)
+    assert(value.get() == 42)
+    println("direct-region-ok")
+end

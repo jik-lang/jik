@@ -1,0 +1,6 @@
+func main():
+    for index = 0, 1:
+        index := 1
+    end
+    return 0
+end

@@ -1,0 +1,15 @@
+struct Person:
+    name: String
+    tags: Vec[String]
+    nickname: Option[String]
+end
+
+variant Message:
+    PERSON: Person
+    TEXT: String
+    NONE: bool
+end
+
+func fallback_name(r: Region) -> String:
+    return "guest"[r]
+end

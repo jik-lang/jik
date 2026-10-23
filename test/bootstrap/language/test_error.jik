@@ -1,0 +1,170 @@
+use "jik/testing" as test
+
+struct RecVecNode:
+    nexts: Vec[Option[RecVecNode]]
+end
+
+struct RecDictNode:
+    nexts: Dict[Option[RecDictNode]]
+end
+
+struct IntBox:
+    value: int
+end
+
+
+throws func div_safe(x, y):
+    if y == 0:
+        fail("division by 0")
+    end
+    return x / y
+end
+
+throws func div_safe_code(x, y):
+    if y == 0:
+        fail("division by 0", 14)
+    end
+    return x / y
+end
+
+throws func fail_code_only(code: int):
+    fail(code)
+end
+
+throws func fail_message_and_zero():
+    fail("zero code", 0)
+end
+
+throws func propagate_code_only():
+    try fail_code_only(0)
+end
+
+throws func propagated_div(x, y):
+    value := try div_safe(x, y)
+    return value
+end
+
+throws func fail_if_true(should_fail):
+    if should_fail:
+        fail("expected failure")
+    end
+end
+
+throws func propagated_call(should_fail):
+    try fail_if_true(should_fail)
+end
+
+throws func set_box_value(box, numerator, denominator):
+    box.value = try div_safe(numerator, denominator)
+end
+
+
+func test_error(ts):
+    try x := div_safe(3, 0):   
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+        message := error_msg(_)
+        message_auto := error_msg()
+        test::suite_assert(ts, message == "division by 0", site())
+        test::suite_assert(ts, message_auto == "division by 0", site())
+        test::suite_assert(ts, error_msg(_) == "division by 0", site())
+        test::suite_assert(ts, error_msg() == "division by 0", site())
+        test::suite_assert(ts, error_code() == 1, site())
+    end
+
+    try x := div_safe_code(3, 0):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, true, site())
+        test::suite_assert(ts, error_msg(_) == "division by 0", site())
+        test::suite_assert(ts, error_code() == 14, site())
+    end
+
+    try fail_code_only(14):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg() == "", site())
+        test::suite_assert(ts, error_code() == 14, site())
+    end
+
+    try propagate_code_only():
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg() == "", site())
+        test::suite_assert(ts, error_code() == 0, site())
+    end
+
+    try fail_message_and_zero():
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg() == "zero code", site())
+        test::suite_assert(ts, error_code() == 0, site())
+    end
+
+    try fail_code_only(-7):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_code() == -7, site())
+    end
+
+    x := must div_safe(3, 1)
+    test::suite_assert(ts, x == 3, site())
+
+    x = must div_safe_code(3, 1)
+    test::suite_assert(ts, x == 3, site())
+
+    x = div_safe(3, 1)!
+    test::suite_assert(ts, x == 3, site())
+    test::suite_assert(ts, div_safe_code(3, 1)! == 3, site())
+    test::suite_assert(ts, div_safe(div_safe(3, 1)!, 1)! == 3, site())
+
+    x = must propagated_div(3, 1)
+    test::suite_assert(ts, x == 3, site())
+
+    try propagated_div(3, 0):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg(_) == "division by 0", site())
+    end
+
+    must propagated_call(false)
+    try propagated_call(true):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_msg(_) == "expected failure", site())
+    end
+
+    box := IntBox{value = 7}
+    try set_box_value(box, 6, 0):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, box.value == 7, site())
+    end
+    must set_box_value(box, 6, 2)
+    test::suite_assert(ts, box.value == 3, site())
+
+end
+
+func test_recursive_container_types(ts):
+    a := RecVecNode{}
+    b := RecDictNode{}
+
+    push(a.nexts, None)
+    push(a.nexts, Some{RecVecNode{}})
+    test::suite_assert(ts, len(a.nexts) == 2, site())
+    b.nexts["a1"] = Some{RecDictNode{}}
+    b.nexts["a2"] = None
+    test::suite_assert(ts, len(b.nexts) == 2, site())
+    r1 := b.nexts["a1"]
+    test::suite_assert(ts, r1 is Some, site())
+    r1 = b.nexts["a2"]
+    test::suite_assert(ts, r1 is Some, site())
+end
+
+
+func run_tests(ts):
+    println("[test] language/test_error")
+    test_error(ts)
+    test_recursive_container_types(ts)
+end

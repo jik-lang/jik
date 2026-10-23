@@ -1,0 +1,39 @@
+func append(words: Vec[String]):
+    push(words, "caller")
+end
+
+func take(words: Vec[String]) -> String:
+    scratch := "local scratch"
+    return pop(words)
+end
+
+func append_nested(rows: Vec[Vec[String]]):
+    push(rows, ["nested"])
+end
+
+func main():
+    words: Vec[String]
+    bound := "bound"
+    push(words, bound)
+    append(words)
+    if take(words) != "caller" or len(words) != 1:
+        return 1
+    end
+    popped := pop(words)
+    clear(words)
+    if popped != "bound":
+        return 2
+    end
+    rows: Vec[Vec[String]]
+    append_nested(rows)
+    row := pop(rows)
+    clear(rows)
+    if row[0] != "nested":
+        return 3
+    end
+    push(row, "second")
+    if len(row) != 2 or pop(row) != "second":
+        return 4
+    end
+    return 42
+end

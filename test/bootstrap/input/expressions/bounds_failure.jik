@@ -1,0 +1,7 @@
+use "shared" as base
+
+func main():
+    boxes := base::make()
+    value := boxes[0].values[0]?[2:][1]
+    println(value)
+end

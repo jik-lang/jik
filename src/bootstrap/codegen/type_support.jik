@@ -1,0 +1,662 @@
+//! C data layouts and collection, copy, and printing helpers.
+
+use "jik/string"
+
+use "backend"
+use "c_names"
+use "../language/builtin"
+use "../modules/module"
+use "../language/types"
+
+
+func emit_enums(g: backend::Translation) -> void:
+    store := g.modules[g.main_source_id].type_store
+    for id, ty in store.types:
+        if not types::is_enum(store, id):
+            continue
+        end
+        definition := ty.kind.NAMED
+        backend::emit_source_location(g, g.modules[definition.source_id].ast.nodes[definition.declaration_id])
+        g.output.write("enum ")
+        backend::write_enum_name(g, id)
+        g.output.line(" {")
+        for index, name in definition.member_names:
+            backend::write_enum_member(g, id, index)
+            g.output.line(concat(" = ", string::from_int(index), ","))
+        end
+        g.output.line("};")
+        g.output.write("static ")
+        c_names::write_atom_type(g.output, types::Atom.STRING)
+        backend::write_enum_name(g, id)
+        g.output.write("_tostr(enum ")
+        backend::write_enum_name(g, id)
+        g.output.start_line()
+        g.output.write(" value, ")
+        c_names::write_atom_type(g.output, types::Atom.REGION)
+        g.output.write("r) {")
+        g.output.end_line()
+        g.output.line("switch (value) {")
+        for index, name in definition.member_names:
+            g.output.write("case ")
+            backend::write_enum_member(g, id, index)
+            g.output.write(": return jik_string_new(")
+            backend::write_string_bytes(g, concat(definition.name, ".", name))
+            g.output.line(", r);")
+        end
+        g.output.line("}")
+        g.output.line("return jik_string_new(\"\", r);")
+        g.output.line("}")
+    end
+end
+
+
+func collect_data_type(g: backend::Translation, store: types::Store, id: int) -> void:
+    for existing in g.data_types_seen:
+        if existing == id:
+            return
+        end
+    end
+    g.data_types_seen.push(id)
+    kind := store.types[id].kind
+    dictionary := types::dict_element(store, id)
+    if dictionary is Some:
+        g.dict_types.push(id)
+        lookup := must types::container(store, types::Container.OPTION, dictionary?)
+        collect_data_type(g, store, lookup)
+        return
+    end
+    option := types::option_element(store, id)
+    if option is Some:
+        g.option_types.push(id)
+        collect_data_type(g, store, option?)
+        return
+    end
+    if types::is_record(store, id):
+        for existing in g.record_types:
+            if existing == id:
+                return
+            end
+        end
+        g.record_types.push(id)
+        for member in kind.NAMED.member_types:
+            collect_data_type(g, store, member)
+        end
+        return
+    end
+    if kind is FUNCTION:
+        collect_data_type(g, store, kind.FUNCTION.return_type)
+        for parameter in kind.FUNCTION.parameter_types:
+            collect_data_type(g, store, parameter)
+        end
+        return
+    end
+    element := types::vector_element(store, id)
+    if element is None:
+        return
+    end
+    for existing in g.vector_types:
+        if existing == id:
+            return
+        end
+    end
+    collect_data_type(g, store, element?)
+    g.vector_types.push(id)
+end
+
+
+throws func emit_data_types(g: backend::Translation) -> void:
+    // Collect each type once, then declare tags before defining layouts/helpers.
+    // Pointer fields may refer back to records/containers in a recursive type.
+    for source_id in g.dependency_order:
+        mod := g.modules[source_id]
+        for node in mod.ast.nodes:
+            if node.inferred_type is Some:
+                collect_data_type(g, mod.type_store, node.inferred_type?)
+            end
+        end
+    end
+    if len(g.vector_types) == 0 and len(g.record_types) == 0 and len(g.option_types) == 0 and len(g.dict_types) == 0:
+        return
+    end
+    mod := g.modules[g.main_source_id]
+    for id in g.dict_types:
+        g.output.write("struct ")
+        backend::write_dict_name(g, id)
+        g.output.write(";")
+        g.output.end_line()
+    end
+    for id in g.option_types:
+        g.output.write("struct ")
+        backend::write_option_name(g, id)
+        g.output.write(";")
+        g.output.end_line()
+    end
+    for id in g.record_types:
+        definition := mod.type_store.types[id].kind.NAMED
+        backend::emit_source_location(g, g.modules[definition.source_id].ast.nodes[definition.declaration_id])
+        g.output.write("struct ")
+        backend::write_record_name(g, id)
+        g.output.write(";")
+        g.output.end_line()
+    end
+    if len(g.record_types) > 0 or len(g.option_types) > 0:
+        for id in g.vector_types:
+            g.output.write("struct ")
+            backend::write_vector_name(g, id)
+            g.output.write(";")
+            g.output.end_line()
+        end
+    end
+    for id in g.record_types:
+        definition := mod.type_store.types[id].kind.NAMED
+        backend::emit_source_location(g, g.modules[definition.source_id].ast.nodes[definition.declaration_id])
+        g.output.write("struct ")
+        backend::write_record_name(g, id)
+        g.output.write(" {")
+        g.output.end_line()
+        g.output.indent()
+        g.output.start_line()
+        c_names::write_atom_type(g.output, types::Atom.REGION)
+        g.output.write("jik_region;")
+        g.output.end_line()
+        if types::is_variant(mod.type_store, id):
+            g.output.line("int tag;")
+            g.output.line("union {")
+            g.output.line("char jik_unused;")
+        end
+        for index, member in definition.member_types:
+            if types::is_variant(mod.type_store, id) and member == types::atom(mod.type_store, types::Atom.VOID):
+                continue
+            end
+            g.output.start_line()
+            try backend::write_type(g, mod, member, mod.ast.nodes[mod.ast.root])
+            g.output.write(" ")
+            backend::write_field_name(g, definition.member_names[index])
+            g.output.write(";")
+            g.output.end_line()
+        end
+        if types::is_variant(mod.type_store, id):
+            g.output.line("} val;")
+        end
+        g.output.dedent()
+        g.output.line("};")
+        if types::is_variant(mod.type_store, id):
+            g.output.write("static struct ")
+            backend::write_record_name(g, id)
+            g.output.write(" *")
+            backend::write_record_name(g, id)
+            g.output.write("_access(struct ")
+            backend::write_record_name(g, id)
+            g.output.line(" *value, int tag, char *location) {")
+            g.output.line("jik_die_if(value->tag != tag, \"illegal variant payload access: %s\", location);")
+            g.output.line("return value;")
+            g.output.line("}")
+        end
+        g.output.write("JIK_DEFINE_STRUCT_NEW(")
+        backend::write_record_name(g, id)
+        g.output.write(")")
+        g.output.end_line()
+    end
+    for id in g.option_types:
+        g.output.write("JIK_DEFINE_OPTION(")
+        backend::write_option_name(g, id)
+        g.output.write(", ")
+        element := types::option_element(mod.type_store, id)
+        try backend::write_type(g, mod, element?, mod.ast.nodes[mod.ast.root])
+        g.output.write(")")
+        g.output.end_line()
+    end
+    for id in g.vector_types:
+        g.output.write("JIK_DEFINE_VEC(")
+        backend::write_vector_name(g, id)
+        g.output.write(", ")
+        element := types::vector_element(mod.type_store, id)
+        try backend::write_type(g, mod, element?, mod.ast.nodes[mod.ast.root])
+        g.output.write(")")
+        g.output.end_line()
+    end
+    for id in g.dict_types:
+        element := types::dict_element(mod.type_store, id)?
+        lookup := must types::container(mod.type_store, types::Container.OPTION, element)
+        g.output.write("JIK_DECLARE_DICT(")
+        backend::write_dict_name(g, id)
+        g.output.write(", ")
+        try backend::write_type(g, mod, element, mod.ast.nodes[mod.ast.root])
+        g.output.write(", ")
+        backend::write_option_name(g, lookup)
+        g.output.write(")")
+        g.output.end_line()
+        g.output.write("JIK_DEFINE_DICT(")
+        backend::write_dict_name(g, id)
+        g.output.write(", ")
+        try backend::write_type(g, mod, element, mod.ast.nodes[mod.ast.root])
+        g.output.write(", ")
+        backend::write_option_name(g, lookup)
+        g.output.write(")")
+        g.output.end_line()
+    end
+    g.output.line("")
+end
+
+
+func write_copy_atom(g: backend::Translation, store: types::Store, id: int, foreign value: String) -> void:
+    if id == types::atom(store, types::Atom.STRING):
+        g.output.write(concat("jik_string_new(", value, "->data, r)"))
+    else:
+        g.output.write(value)
+    end
+end
+
+
+throws func emit_copy_container(g: backend::Translation, mod: module::Module, id: int) -> void:
+    container := mod.type_store.types[id].kind.CONTAINER
+    element := container.element_type
+    if container.kind == types::Container.OPTION:
+        g.output.write("if (!src->is_some) return ")
+        backend::write_option_name(g, id)
+        g.output.line("_none(r);")
+        g.output.write("return ")
+        backend::write_option_name(g, id)
+        g.output.write("_some(")
+        write_copy_atom(g, mod.type_store, element, "src->val")
+        g.output.line(", r);")
+        return
+    end
+    try backend::write_type(g, mod, id, mod.ast.nodes[mod.ast.root])
+    g.output.write(" dst = ")
+    backend::write_collection_name(g, mod.type_store, id)
+    if container.kind == types::Container.VECTOR:
+        g.output.line("_new(r, src->size);")
+        g.output.line("for (size_t i = 0; i < src->size; i++) {")
+        g.output.write("dst->data[i] = ")
+        write_copy_atom(g, mod.type_store, element, "src->data[i]")
+        g.output.line(";")
+    else:
+        g.output.line("_new(r);")
+        g.output.line("for (size_t i = 0; i < src->capacity; i++) {")
+        g.output.line("if (!src->items[i].key) continue;")
+        // The runtime setter duplicates keys into the destination region.
+        backend::write_dict_name(g, id)
+        g.output.write("_set(dst, src->items[i].key, ")
+        write_copy_atom(g, mod.type_store, element, "src->items[i].val")
+        g.output.line(", NULL);")
+    end
+    g.output.line("}")
+    g.output.line("return dst;")
+end
+
+
+throws func emit_copy_record(g: backend::Translation, mod: module::Module, id: int) -> void:
+    definition := mod.type_store.types[id].kind.NAMED
+    try backend::write_type(g, mod, id, mod.ast.nodes[mod.ast.root])
+    g.output.write(" dst = ")
+    backend::write_record_name(g, id)
+    g.output.line("_new(r, src);")
+    tagged := types::is_variant(mod.type_store, id)
+    if tagged:
+        g.output.line("switch (src->tag) {")
+    end
+    for index, member in definition.member_types:
+        if tagged:
+            g.output.line(concat("case ", string::from_int(index), ":"))
+        end
+        if member == types::atom(mod.type_store, types::Atom.STRING):
+            g.output.write("dst->val." if tagged else "dst->")
+            backend::write_field_name(g, definition.member_names[index])
+            g.output.write(" = jik_string_new(src->val." if tagged else " = jik_string_new(src->")
+            backend::write_field_name(g, definition.member_names[index])
+            g.output.line("->data, r);")
+        end
+        if tagged:
+            g.output.line("break;")
+        end
+    end
+    if tagged:
+        g.output.line("default: jik_die(\"invalid variant tag during copy\");")
+        g.output.line("}")
+    end
+    g.output.line("return dst;")
+end
+
+
+throws func emit_copy_functions(g: backend::Translation) -> void:
+    emitted: Vec[int]
+    for source_id in g.dependency_order:
+        mod := g.modules[source_id]
+        for node in mod.ast.nodes:
+            if not (node.kind is CALL) or node.kind.CALL.builtin is None or node.kind.CALL.builtin? != builtin::Kind.COPY:
+                continue
+            end
+            id := node.inferred_type?
+            if id == types::atom(mod.type_store, types::Atom.STRING):
+                continue
+            end
+            exists := false
+            for previous in emitted:
+                if previous == id:
+                    exists = true
+                end
+            end
+            if exists:
+                continue
+            end
+            emitted.push(id)
+            g.output.write("static ")
+            try backend::write_type(g, mod, id, node)
+            g.output.write(" ")
+            backend::write_copy_name(g, id)
+            g.output.write("(")
+            try backend::write_type(g, mod, id, node)
+            g.output.start_line()
+            g.output.write(" src, ")
+            c_names::write_atom_type(g.output, types::Atom.REGION)
+            g.output.write("r) {")
+            g.output.end_line()
+            if types::is_record(mod.type_store, id):
+                try emit_copy_record(g, mod, id)
+            else:
+                try emit_copy_container(g, mod, id)
+            end
+            g.output.line("}")
+        end
+    end
+end
+
+
+func collect_printed_type(g: backend::Translation, store: types::Store, id: int) -> void:
+    element := types::vector_element(store, id)
+    if element is None:
+        element = types::option_element(store, id)
+    end
+    if element is None:
+        element = types::dict_element(store, id)
+    end
+    if element is None and not types::is_record(store, id) and not types::is_extern_struct(store, id):
+        return
+    end
+    for existing in g.printed_types_seen:
+        if existing == id:
+            return
+        end
+    end
+    g.printed_types_seen.push(id)
+    if element is Some:
+        collect_printed_type(g, store, element?)
+    else:
+        for member in store.types[id].kind.NAMED.member_types:
+            collect_printed_type(g, store, member)
+        end
+    end
+    g.printed_types.push(id)
+end
+
+
+func payload_type_name(foreign store: types::Store, id: int, r: Region) -> String:
+    kind := store.types[id].kind
+    if kind is ATOM:
+        return copy(types::AtomNames[kind.ATOM], r)
+    elif kind is NAMED:
+        return copy(kind.NAMED.name, r)
+    end
+    container := kind.CONTAINER
+    return concat(types::ContainerNames[container.kind], "[", payload_type_name(store, container.element_type), "]", r)
+end
+
+
+func emit_option_printer(g: backend::Translation, store: types::Store, id: int) -> void:
+    element := types::option_element(store, id)?
+    g.output.write("static ")
+    c_names::write_atom_type(g.output, types::Atom.STRING)
+    backend::write_option_name(g, id)
+    g.output.write("_tostr(struct ")
+    backend::write_option_name(g, id)
+    g.output.write(" *value, ")
+    c_names::write_atom_type(g.output, types::Atom.REGION)
+    g.output.write("r) {")
+    g.output.end_line()
+    g.output.indent()
+    g.output.line("if (!value) return jik_string_new(\"NULL\", r);")
+    g.output.line("if (!value->is_some) {")
+    g.output.indent()
+    g.output.start_line()
+    g.output.write("return jik_string_new(")
+    backend::write_string_bytes(g, concat("<None[", payload_type_name(store, element), "]>"))
+    g.output.write(", r);")
+    g.output.end_line()
+    g.output.dedent()
+    g.output.line("}")
+    g.output.line("JikCharBuffer *buffer = jik_char_buffer_new(\"<Some: \", r);")
+    g.output.start_line()
+    g.output.write("jik_char_buffer_append(buffer, ")
+    backend::write_print_conversion(g, store, element)
+    g.output.write("(value->val, r)->data, r);")
+    g.output.end_line()
+    g.output.line("jik_char_buffer_append(buffer, \">\", r);")
+    g.output.line("return jik_string_new(buffer->data, r);")
+    g.output.dedent()
+    g.output.line("}")
+    g.output.line("")
+end
+
+
+func emit_dict_printer(g: backend::Translation, store: types::Store, id: int) -> void:
+    element := types::dict_element(store, id)?
+    c_names::write_atom_type(g.output, types::Atom.STRING)
+    backend::write_dict_name(g, id)
+    g.output.write("_tostr(struct ")
+    backend::write_dict_name(g, id)
+    g.output.write(" *value, ")
+    c_names::write_atom_type(g.output, types::Atom.REGION)
+    g.output.write("r) {")
+    g.output.end_line()
+    g.output.indent()
+    g.output.line("if (!value) return jik_string_new(\"NULL\", r);")
+    g.output.line("JikCharBuffer *buffer = jik_char_buffer_new(\"{\", r);")
+    g.output.line("for (size_t i = 0; i < value->capacity; i++) {")
+    g.output.indent()
+    g.output.line("if (!value->items[i].key) continue;")
+    g.output.line("jik_char_buffer_append(buffer, \" \", r);")
+    g.output.line("jik_char_buffer_append(buffer, jik_string_tostr(value->items[i].key, r)->data, r);")
+    g.output.line("jik_char_buffer_append(buffer, \": \", r);")
+    g.output.start_line()
+    g.output.write("jik_char_buffer_append(buffer, ")
+    backend::write_print_conversion(g, store, element)
+    g.output.write("(value->items[i].val, r)->data, r);")
+    g.output.end_line()
+    g.output.line("jik_char_buffer_append(buffer, \",\", r);")
+    g.output.dedent()
+    g.output.line("}")
+    g.output.line("jik_char_buffer_append(buffer, \" }\", r);")
+    g.output.line("return jik_string_new(buffer->data, r);")
+    g.output.dedent()
+    g.output.line("}")
+    g.output.line("")
+end
+
+
+func emit_variant_printer(g: backend::Translation, store: types::Store, id: int) -> void:
+    definition := store.types[id].kind.NAMED
+    g.output.write("static ")
+    c_names::write_atom_type(g.output, types::Atom.STRING)
+    backend::write_record_name(g, id)
+    g.output.write("_tostr(struct ")
+    backend::write_record_name(g, id)
+    g.output.start_line()
+    g.output.write(" *value, ")
+    c_names::write_atom_type(g.output, types::Atom.REGION)
+    g.output.write("r) {")
+    g.output.end_line()
+    g.output.line("if (!value) return jik_string_new(\"NULL\", r);")
+    g.output.write("JikCharBuffer *buffer = jik_char_buffer_new(")
+    backend::write_string_bytes(g, concat("<", definition.name, " "))
+    g.output.line(", r);")
+    g.output.line("switch (value->tag) {")
+    for index, name in definition.member_names:
+        g.output.line(concat("case ", string::from_int(index), ":"))
+        payload := definition.member_types[index]
+        g.output.write("jik_char_buffer_append(buffer, ")
+        backend::write_string_bytes(g, concat(name, "=" if payload != types::atom(store, types::Atom.VOID) else ""))
+        g.output.line(", r);")
+        if payload != types::atom(store, types::Atom.VOID):
+            g.output.write("jik_char_buffer_append(buffer, ")
+            backend::write_print_conversion(g, store, payload)
+            g.output.write("(value->val.")
+            backend::write_field_name(g, name)
+            g.output.line(", r)->data, r);")
+        end
+        g.output.line("break;")
+    end
+    g.output.line("}")
+    g.output.line("jik_char_buffer_append(buffer, \">\", r);")
+    g.output.line("return jik_string_new(buffer->data, r);")
+    g.output.line("}")
+end
+
+
+func emit_struct_printer(g: backend::Translation, store: types::Store, id: int) -> void:
+    definition := store.types[id].kind.NAMED
+    g.output.write("static ")
+    c_names::write_atom_type(g.output, types::Atom.STRING)
+    backend::write_record_name(g, id)
+    g.output.write("_tostr(struct ")
+    backend::write_record_name(g, id)
+    g.output.start_line()
+    g.output.write(" *value, ")
+    c_names::write_atom_type(g.output, types::Atom.REGION)
+    g.output.write("r) {")
+    g.output.end_line()
+    g.output.indent()
+    g.output.line("if (!value) return jik_string_new(\"NULL\", r);")
+    g.output.start_line()
+    g.output.write("JikCharBuffer *buffer = jik_char_buffer_new(")
+    backend::write_string_bytes(g, concat("<", definition.name, " "))
+    g.output.write(", r);")
+    g.output.end_line()
+    for index, member in definition.member_types:
+        g.output.start_line()
+        g.output.write("jik_char_buffer_append(buffer, ")
+        backend::write_string_bytes(g, concat(definition.member_names[index], "="))
+        g.output.write(", r);")
+        g.output.end_line()
+        g.output.start_line()
+        g.output.write("jik_char_buffer_append(buffer, ")
+        backend::write_print_conversion(g, store, member)
+        g.output.write("(value->")
+        backend::write_field_name(g, definition.member_names[index])
+        g.output.write(", r)->data, r);")
+        g.output.end_line()
+        g.output.line("jik_char_buffer_append(buffer, \" \", r);")
+    end
+    g.output.line("jik_char_buffer_append(buffer, \">\", r);")
+    g.output.line("return jik_string_new(buffer->data, r);")
+    g.output.dedent()
+    g.output.line("}")
+    g.output.line("")
+end
+
+
+func emit_opaque_printer(g: backend::Translation, store: types::Store, id: int) -> void:
+    g.output.write("static ")
+    c_names::write_atom_type(g.output, types::Atom.STRING)
+    backend::write_print_conversion(g, store, id)
+    // Opaque native types may be incomplete. Never inspect fields or dereference
+    // the handle, including when its value is NULL.
+    g.output.start_line()
+    g.output.write("(const void *value, ")
+    c_names::write_atom_type(g.output, types::Atom.REGION)
+    g.output.write("r) {")
+    g.output.end_line()
+    g.output.line("(void)value;")
+    g.output.write("return jik_string_new(")
+    backend::write_string_bytes(g, concat("<", store.types[id].kind.NAMED.name, ">"))
+    g.output.line(", r);")
+    g.output.line("}")
+end
+
+
+func emit_printers(g: backend::Translation) -> void:
+    for source_id in g.dependency_order:
+        mod := g.modules[source_id]
+        for node in mod.ast.nodes:
+            if node.kind is CALL and node.kind.CALL.builtin is Some and builtin::is_output(node.kind.CALL.builtin?):
+                for argument in node.kind.CALL.arguments:
+                    collect_printed_type(g, mod.type_store, mod.ast.nodes[argument].inferred_type?)
+                end
+            end
+        end
+    end
+    store := g.modules[g.main_source_id].type_store
+    if len(g.printed_types) > 0:
+        for id in g.printed_types:
+            if types::dict_element(store, id) is None:
+                g.output.write("static ")
+            end
+            c_names::write_atom_type(g.output, types::Atom.STRING)
+            backend::write_print_conversion(g, store, id)
+            if types::is_extern_struct(store, id):
+                g.output.start_line()
+                g.output.write("(const void *, ")
+                c_names::write_atom_type(g.output, types::Atom.REGION)
+                g.output.write(");")
+                g.output.end_line()
+                continue
+            end
+            g.output.write("(struct ")
+            backend::write_data_name(g, store, id)
+            g.output.write(" *, ")
+            c_names::write_atom_type(g.output, types::Atom.REGION)
+            g.output.write(");")
+            g.output.end_line()
+        end
+    end
+    for id in g.printed_types:
+        if types::is_extern_struct(store, id):
+            emit_opaque_printer(g, store, id)
+            continue
+        end
+        if types::dict_element(store, id) is Some:
+            emit_dict_printer(g, store, id)
+            continue
+        end
+        if types::option_element(store, id) is Some:
+            emit_option_printer(g, store, id)
+            continue
+        end
+        if types::is_variant(store, id):
+            emit_variant_printer(g, store, id)
+            continue
+        end
+        if types::is_record(store, id):
+            emit_struct_printer(g, store, id)
+            continue
+        end
+        g.output.write("static ")
+        c_names::write_atom_type(g.output, types::Atom.STRING)
+        backend::write_vector_name(g, id)
+        g.output.write("_tostr(struct ")
+        backend::write_vector_name(g, id)
+        g.output.write(" *values, ")
+        c_names::write_atom_type(g.output, types::Atom.REGION)
+        g.output.write("r) {")
+        g.output.end_line()
+        g.output.indent()
+        g.output.line("if (!values) return jik_string_new(\"NULL\", r);")
+        g.output.line("JikCharBuffer *buffer = jik_char_buffer_new(\"[\", r);")
+        g.output.line("for (size_t i = 0; i < values->size; i++) {")
+        g.output.indent()
+        g.output.line("jik_char_buffer_append(buffer, \" \", r);")
+        g.output.start_line()
+        g.output.write("jik_char_buffer_append(buffer, ")
+        element := types::vector_element(store, id)
+        backend::write_print_conversion(g, store, element?)
+        g.output.write("(values->data[i], r)->data, r);")
+        g.output.end_line()
+        g.output.dedent()
+        g.output.line("}")
+        g.output.line("jik_char_buffer_append(buffer, \" ]\", r);")
+        g.output.line("return jik_string_new(buffer->data, r);")
+        g.output.dedent()
+        g.output.line("}")
+        g.output.line("")
+    end
+end

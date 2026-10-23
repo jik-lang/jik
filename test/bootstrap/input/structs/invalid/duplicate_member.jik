@@ -1,0 +1,11 @@
+struct Label:
+    text: String
+    count: int
+end
+struct Broken:
+    field: int
+    field: int
+end
+func main():
+    return 42
+end

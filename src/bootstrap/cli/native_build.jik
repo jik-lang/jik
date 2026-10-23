@@ -1,0 +1,129 @@
+//! Apply prepared native requirements, invoke the C compiler, and copy assets.
+
+use "jik/fs"
+use "jik/io"
+use "jik/path"
+use "jik/process"
+use "jik/string"
+use "jik/sys"
+
+use "../compiler"
+use "../diag"
+use "../language/native"
+use "native_profiles"
+use "command_line"
+
+
+func resolve_path(foreign source_path: String, foreign argument: String, r: Region) -> String:
+    if path::is_absolute(argument):
+        return copy(argument, r)
+    end
+    return path::join([path::dirname(source_path), copy(argument)], r)
+end
+
+
+// Preserve the seed's module scheduling and each module's directive order:
+// include search order, static-library order and copy overwrites are observable.
+func arguments(foreign comp: compiler::Compiler, profile: native::Profile, foreign executable: String, foreign flags: Vec[String], release: bool, foreign include_path: String, r: Region) -> Vec[String]:
+    // Match the seed: the selected compiler and user flags choose the C dialect.
+    args: Vec[String][r]
+    if sys::platform() == "windows":
+        args.push("-D_CRT_SECURE_NO_WARNINGS")
+        args.push("-D_CRT_NONSTDC_NO_WARNINGS")
+    end
+    if release:
+        args.push("-O3")
+    end
+    for flag in flags:
+        args.push(copy(flag, r))
+    end
+    order := comp.program.initialization_order
+    host := native_profiles::host_platform()
+    for source_id in order:
+        for requirement in comp.program.modules[source_id].ast.get_root_module().requirements:
+            if requirement.kind != native::Kind.INCLUDE_DIR or not native::active(requirement, host, profile):
+                continue
+            end
+            for argument in requirement.arguments:
+                args.push("-I")
+                args.push(resolve_path(comp.program.sources.sources[source_id].path, argument, r))
+            end
+        end
+    end
+    args.push("-I")
+    args.push(copy(include_path, r))
+    args.push(copy(comp.config.output_path, r))
+    args.push("-o")
+    args.push(copy(executable, r))
+    // Link requirements follow the translation unit, retaining archive order.
+    for source_id in order:
+        for requirement in comp.program.modules[source_id].ast.get_root_module().requirements:
+            if not native::active(requirement, host, profile):
+                continue
+            end
+            for argument in requirement.arguments:
+                if requirement.kind == native::Kind.LIB_DIR:
+                    args.push("-L")
+                    args.push(resolve_path(comp.program.sources.sources[source_id].path, argument, r))
+                elif requirement.kind == native::Kind.LINK:
+                    args.push(concat("-l", argument, r))
+                end
+            end
+        end
+    end
+    return args
+end
+
+
+throws func copy_files(comp: compiler::Compiler, profile: native::Profile, foreign executable: String, verbose: bool) -> void:
+    host := native_profiles::host_platform()
+    order := comp.program.initialization_order
+    output_dir := path::dirname(executable)
+    for source_id in order:
+        for requirement in comp.program.modules[source_id].ast.get_root_module().requirements:
+            if requirement.kind != native::Kind.COPY or not native::active(requirement, host, profile):
+                continue
+            end
+            for argument in requirement.arguments:
+                source := resolve_path(comp.program.sources.sources[source_id].path, argument)
+                destination := path::join([output_dir, path::basename(source)])
+                if path::normalize(source) == path::normalize(destination):
+                    continue
+                end
+                if verbose:
+                    io::write_stderr(concat("jik: copy ", source, " -> ", destination, "\n"))
+                end
+                try fs::copy_file(source, destination):
+                except:
+                    diag::error(comp.program.diagnostics, "could not copy native requirement", concat(source, " -> ", destination, ": ", error_msg()), Some{requirement.span})
+                    comp.print_diagnostics()
+                    fail(compiler::ERROR_REPORTED)
+                end
+            end
+        end
+    end
+end
+
+
+/// Translate before validating native requirements and constructing C arguments.
+/// Preview stops before host compilation and asset copying; propagate translation,
+/// profile, process, and copy failures.
+throws func compile(comp: compiler::Compiler, foreign cc: String, foreign executable: String, foreign flags: Vec[String], release: bool, preview: bool, verbose: bool) -> void:
+    try comp.run()
+    profile := try native_profiles::validate(comp, cc, flags)
+    tool := try sys::executable_path()
+    include_path := path::join([path::dirname(tool), "support", "include"])
+    args := arguments(comp, profile, executable, flags, release, include_path)
+    if preview:
+        println(command_line::format(cc, args, sys::platform() == "windows"))
+        return
+    end
+    if verbose:
+        io::write_stderr(concat("jik: compile with ", cc, "\n"))
+    end
+    status := try process::run(cc, args)
+    if status != 0:
+        fail(concat("C compilation failed (exit ", string::from_int(status), ")"))
+    end
+    try copy_files(comp, profile, executable, verbose)
+end

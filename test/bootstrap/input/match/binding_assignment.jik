@@ -1,0 +1,12 @@
+variant V:
+    INT: int
+end
+
+func main():
+    value := V.INT{7}
+    match value:
+        case INT{payload}:
+            payload = 8
+            println(payload, ":", value.INT)
+    end
+end

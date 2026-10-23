@@ -1,0 +1,21 @@
+enum Key:
+    A
+    B
+end
+
+first := Labels[Key.A]
+count := Counts[Key.B]
+
+table Labels[Key] -> String:
+    A: "first"
+    B: "second"
+end
+
+table Counts[Key] -> int:
+    A: 3
+    B: 4
+end
+
+func main():
+    println(first, ":", count)
+end

@@ -1,0 +1,24 @@
+func receiver(values: Vec[int], counts: Vec[int]) -> Vec[int]:
+    counts[0] = counts[0] + 1
+    return values
+end
+
+func next(counts: Vec[int]) -> int:
+    counts[1] = counts[1] + 1
+    return counts[1]
+end
+
+func main():
+    values: Vec[int]
+    counts := [0, 0]
+    push(receiver(values, counts), next(counts))
+    if counts[0] != 1 or counts[1] != 1 or values[0] != 1:
+        return 1
+    end
+    item := pop(receiver(values, counts))
+    clear(receiver(values, counts))
+    if item != 1 or counts[0] != 3 or len(values) != 0:
+        return 2
+    end
+    return 42
+end

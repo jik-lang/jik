@@ -1,0 +1,137 @@
+struct Box:
+    value: int
+end
+
+variant Choice:
+    NUMBER: int
+    EMPTY
+end
+
+func make_message(r: Region) -> String:
+    println("message-eval")
+    return concat("computed", r)
+end
+
+func make_code() -> int:
+    println("code-eval")
+    return 0
+end
+
+func new_box(r: Region) -> Box:
+    return Box{value = 0}[r]
+end
+
+func box_value(box: Box) -> int:
+    return box.value
+end
+
+throws func message_only():
+    fail("message")
+end
+
+throws func code_only(code: int) -> int:
+    if code == 42:
+        return code
+    end
+    fail(code)
+end
+
+throws func pair_zero():
+    fail("zero", 0)
+end
+
+throws func evaluated():
+    fail("computed", make_code())
+end
+
+throws func evaluated_message():
+    fail(make_message(_), 0)
+end
+
+throws func no_region(flag: bool) -> int:
+    if flag:
+        fail(0)
+    end
+    return 41
+end
+
+throws func local_values(flag: bool) -> int:
+    values := [3, 4]
+    if flag:
+        fail(concat("local-", "message"), -7)
+    end
+    return len(values)
+end
+
+throws func fallthrough(flag: bool):
+    values := [1, 2]
+    if flag:
+        fail(len(values))
+    end
+end
+
+throws func loop_exit():
+    values := [1, 2]
+    while len(values) > 0:
+        fail(pop(values))
+    end
+end
+
+throws func copy_result(flag: bool, r: Region) -> String:
+    value := concat("returned")
+    if flag:
+        fail(value)
+    end
+    return copy(value, r)
+end
+
+throws func borrowed(foreign message: String):
+    fail(message, 5)
+end
+
+throws func mixed_regions(foreign message: String, box: Box):
+    box.value = 17
+    fail(message)
+end
+
+throws func receiver(box: Box):
+    fail(box.value)
+end
+
+throws func option_result(r: Region) -> Option[int]:
+    if false:
+        return Some{1}[r]
+    end
+    fail(8)
+end
+
+throws func record_result(r: Region) -> Box:
+    if false:
+        return Box{value = 1}[r]
+    end
+    fail(9)
+end
+
+throws func variant_result(r: Region) -> Choice:
+    if false:
+        return Choice.NUMBER{1}[r]
+    end
+    fail(10)
+end
+
+throws func site_result() -> Site:
+    if false:
+        return site()
+    end
+    fail(11)
+end
+
+throws func double_result() -> double:
+    if false:
+        return 1.5
+    end
+    fail(12)
+end
+
+func main():
+end

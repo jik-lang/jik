@@ -1,0 +1,108 @@
+use "jik/string"
+use "jik/testing" as test
+
+use "test_strings"
+use "support"
+use "../../src/bootstrap/language/types"
+use "../../src/bootstrap/language/region_source"
+
+
+func test_checked_metadata(ts) -> void:
+    text := "variant V:\n    EOF\n    INT: int\n    TEXT: String\nend\nfunc make(r: Region) -> V:\n    return V.TEXT{\"hello\"}[r]\nend\nfunc main():\n    value: V\n    value = V.INT{3}\n    if value is INT:\n        value.INT = 4\n    end\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    type_id := mod.ast.nodes[root.declarations[0]].kind.TYPE_DECL.resolved_type?
+    definition := mod.type_store.types[type_id].kind.NAMED
+    test::suite_assert(ts, types::is_variant(mod.type_store, type_id), site())
+    test::suite_assert(ts, types::is_allocated(mod.type_store, type_id), site())
+    test::suite_assert(ts, len(definition.member_names) == 3 and len(definition.member_types) == 3, site())
+    test::suite_assert(ts, definition.member_names[0] == "EOF", site())
+    test::suite_assert(ts, definition.member_types[0] == types::atom(mod.type_store, types::Atom.VOID), site())
+    constructors := 0
+    checks := 0
+    accesses := 0
+    for node in mod.ast.nodes:
+        if node.kind is VARIANT_LITERAL:
+            literal := node.kind.VARIANT_LITERAL
+            test::suite_assert(ts, node.inferred_type? == type_id, site())
+            test::suite_assert(ts, literal.member >= 0 and literal.member < 3, site())
+            test::suite_assert(ts, definition.member_names[literal.member] == literal.tag, site())
+            if literal.tag == "EOF":
+                test::suite_assert(ts, literal.value is None, site())
+            end
+            if literal.tag == "TEXT":
+                test::suite_assert(ts, node.region_source.kind == region_source::Kind.CALLER, site())
+                test::suite_assert(ts, mod.ast.nodes[literal.value?].region_source.kind == region_source::Kind.CALLER, site())
+            end
+            constructors += 1
+        elif node.kind is VARIANT_CHECK:
+            test::suite_assert(ts, node.kind.VARIANT_CHECK.member == 1, site())
+            test::suite_assert(ts, node.inferred_type? == types::atom(mod.type_store, types::Atom.BOOL), site())
+            checks += 1
+        elif node.kind is FIELD:
+            test::suite_assert(ts, node.kind.FIELD.member == 1, site())
+            test::suite_assert(ts, node.inferred_type? == types::atom(mod.type_store, types::Atom.INT), site())
+            accesses += 1
+        end
+    end
+    test::suite_assert(ts, constructors == 3 and checks == 1 and accesses == 1, site())
+end
+
+
+func test_diagnostics(ts) -> void:
+    prefix := "variant V:\n    INT: int\n    TEXT: String\n    EOF\nend\n"
+    test_strings::check_error(ts, concat(prefix, "func bad():\n    value := V.INT{\"wrong\"}\nend\n"), "type inference conflict")
+    test_strings::check_error(ts, concat(prefix, "func bad():\n    value := V.EOF{1}\nend\n"), "unexpected variant payload")
+    test_strings::check_error(ts, concat(prefix, "func bad():\n    value := V.MISSING{}\nend\n"), "unknown variant tag")
+    test_strings::check_error(ts, concat(prefix, "func bad():\n    value := V.INT{}\n    x := value is MISSING\nend\n"), "unknown variant tag")
+    test_strings::check_error(ts, concat(prefix, "func bad():\n    value := V.EOF{}\n    x := value.EOF\nend\n"), "payloadless variant access")
+    test_strings::check_error(ts, concat(prefix, "func bad(r: Region) -> V:\n    text := \"local\"\n    return V.TEXT{text}[r]\nend\n"), "region mismatch")
+    test_strings::check_error(ts, "variant V:\n    NEXT: Vec[V]\nend\n", "illegal recursive type")
+    test_strings::check_error(ts, "variant V:\n    VALUE: void\nend\n", "invalid variant payload type")
+    test_strings::check_error(ts, "variant V:\n    VALUE: Region\nend\n", "invalid variant payload type")
+end
+
+
+func test_spans_and_recovery(ts) -> void:
+    text := "func main():\n    value := imported::V.TEXT{\n        \"payload\"\n    }[r]\n    active := value is TEXT\nend\n"
+    parsed := support::parse_source(text, _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+    if parsed.diagnostics.error_count > 0:
+        return
+    end
+    constructors := 0
+    checks := 0
+    for node in parsed.ast.nodes:
+        if node.kind is VARIANT_LITERAL:
+            test::suite_assert(ts, must string::slice(text, node.span.start, node.span.stop) == "imported::V.TEXT{\n        \"payload\"\n    }[r]", site())
+            literal := node.kind.VARIANT_LITERAL
+            annotation := parsed.ast.nodes[literal.annotation].kind.TYPE_NAME
+            test::suite_assert(ts, annotation.qualifier? == "imported" and annotation.name == "V", site())
+            test::suite_assert(ts, literal.value is Some and literal.destination is Some, site())
+            constructors += 1
+        elif node.kind is VARIANT_CHECK:
+            test::suite_assert(ts, must string::slice(text, node.span.start, node.span.stop) == "value is TEXT", site())
+            checks += 1
+        end
+    end
+    test::suite_assert(ts, constructors == 1 and checks == 1, site())
+    malformed := support::parse_source("func main():\n    value := V.INT{1, 2}\n    after := [1]\nend\n", _)
+    test::suite_assert(ts, malformed.diagnostics.error_count == 1, site())
+    root := malformed.ast.get_root_module()
+    body := malformed.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL.body
+    test::suite_assert(ts, len(body.statements) == 1, site())
+    test::suite_assert(ts, malformed.ast.nodes[body.statements[0]].kind.LOCAL_DECL.name == "after", site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_variants")
+    test_checked_metadata(ts)
+    test_diagnostics(ts)
+    test_spans_and_recovery(ts)
+end

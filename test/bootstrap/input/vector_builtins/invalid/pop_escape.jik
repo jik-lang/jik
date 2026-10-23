@@ -1,0 +1,8 @@
+func invalid(r: Region) -> String:
+    local := ["local"]
+    return pop(local)
+end
+
+func main():
+    return 0
+end

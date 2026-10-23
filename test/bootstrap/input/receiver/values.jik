@@ -1,0 +1,69 @@
+use "../../../jik/support/ufc_shapes" as shapes
+
+struct Counter:
+    value: int
+end
+
+variant Number:
+    VALUE: int
+    MISSING
+end
+
+func add(value: Counter, amount: int) -> Counter:
+    value.value += amount
+    return value
+end
+
+func read(value: Counter) -> int:
+    return value.value
+end
+
+func label(value: Counter, r: Region) -> String:
+    return concat("counter", r)
+end
+
+func increment(value: Number, amount: int) -> Number:
+    value.VALUE += amount
+    return value
+end
+
+func read_number(value: Number) -> int:
+    return value.VALUE
+end
+
+// These caller-module functions must not capture imported receiver calls.
+func advance(value: shapes::Token, amount: int) -> shapes::Token:
+    value.value = 1000
+    return value
+end
+
+func increase(value: shapes::Reading, amount: int) -> shapes::Reading:
+    return shapes::Reading.VALUE{1000}[.value]
+end
+
+func inferred(value):
+    return value.add(1).read()
+end
+
+global_counter := Counter{value = 1}
+global_label := global_counter.label()
+
+func main():
+    assert(global_label == "counter")
+    counter := Counter{value = 2}
+    assert(counter.add(3).add(4).read() == 9)
+    assert(counter.label() == "counter")
+    assert(counter.label(_) == "counter")
+    assert(inferred(counter) == 10)
+    number := Number.VALUE{2}
+    assert(number.increment(3).increment(4).read_number() == 9)
+    token := shapes::Token{value = 4}
+    assert(token.advance(3).get_value() == 7)
+    reading := shapes::Reading.VALUE{4}
+    assert(reading.increase(3).reading_value() == 7)
+    choices := [counter]
+    assert(choices[0].add(1).read() == 11)
+    option := Some{counter}
+    assert(option?.read() == 11)
+    println("receiver-ok")
+end

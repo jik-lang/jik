@@ -1,0 +1,15 @@
+func error_code() -> int:
+    return 99
+end
+
+
+func error_msg(r: Region) -> String:
+    return "custom"[r]
+end
+
+
+func main():
+    assert(error_code() == 99)
+    assert(error_msg() == "custom")
+    println("shadow-ok")
+end

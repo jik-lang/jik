@@ -1,0 +1,6 @@
+func main(args):
+    println(len(args))
+    for index, arg in args:
+        println(index, ":", len(arg), ":", arg)
+    end
+end

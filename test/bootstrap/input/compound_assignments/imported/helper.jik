@@ -1,0 +1,5 @@
+func delta(value):
+    value *= 3
+    value += 2
+    return value
+end

@@ -1,0 +1,19 @@
+func equal(left: String, right: String) -> bool:
+    return left == right
+end
+
+
+func inspect(owner: String, r: Region) -> int:
+    local := "same"
+    external := "same"[r]
+    if not equal(local, external) or not equal(owner, local):
+        return 1
+    end
+    return 42
+end
+
+
+func main():
+    owner := "same"
+    return inspect(owner, _)
+end

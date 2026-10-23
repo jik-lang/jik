@@ -1,0 +1,14 @@
+trace := [0 of 0]
+initial := stamp(1)
+name := "shared"
+
+struct Box:
+    value: int
+end
+
+state := Box{value=1}
+
+func stamp(value: int) -> int:
+    push(trace, value)
+    return value
+end

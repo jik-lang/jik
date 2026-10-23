@@ -1,0 +1,32 @@
+struct Node:
+    name: String
+    children: Option[Dict[Node]]
+end
+
+func main():
+    commands := {"copy": {"overwrite": true, "recursive": false}, "move": {"overwrite": false}}
+    if not commands["copy"]?["overwrite"]? or commands["copy"]?["recursive"]? or commands["move"]?["missing"] is Some:
+        return 1
+    end
+    optional: Dict[Option[String]] = {"missing": None, "present": Some{"text"}}
+    optional["new"] = None
+    if optional["unknown"] is Some or optional["missing"] is None or optional["missing"]? is Some or optional["present"]?? != "text":
+        return 2
+    end
+    root := Node{name = "root", children = Some{{"child": Node{name = "leaf"}}}}
+    root.children?["child"]?.name = "updated"
+    if root.children?["child"]?.name != "updated":
+        return 3
+    end
+    vectors := [{"a": 1}, {"b": 2}]
+    wrapped := Some{{"values": [3, 4]}}
+    if vectors[1]["b"]? != 2 or wrapped?["values"]?[0] != 3:
+        return 4
+    end
+    defaults := [2 of Node{}]
+    if defaults[0].children is Some or defaults[1].children is Some:
+        return 5
+    end
+    println(root.children?["child"]?.name, ":", optional["present"]??, ":", vectors[1]["b"]?)
+    return 42
+end

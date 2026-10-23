@@ -1,0 +1,6 @@
+func bad():
+    value := unwrap(Some{1}, Some{2})
+end
+func main():
+    return 42
+end

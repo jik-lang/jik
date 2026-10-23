@@ -1,0 +1,35 @@
+struct Holder:
+    values: Dict[Vec[String]]
+end
+
+func make(r: Region) -> Dict[Vec[String]]:
+    scratch := "scratch"
+    return {"first": ["caller", "nested"]}
+end
+
+func read(values: Dict[Vec[String]], key: String) -> int:
+    return len(values[key]?)
+end
+
+func put_number(values: Dict[int], key: String):
+    values[key] = 7
+end
+
+func main():
+    values := make()
+    separate_key := "first"
+    if read(values, separate_key) != 2 or values[separate_key]?[1] != "nested":
+        return 1
+    end
+    holder := Holder{values}[.values]
+    values["second"] = ["stored"]
+    holder.values["second"]?[0] = "updated"
+    empty: Dict[String][.values]
+    numbers: Dict[int][.values]
+    put_number(numbers, separate_key)
+    if numbers["first"]? != 7 or len(empty) != 0 or values["second"]?[0] != "updated":
+        return 2
+    end
+    println(values["first"]?, ":", values["second"]?, ":", numbers["first"]?)
+    return 42
+end

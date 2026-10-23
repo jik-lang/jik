@@ -1,0 +1,40 @@
+func identity(value):
+    return value
+end
+
+func main():
+    count: int
+    ratio: double
+    enabled: bool
+    letter: char
+    if count:
+        return 1
+    end
+    if ratio:
+        return 2
+    end
+    if enabled:
+        return 3
+    end
+    if letter:
+        return 4
+    end
+    count = 40
+    ratio = 2.5
+    enabled = true
+    letter = letter
+    explicit: int = identity(count + 2)
+    real: double = ratio * 2
+    flag: bool = enabled == true
+    if real != 5.0:
+        return 5
+    end
+    if not flag:
+        return 6
+    end
+    if flag:
+        nested: int = explicit
+        count = nested
+    end
+    return count
+end

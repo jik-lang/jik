@@ -1,0 +1,34 @@
+throws func failing(code: int, text: String):
+    fail(text, code)
+end
+
+
+throws func succeeding(value: int) -> int:
+    return value
+end
+
+
+func main():
+    try failing(11, "outer"):
+    except:
+        println("outer ", error_code(), " ", error_msg())
+        // Arguments and a successful nested body remain in the outer handler.
+        try value := succeeding(error_code()):
+            println("success ", value, " ", error_code(), " ", error_msg())
+        except:
+            assert(false)
+        end
+        try failing(22, "inner"):
+            assert(false)
+        except:
+            println("inner ", error_code(), " ", error_msg())
+            try value := succeeding(42):
+                println("deep success ", error_code(), " ", error_msg())
+            except:
+                assert(false)
+            end
+            println("inner restored ", error_code(), " ", error_msg())
+        end
+        println("outer restored ", error_code(), " ", error_msg())
+    end
+end

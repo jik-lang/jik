@@ -1,0 +1,20 @@
+use "left"
+use "right"
+use "shared"
+
+struct Box:
+    item: left::Item
+end
+
+func main():
+    first := left::make(42)
+    second := right::Item{value = 10}
+    defaults: left::Item
+    box := Box{item = first}
+    if shared::read(first) != 42 or right::read(second) != 10 or defaults.label != "":
+        return 1
+    end
+    box.item.value = 7
+    println(first.label, ":", shared::read(first), ":", right::read(second))
+    return 42
+end

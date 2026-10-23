@@ -1,0 +1,7 @@
+use "first/../first/helper"
+use "second/helper" as alternate
+
+
+func main():
+    return helper::value() + alternate::value()
+end

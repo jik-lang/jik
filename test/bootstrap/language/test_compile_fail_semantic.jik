@@ -1,0 +1,770 @@
+use "jik/testing" as test
+
+use "utils"
+
+func test_compile_fail_01(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    x: int
+end
+
+func main():
+    a := Foo
+end
+""",
+        "expected a local or parameter value")
+end
+
+func test_compile_fail_02(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Fruit:
+    ANANAS
+    BANANA
+end
+
+func main():
+    a := Fruit
+end
+""",
+        "expected a local or parameter value")
+end
+
+func test_compile_fail_03(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    INT: int
+end
+
+func main():
+    a := Value
+end
+""",
+        "expected a local or parameter value")
+end
+
+func test_compile_fail_04(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    INT: int
+end
+
+func main():
+    a := Value.INT
+end
+""",
+        "expected a local or parameter value")
+end
+
+func test_compile_fail_05(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    items: Vec[Foo]
+end
+
+func main():
+end
+""",
+        "recursive cycles must pass through Option")
+end
+
+func test_compile_fail_06(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    INT: int
+    TEXT: String
+end
+
+func main():
+    v := Value.INT{1}
+    match v:
+        case INT{x}:
+            print(x)
+    end
+end
+""",
+        "unhandled cases: Value.TEXT")
+end
+
+func test_compile_fail_07(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func jik_bad():
+end
+
+func main():
+end
+""",
+        "jik_bad uses a reserved prefix: jik_, Jik or JIK")
+end
+
+func test_compile_fail_08(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    jik_x := 1
+end
+""",
+        "jik_x uses a reserved prefix: jik_, Jik or JIK")
+end
+
+func test_compile_fail_09(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    jik_field: int
+end
+
+func main():
+end
+""",
+        "jik_field uses a reserved prefix: jik_, Jik or JIK")
+end
+
+func test_compile_fail_10(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+use "jik/io"
+
+func main():
+    f := io::File{}
+end
+""",
+        "external struct type has no init function")
+end
+
+func test_compile_fail_11(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+use "jik/io"
+
+func main():
+    f: io::File
+end
+""",
+        "external struct type has no init function")
+end
+
+func test_compile_fail_12(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+use "jik/io"
+
+struct Foo:
+    f: io::File
+end
+
+func main():
+end
+""",
+        "external struct type has no init function")
+end
+
+func test_compile_fail_13(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+extern struct jik_TestOpaque as
+    TestOpaque
+
+extern init func jik_test_opaque_new1 as
+    new1(region: Region) -> TestOpaque
+
+extern init func jik_test_opaque_new2 as
+    new2(region: Region) -> TestOpaque
+
+@embed{C_END}
+typedef struct jik_TestOpaque {
+    int x;
+} jik_TestOpaque;
+
+jik_TestOpaque *
+jik_test_opaque_new1(JikRegion *r)
+{
+    return jik_region_alloc(r, sizeof(jik_TestOpaque));
+}
+
+jik_TestOpaque *
+jik_test_opaque_new2(JikRegion *r)
+{
+    return jik_region_alloc(r, sizeof(jik_TestOpaque));
+}
+C_END
+
+func main():
+end
+""",
+        "extern struct type already has an init function")
+end
+
+func test_compile_fail_14(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func ordinary() -> int:
+    return 1
+end
+
+func main():
+    value := ordinary()!
+end
+""",
+        "must requires a throwing function")
+end
+
+func test_compile_fail_15(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    value := 1
+    value!
+end
+""",
+        "must and ! require a function call")
+end
+
+func test_compile_fail_16(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    value: int
+end
+
+func wrong(value: int):
+end
+
+func main():
+    f := Foo{}
+    f.wrong()
+end
+""",
+        "receiver does not match the first parameter")
+end
+
+func test_compile_fail_17(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    value := 1
+    value.nope()
+end
+""",
+        "uniform function call requires a struct or variant receiver")
+end
+
+func test_compile_fail_18(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Choice:
+    VALUE: int
+end
+
+func wrong(value: int):
+end
+
+func main():
+    choice := Choice.VALUE{1}
+    choice.wrong()
+end
+""",
+        "receiver does not match the first parameter")
+end
+
+func test_compile_fail_19(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+    GREEN
+end
+
+func main():
+    color := Color.RED
+    match color:
+        case RED:
+            println("red")
+    end
+end
+""",
+        "unhandled cases: Color.GREEN")
+end
+
+func test_compile_fail_20(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+    GREEN
+end
+
+func main():
+    color := Color.RED
+    match color:
+        case RED:
+            println("red")
+        case RED:
+            println("red again")
+        case GREEN:
+            println("green")
+    end
+end
+""",
+        "duplicate match case")
+end
+
+func test_compile_fail_21(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+end
+
+func main():
+    color := Color.RED
+    match color:
+        case BLUE:
+            println("blue")
+    end
+end
+""",
+        "unknown match case")
+end
+
+func test_compile_fail_23(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+end
+
+func main():
+    color := Color.RED
+    match color:
+        case RED{value}:
+            println(value)
+    end
+end
+""",
+        "enum case cannot bind a payload")
+end
+
+func test_compile_fail_24(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+end
+
+func main():
+    color := Color.RED
+    match color:
+        case PURPLE:
+            println("red")
+    end
+end
+""",
+        "unknown match case")
+end
+
+func test_compile_fail_25(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    match 1:
+        case ONE:
+            println("one")
+    end
+end
+""",
+        "match requires an enum or variant value")
+end
+
+func test_compile_fail_26(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Choice:
+    FIRST: int
+    SECOND
+end
+
+func main():
+    choice := Choice.FIRST{1}
+    match choice:
+        case FIRST{value}:
+            println(value)
+        case FIRST{value}:
+            println(value)
+        case SECOND:
+            println("second")
+    end
+end
+""",
+        "duplicate match case")
+end
+
+func test_compile_fail_27(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    size_t := 1
+end
+""",
+        "size_t is reserved by the C backend")
+end
+
+func test_compile_fail_28(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    EOF := 1
+end
+""",
+        "EOF is reserved by the C backend")
+end
+
+func test_compile_fail_29(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    _Private := 1
+end
+""",
+        "_Private is reserved by the C backend")
+end
+
+func test_compile_fail_30(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    EMPTY
+end
+
+func main():
+    value := Value.EMPTY
+end
+""",
+        "expected a local or parameter value"
+    )
+
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    EMPTY
+end
+
+func invalid(r: Region):
+    value := Value.EMPTY[r]
+end
+
+func main():
+end
+""",
+        "expected a local or parameter value"
+    )
+end
+
+func test_compile_fail_31(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    x: int
+end
+
+func main():
+    y := 1
+    value := Foo{y}
+end
+""",
+        "unknown struct field")
+end
+
+func test_compile_fail_32(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    x: int
+end
+
+func main():
+    value := Foo{x}
+end
+""",
+        "undefined symbol: x")
+end
+
+func test_compile_fail_33(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+struct Foo:
+    x: int
+end
+
+func main():
+    x := "wrong"
+    value := Foo{x}
+end
+""",
+        "conflicting types: String and int")
+end
+
+func test_compile_fail_34(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    number: int = "wrong"
+end
+""",
+        "conflicting types: int and String")
+end
+
+func test_compile_fail_35(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main(r: Region):
+    name: String[r] = "name"
+end
+""",
+        "allocation suffix belongs on initializer")
+end
+
+func test_compile_fail_36(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+    GREEN
+end
+
+func main():
+    match Color.RED:
+        other:
+            println("other")
+        case RED:
+            println("red")
+    end
+end
+""",
+        "other must be the final match arm")
+end
+
+func test_compile_fail_37(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+    GREEN
+end
+
+func main():
+    match Color.RED:
+        case RED:
+            println("red")
+        other:
+            println("first")
+        other:
+            println("second")
+    end
+end
+""",
+        "other must be the final match arm")
+end
+
+func test_compile_fail_38(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+end
+
+func main():
+    match Color.RED:
+        case BLUE:
+            println("blue")
+        other:
+            println("other")
+    end
+end
+""",
+        "unknown match case")
+end
+
+func test_compile_fail_39(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+end
+
+func main():
+    match Color.RED:
+        case RED:
+            println("red")
+        case RED:
+            println("red again")
+        other:
+            println("other")
+    end
+end
+""",
+        "duplicate match case")
+end
+
+func test_compile_fail_40(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+enum Color:
+    RED
+    GREEN
+    BLUE
+end
+
+func main():
+    match Color.RED:
+        case RED:
+            println("red")
+    end
+end
+""",
+        "unhandled cases: Color.GREEN Color.BLUE")
+end
+
+func test_compile_fail_41(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    INT: int
+end
+
+func main():
+    value := Value.INT{1}
+    if value is TEXT:
+        println("text")
+    end
+end
+""",
+        "unknown variant tag")
+end
+
+func test_compile_fail_42(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    END
+end
+
+func main():
+    value := Value.END{}
+    println(value.END)
+end
+""",
+        "this tag has no payload")
+end
+
+func test_compile_fail_43(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    INT: int
+end
+
+func main():
+    value := Value.INT{1}
+    value.INT = "wrong"
+end
+""",
+        "conflicting types: String and int")
+end
+
+func test_compile_fail_44(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+variant Value:
+    END
+end
+
+func main():
+    value := Value.END{}
+    match value:
+        case END{payload}:
+            println(payload)
+    end
+end
+""",
+        "variant tag has no payload")
+end
+
+func test_compile_fail_invalid_fail_arguments(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+throws func bad():
+    fail()
+end
+
+func main():
+    must bad()
+end
+""",
+        "fail expects one or two arguments")
+    utils::assert_compile_fail_source(ts,
+"""
+throws func bad():
+    fail(1, 2)
+end
+
+func main():
+    must bad()
+end
+""",
+        "expected String or int, or String followed by int")
+end
+
+func run_tests(ts):
+    println("[test] language/test_compile_fail_semantic")
+    test_compile_fail_invalid_fail_arguments(ts)
+    test_compile_fail_01(ts)
+    test_compile_fail_02(ts)
+    test_compile_fail_03(ts)
+    test_compile_fail_04(ts)
+    test_compile_fail_05(ts)
+    test_compile_fail_06(ts)
+    test_compile_fail_07(ts)
+    test_compile_fail_08(ts)
+    test_compile_fail_09(ts)
+    test_compile_fail_10(ts)
+    test_compile_fail_11(ts)
+    test_compile_fail_12(ts)
+    test_compile_fail_13(ts)
+    test_compile_fail_14(ts)
+    test_compile_fail_15(ts)
+    test_compile_fail_16(ts)
+    test_compile_fail_17(ts)
+    test_compile_fail_18(ts)
+    test_compile_fail_19(ts)
+    test_compile_fail_20(ts)
+    test_compile_fail_21(ts)
+    test_compile_fail_23(ts)
+    test_compile_fail_24(ts)
+    test_compile_fail_25(ts)
+    test_compile_fail_26(ts)
+    test_compile_fail_27(ts)
+    test_compile_fail_28(ts)
+    test_compile_fail_29(ts)
+    test_compile_fail_30(ts)
+    test_compile_fail_31(ts)
+    test_compile_fail_32(ts)
+    test_compile_fail_33(ts)
+    test_compile_fail_34(ts)
+    test_compile_fail_35(ts)
+    test_compile_fail_36(ts)
+    test_compile_fail_37(ts)
+    test_compile_fail_38(ts)
+    test_compile_fail_39(ts)
+    test_compile_fail_40(ts)
+    test_compile_fail_41(ts)
+    test_compile_fail_42(ts)
+    test_compile_fail_43(ts)
+    test_compile_fail_44(ts)
+end

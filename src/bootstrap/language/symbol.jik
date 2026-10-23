@@ -1,0 +1,63 @@
+//! Names and their declarations in each scope, plus enclosing error handlers.
+
+enum SymbolKind:
+    FUNCTION
+    PARAMETER
+    LOCAL
+    MATCH_BINDING
+    GLOBAL
+    TYPE
+    TABLE
+end
+
+
+// Resolved binding in one module; node references use that module's AST.
+struct Symbol:
+    name: String
+    kind: SymbolKind
+    origin: int    // Declaration or binding node ID in the containing module Ast.nodes.
+    // Declaration start byte offset for an ordinary local; None for other bindings.
+    local_start: Option[int]
+end
+
+
+// Lexical bindings with an optional enclosing scope in the same module.
+struct Scope:
+    parent: Option[Scope]
+    symbols: Dict[Symbol]    // Binding name -> Symbol; enclosing scopes are searched separately.
+    error_handler: Option[int]    // TRY node ID in this module; Some only on its except body scope.
+end
+
+
+func find_error_handler(sc: Scope) -> Option[int]:
+    if sc.error_handler is Some:
+        return sc.error_handler
+    end
+    if sc.parent is Some:
+        return find_error_handler(sc.parent?)
+    end
+    return None
+end
+
+
+func has_symbol(sc: Scope, name: String) -> bool:
+    if sc.symbols[name] is Some:
+        return true
+    end
+    if sc.parent is Some:
+        return has_symbol(sc.parent?, name)
+    end
+    return false
+end
+
+
+func find_origin(sc: Scope, name: String) -> Option[int]:
+    entry := sc.symbols[name]
+    if entry is Some:
+        return Some{entry?.origin}
+    end
+    if sc.parent is Some:
+        return find_origin(sc.parent?, name)
+    end
+    return None
+end

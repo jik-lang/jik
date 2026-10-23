@@ -1,0 +1,35 @@
+use "shared" as int
+
+NULL := 2
+
+enum Key:
+    EOF
+    jik_value
+    __Tag
+end
+
+variant Value:
+    EOF
+    JikTag
+    NUMBER: int
+end
+
+struct Box:
+    print: int
+end
+
+func size_t() -> int:
+    _value := 3
+    foreigner := 4
+    return _value + foreigner
+end
+
+func main():
+    key := Key.jik_value
+    value := Value.JikTag{}
+    box := Box{print = 5}
+    if key != Key.jik_value or not (value is JikTag):
+        return 1
+    end
+    println(NULL + size_t() + int::number() + box.print)
+end

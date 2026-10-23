@@ -1,0 +1,6 @@
+func bad(values: Dict[int]):
+    push(values, 1)
+end
+func main():
+    return 42
+end

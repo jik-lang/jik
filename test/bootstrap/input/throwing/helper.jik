@@ -1,0 +1,6 @@
+throws func imported(foreign message: String):
+    values := [1, 2]
+    if len(values) > 0:
+        fail(message, 13)
+    end
+end

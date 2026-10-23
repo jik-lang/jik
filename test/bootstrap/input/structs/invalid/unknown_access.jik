@@ -1,0 +1,10 @@
+struct Label:
+    text: String
+    count: int
+end
+func bad(value: Label):
+    result := value.missing
+end
+func main():
+    return 42
+end

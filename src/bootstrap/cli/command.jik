@@ -1,3 +1,6 @@
+//! Command identities and names shared by CLI dispatch and help.
+
+// Command name and one-line description shown in CLI help.
 struct Command:
     name: String
     summary: String
@@ -5,6 +8,11 @@ end
 
 
 COMMANDS := [
+    Command{name = "tran", summary = "translate Jik source to C"},
+    Command{name = "check", summary = "check syntax, types and regions"},
+    Command{name = "env", summary = "print resolved Jik configuration"},
+    Command{name = "build", summary = "translate and build Jik source to executable"},
+    Command{name = "run", summary = "translate, build and run executable"},
     Command{name = "help", summary = "show help for command or topic"},
-    Command{name = "tran", summary = "translate Jik source to C"}
+    Command{name = "version", summary = "show Jik version"}
 ]

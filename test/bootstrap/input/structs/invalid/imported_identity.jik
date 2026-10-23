@@ -1,0 +1,8 @@
+use "../imported/left"
+use "../imported/right"
+func bad(value: left::Item):
+    alternate: right::Item = value
+end
+func main():
+    return 42
+end

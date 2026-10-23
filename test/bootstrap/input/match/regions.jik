@@ -1,0 +1,41 @@
+variant Value:
+    TEXT: String
+    NUMS: Vec[String]
+    EOF
+end
+
+func extract(value: Value, r: Region) -> String:
+    match value:
+        case TEXT{payload}:
+            return payload
+        other:
+            return "fallback"
+    end
+end
+
+func update(value: Value):
+    match value:
+        case NUMS{payload}:
+            push(payload, "new")
+        other:
+    end
+end
+
+func local_length() -> int:
+    match Value.TEXT{"local"}:
+        case TEXT{payload}:
+            return len(payload)
+        other:
+            return 0
+    end
+end
+
+func main():
+    value := Value.TEXT{"hello"}
+    text := extract(value, .value)
+    println(text)
+    value = Value.NUMS{["first"]}
+    update(value)
+    println(value.NUMS)
+    println(local_length())
+end

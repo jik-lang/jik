@@ -1,0 +1,84 @@
+use "jik/testing" as test
+use "jik/argparse" as ap
+use "jik/bytes"
+use "jik/io"
+use "jik/path"
+use "jik/process"
+use "jik/string"
+
+use "../../src/bootstrap/cli/run" as run_command
+use "../../src/bootstrap/cli/build" as build_command
+use "../../src/bootstrap/cli/tran" as tran_command
+use "../../src/bootstrap/cli/compiler_options"
+use "../../src/bootstrap/compiler"
+use "language/utils"
+
+
+func text(value: bytes::Bytes) -> String:
+    decoded := must bytes::to_string_ascii(value, .value)
+    return string::replace(decoded, "\r\n", "\n", .value)
+end
+
+
+func check_regions(foreign ts: test::TestSuite, result: process::Result):
+    test::suite_assert(ts, result.code == 0 and text(result.out) == "42\n", site())
+    diagnostic := text(result.err)
+    test::suite_assert(ts, string::contains(diagnostic, "region stats") and string::contains(diagnostic, "alive=0"), site())
+    test::suite_assert(ts, string::contains(diagnostic, "region lifetime tree") and string::contains(diagnostic, "main.arguments"), site())
+    // Early return, throwing cleanup and fallthrough must leave sibling regions
+    // at the same depth. Ignore generated names, region IDs and allocation counts.
+    depth := -1
+    seen := 0
+    for line in string::split(diagnostic, "\n"):
+        if string::contains(line, "::early.local") or string::contains(line, "::faulty.local") or string::contains(line, "::normal.local"):
+            current := string::find(line, "R")
+            if depth < 0:
+                depth = current
+            end
+            test::suite_assert(ts, current == depth and depth > 0, site())
+            seen += 1
+        end
+    end
+    test::suite_assert(ts, seen == 3, site())
+end
+
+
+func test_configuration(ts: test::TestSuite):
+    parsers := [build_command::make_parser(), run_command::make_parser(), tran_command::make_parser()]
+    for parser in parsers:
+        config := compiler::Config{}
+        defaults := must ap::parse(parser, ["input.jik"])
+        compiler_options::configure(config, defaults)
+        test::suite_assert(ts, not config.region_stats and not config.region_tree and not config.unsafe_no_bounds_checks and not config.verbose and not config.dump_ast, site())
+        enabled := must ap::parse(parser, ["input.jik", "--region-stats", "--region-tree", "--unsafe-no-bounds-checks", "--verbose", "--dump-ast"])
+        compiler_options::configure(config, enabled)
+        test::suite_assert(ts, config.region_stats and config.region_tree and config.unsafe_no_bounds_checks and config.verbose and config.dump_ast, site())
+    end
+end
+
+
+func run_tests(ts: test::TestSuite):
+    println("[test] test_runtime_options")
+    test_configuration(ts)
+    tool := utils::compiler_command(_)
+    workspace := must run_command::make_workspace()
+    source := "test/bootstrap/input/runtime_options/main.jik"
+    generated := path::join([workspace, "runtime.c"])
+    // Execute instrumentation once. Other commands share its configuration and
+    // code generation; their option registration is checked above.
+    check_regions(ts, must process::capture(tool, ["run", source, "--region-stats", "--region-tree"]))
+    translated := must process::capture(tool, ["tran", source, "--out", generated, "--embed-core", "--region-stats", "--region-tree", "--verbose"])
+    test::suite_assert(ts, translated.code == 0 and bytes::len(translated.out) == 0 and bytes::len(translated.err) > 0, site())
+    translation := must io::read_file(generated)
+    test::suite_assert(ts, string::contains(translation, "#define JIK_REGION_STATS") and string::contains(translation, "jik_region_tree_enter("), site())
+    bounds := "test/bootstrap/input/runtime_options/bounds.jik"
+    checked := must process::capture(tool, ["run", bounds])
+    unchecked := must process::capture(tool, ["run", bounds, "--unsafe-no-bounds-checks"])
+    test::suite_assert(ts, checked.code == 0 and text(checked.out) == "42 checked\n" and bytes::len(checked.err) == 0, site())
+    test::suite_assert(ts, unchecked.code == 0 and text(unchecked.out) == "42 unchecked\n" and bytes::len(unchecked.err) == 0, site())
+    quiet := must process::capture(tool, ["check", source])
+    verbose := must process::capture(tool, ["check", source, "--verbose"])
+    test::suite_assert(ts, quiet.code == 0 and verbose.code == 0 and text(quiet.out) == text(verbose.out), site())
+    test::suite_assert(ts, bytes::len(quiet.err) == 0 and bytes::len(verbose.err) > 0, site())
+    must run_command::cleanup(workspace)
+end

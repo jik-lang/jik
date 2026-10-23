@@ -1,0 +1,6 @@
+use "../../../outside"
+
+
+func value():
+    return 0
+end

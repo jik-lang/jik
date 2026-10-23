@@ -1,0 +1,5 @@
+use "shared" as common
+
+func value():
+    return common::value()
+end

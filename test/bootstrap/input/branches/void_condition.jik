@@ -1,0 +1,9 @@
+func empty():
+end
+func main():
+    if false:
+    elif empty():
+        return 1
+    end
+    return 0
+end

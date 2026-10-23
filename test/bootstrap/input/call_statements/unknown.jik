@@ -1,0 +1,4 @@
+func main():
+    missing()
+    return 0
+end

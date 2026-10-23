@@ -1,0 +1,66 @@
+use "jik/testing" as test
+
+use "support"
+use "test_regions"
+use "../../src/bootstrap/parser/ast"
+use "../../src/bootstrap/language/builtin"
+use "../../src/bootstrap/language/types"
+use "../../src/bootstrap/semantic/typing/typecheck"
+use "../../src/bootstrap/semantic/regions/regions"
+
+
+func test_handler_bindings(ts) -> void:
+    text := "throws func signal():\n    fail(0)\nend\nthrows func echo(value: int) -> int:\n    return value\nend\nfunc inspect():\n    try signal():\n    except:\n        outer := error_code()\n        try value := echo(error_code()):\n            success := error_msg()\n        except:\n            inner := error_code()\n        end\n    end\nend\n"
+    comp := support::infer_source(text, -1)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    function := mod.ast.nodes[mod.ast.get_root_module().declarations[2]].kind.FUNCTION_DECL
+    outer_id := function.body.statements[0]
+    inner_id := mod.ast.nodes[outer_id].kind.TRY.except_body.statements[1]
+    expected := [outer_id, outer_id, outer_id, inner_id]
+    count := 0
+    for node in mod.ast.nodes:
+        if not (node.kind is CALL) or node.kind.CALL.builtin is None:
+            continue
+        end
+        call := node.kind.CALL
+        kind := call.builtin?
+        if kind != builtin::Kind.ERROR_MSG and kind != builtin::Kind.ERROR_CODE:
+            continue
+        end
+        test::suite_assert(ts, count < len(expected), site())
+        if count >= len(expected):
+            return
+        end
+        test::suite_assert(ts, call.error_handler is Some and call.error_handler? == expected[count], site())
+        result := types::atom(mod.type_store, types::Atom.INT)
+        if kind == builtin::Kind.ERROR_MSG:
+            result = types::atom(mod.type_store, types::Atom.STRING)
+            test::suite_assert(ts, len(call.arguments) == 1 and call.auto_region, site())
+            test::suite_assert(ts, mod.ast.nodes[call.arguments[0]].kind is LOCAL_REGION, site())
+        end
+        test::suite_assert(ts, node.inferred_type is Some and node.inferred_type? == result, site())
+        count += 1
+    end
+    test::suite_assert(ts, count == len(expected) and function.needs_local_region, site())
+end
+
+
+func test_context_and_placement(ts) -> void:
+    test_regions::check_error(ts, "func bad():\n    println(error_code())\nend\n", "error inspection outside except")
+    test_regions::check_error(ts, "throws func action():\nend\nfunc bad():\n    try action():\n        println(error_msg())\n    except:\n    end\nend\n", "error inspection outside except")
+    test_regions::check_error(ts, "throws func bad():\n    fail(0)\n    println(1)\nend\n", "unreachable statement after fail")
+    test_regions::check_error(ts, "throws func bad():\n    while true:\n        fail(0)\n        break\n    end\nend\n", "unreachable statement after fail")
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_error_inspection")
+    test_handler_bindings(ts)
+    test_context_and_placement(ts)
+end

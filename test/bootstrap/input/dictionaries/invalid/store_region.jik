@@ -1,0 +1,7 @@
+func bad(values: Dict[String]):
+    text := "local"
+    values["key"] = text
+end
+func main():
+    return 42
+end

@@ -1,0 +1,7 @@
+func invalid(pop: int) -> int:
+    return pop
+end
+
+func main():
+    return 0
+end

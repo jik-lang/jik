@@ -1,0 +1,7 @@
+use "left"
+use "right"
+
+
+func main():
+    return left::value() + right::value()
+end

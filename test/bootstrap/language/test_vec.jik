@@ -1,0 +1,124 @@
+use "jik/testing" as test
+
+use "support/point"
+
+
+func test_vec_01(ts):
+    v1 := [0 of 0]    
+    test::suite_assert(ts, len(v1) == 0, site())
+    push(v1, 1)
+    test::suite_assert(ts, len(v1) == 1, site())
+    push(v1, 2)
+    test::suite_assert(ts, len(v1) == 2, site())
+    test::suite_assert(ts, v1[0] == 1, site())
+    test::suite_assert(ts, v1[1] == 2, site())
+    x := pop(v1)
+    test::suite_assert(ts, x == 2, site())
+    test::suite_assert(ts, len(v1) == 1, site())
+    x = pop(v1)
+    test::suite_assert(ts, x == 1, site())
+    test::suite_assert(ts, len(v1) == 0, site())
+    v1 = [10 of 1]
+    clear(v1)
+    test::suite_assert(ts, len(v1) == 0, site())
+end
+
+func test_vec_02(ts):
+    v1 := [2 of point::Point{x = 3, y = 2}]
+    test::suite_assert(ts, len(v1) == 2, site())
+    test::suite_assert(ts, v1[0].x == 3, site())
+    test::suite_assert(ts, v1[0].y == 2, site())
+    test::suite_assert(ts, v1[1].x == 3, site())
+    test::suite_assert(ts, v1[1].y == 2, site())
+    clear(v1)
+    test::suite_assert(ts, len(v1) == 0, site())    
+end
+
+func test_vec_03(ts):
+    v1 := [0 of [0 of 0]]
+    test::suite_assert(ts, len(v1) == 0, site())
+    push(v1, [2 of 1])
+    push(v1, [3 of 2])
+    test::suite_assert(ts, len(v1) == 2, site())
+    test::suite_assert(ts, len(v1[0]) == 2, site())
+    test::suite_assert(ts, len(v1[1]) == 3, site())
+end
+
+func test_vec_04(ts):
+    v1 := [2 of point::Point{}]
+    v1[0].x = 3
+    v1[0].y = 2
+    test::suite_assert(ts, v1[1].x == 0, site())
+    test::suite_assert(ts, v1[1].y == 0, site())
+end
+
+func test_vec_05(ts):
+    v1 := [[1, 2], [3, 4]]
+    test::suite_assert(ts, v1[0][0] == 1, site())
+    test::suite_assert(ts, v1[0][1] == 2, site())
+    test::suite_assert(ts, v1[1][0] == 3, site())
+    test::suite_assert(ts, v1[1][1] == 4, site())
+    push(v1[0], 5)
+    push(v1[1], 6)
+    test::suite_assert(ts, v1[0][2] == 5, site())
+    test::suite_assert(ts, v1[1][2] == 6, site())
+end
+
+func test_vec_multiline_literals(ts):
+    points := [
+        point::Point{x = 3, y = 2}
+    ]
+    test::suite_assert(ts, len(points) == 1, site())
+    test::suite_assert(ts, points[0].x == 3, site())
+    test::suite_assert(ts, points[0].y == 2, site())
+
+    copies := [2 of point::Point{x = 5, y = 4}
+    ]
+    test::suite_assert(ts, len(copies) == 2, site())
+    test::suite_assert(ts, copies[0].x == 5, site())
+    test::suite_assert(ts, copies[1].y == 4, site())
+end
+
+func test_vec_slice(ts):
+    values := [10, 20, 30, 40, 50]
+    middle := values[1:4]
+    prefix := values[:2]
+    suffix := values[3:]
+    all_values := values[:]
+    empty := values[2:2]
+
+    test::suite_assert(ts, len(middle) == 3, site())
+    test::suite_assert(ts, middle[0] == 20, site())
+    test::suite_assert(ts, middle[2] == 40, site())
+    test::suite_assert(ts, len(prefix) == 2, site())
+    test::suite_assert(ts, prefix[1] == 20, site())
+    test::suite_assert(ts, len(suffix) == 2, site())
+    test::suite_assert(ts, suffix[0] == 40, site())
+    test::suite_assert(ts, len(all_values) == 5, site())
+    test::suite_assert(ts, all_values[4] == 50, site())
+    test::suite_assert(ts, len(empty) == 0, site())
+
+    push(values, 60)
+    test::suite_assert(ts, len(middle) == 3, site())
+end
+
+func test_vec_indexed_iteration(ts):
+    values := [3, 5, 7]
+    total := 0
+    for index, value in values:
+        total = total + index * value
+    end
+    test::suite_assert(ts, total == 19, site())
+end
+
+func run_tests(ts):
+    println("[test] language/test_vec")
+    test_vec_01(ts)
+    test_vec_02(ts)
+    test_vec_03(ts)
+    test_vec_04(ts)
+    test_vec_05(ts)
+    test_vec_multiline_literals(ts)
+    test_vec_slice(ts)
+    test_vec_indexed_iteration(ts)
+end

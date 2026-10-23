@@ -1,0 +1,57 @@
+use "jik/process"
+use "jik/bytes"
+
+use "../../language/utils"
+
+@embed{C}
+struct jik_vec_JikString;
+struct jik_vec_int32_t;
+struct jik_vec_vec_int32_t;
+struct jik_dict_jik_vec_jik_opt_int32_t;
+struct jik_opt_jik_vec_JikString;
+size_t jik_vec_JikString_size(struct jik_vec_JikString *, char *);
+struct jik_vec_int32_t *jik_vec_vec_int32_t_get(struct jik_vec_vec_int32_t *, size_t, char *);
+int32_t jik_vec_int32_t_get(struct jik_vec_int32_t *, size_t, char *);
+static int32_t native_word_count(struct jik_vec_JikString *words) {
+    return (int32_t)jik_vec_JikString_size(words, "native words");
+}
+static int32_t native_nested_value(struct jik_vec_vec_int32_t *values) {
+    return jik_vec_int32_t_get(jik_vec_vec_int32_t_get(values, 0, "native rows"), 1, "native row");
+}
+static struct jik_dict_jik_vec_jik_opt_int32_t *native_map(struct jik_dict_jik_vec_jik_opt_int32_t *value, JikRegion *r) {
+    (void)r;
+    return value;
+}
+static struct jik_opt_jik_vec_JikString *native_option(struct jik_opt_jik_vec_JikString *value, JikRegion *r) {
+    (void)r;
+    return value;
+}
+C
+
+extern func native_word_count as word_count(words: Vec[String]) -> int
+extern func native_nested_value as nested_value(values: Vec[Vec[int]]) -> int
+extern func native_map as roundtrip_map(value: Dict[Vec[Option[int]]], r: Region) -> Dict[Vec[Option[int]]]
+extern func native_option as roundtrip_option(value: Option[Vec[String]], r: Region) -> Option[Vec[String]]
+
+
+func main():
+    assert(word_count(["one", "two"]) == 2)
+    assert(nested_value([[1, 42]]) == 42)
+    values := {"one": [Some{42}]}
+    returned := roundtrip_map(values, .values)
+    assert(returned["one"]?[0]? == 42)
+    optional := Some{["word"]}
+    result := roundtrip_option(optional, .optional)
+    assert(result?[0] == "word")
+
+    captured := must process::capture(utils::compiler_command(_), ["help"])
+    assert(captured.code == 0)
+    assert(bytes::len(captured.out) > 0)
+    assert(bytes::len(captured.err) == 0)
+    try process::capture("nonexistent-jik-container-abi-program", ["unused"]):
+        assert(false)
+    except:
+        assert(error_msg() == "process::capture: could not start process")
+    end
+    println("container-abi-ok")
+end

@@ -1,0 +1,13 @@
+func answer(r: Region) -> int:
+    return 42
+end
+
+
+func relay(r: Region) -> int:
+    return answer(r)
+end
+
+
+func main():
+    return relay(_)
+end

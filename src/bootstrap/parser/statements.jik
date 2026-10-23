@@ -1,0 +1,438 @@
+//! Local declarations, assignments, and structured statement bodies.
+
+use "state"
+use "expressions"
+use "ast"
+use "../diag"
+use "../source"
+use "../lexer/token"
+use "../language/types"
+
+
+/// Keep try out of general expressions: only a complete initializer can propagate.
+throws func parse_initializer(p: state::Parser, allow_propagation: bool) -> int:
+    if not allow_propagation or p.current_type() != token::TokenType.KWD_TRY:
+        value := try expressions::parse_expression(p)
+        return value
+    end
+    start := p.advance()
+    value := try expressions::parse_expression(p)
+    if not (p.ast.nodes[value].kind is CALL):
+        diag::error(p.diagnostics, "invalid try operand", "try requires a function call", Some{start.span})
+        fail("parse error")
+    end
+    p.ast.nodes[value].kind.CALL.propagate = true
+    p.ast.nodes[value].span.start = start.span.start
+    return value
+end
+
+
+throws func parse_declaration(p: state::Parser, try_header: bool) -> int:
+    name_tok := try p.expect(token::TokenType.IDENTIFIER)
+    annotation: Option[int][.p]
+    initializer: Option[int][.p]
+    stop := name_tok.span.stop
+    if p.current_type() == token::TokenType.COLON:
+        p.advance()
+        type_name := try p.parse_local_type_name()
+        annotation = Some{type_name}[.p]
+        stop = p.ast.nodes[type_name].span.stop
+        description := p.ast.nodes[type_name].kind.TYPE_NAME
+        default_string := description.name == "String" and description.qualifier is None
+        default_vector := description.name == "Vec" and description.qualifier is None
+        default_option := description.name == "Option" and description.qualifier is None
+        default_dict := description.name == "Dict" and description.qualifier is None
+        default_struct := not default_string and not default_vector and not description.applied and (description.qualifier is Some or types::builtin(types::Store{}, description.name) is None)
+        default_id := -1
+        if (default_string or default_vector or default_struct or default_option or default_dict) and p.current_type() != token::TokenType.ASSIGN:
+            default_span := copy(p.ast.nodes[type_name].span, .p)
+            if default_string:
+                default_id = p.ast.add(default_span, ast::NodeKind.STRING_LITERAL{ast::StringLiteral{value = ""}}[.p])
+            elif default_vector:
+                default_id = p.ast.add(default_span, ast::NodeKind.VECTOR_LITERAL{ast::VectorLiteral{annotation = Some{type_name}}}[.p])
+            elif default_option:
+                default_id = p.ast.add(default_span, ast::NodeKind.OPTION_LITERAL{ast::OptionLiteral{annotation = Some{type_name}}}[.p])
+            elif default_dict:
+                default_id = p.ast.add(default_span, ast::NodeKind.DICT_LITERAL{ast::DictLiteral{annotation = Some{type_name}}}[.p])
+            else:
+                default_id = p.ast.add(default_span, ast::NodeKind.STRUCT_LITERAL{ast::StructLiteral{annotation = type_name, is_default = true}}[.p])
+            end
+            try expressions::parse_allocation_destination(p, default_id)
+            stop = p.ast.nodes[default_id].span.stop
+        end
+        if p.current_type() == token::TokenType.ASSIGN:
+            if default_id >= 0 and p.ast.nodes[default_id].span.stop > p.ast.nodes[type_name].span.stop:
+                diag::error(p.diagnostics, "allocation suffix belongs on initializer", "a typed initializer supplies its own allocation destination", Some{p.ast.nodes[default_id].span})
+                fail("parse error")
+            end
+            p.advance()
+            value := try expressions::parse_expression(p)
+            initializer = Some{value}[.p]
+            stop = p.ast.nodes[value].span.stop
+        elif default_string or default_vector or default_struct or default_option or default_dict:
+            initializer = Some{default_id}[.p]
+        end
+    else:
+        try p.expect(token::TokenType.DECLARE)
+        value := try parse_initializer(p, not try_header)
+        initializer = Some{value}[.p]
+        stop = p.ast.nodes[value].span.stop
+    end
+    if not try_header:
+        try p.expect(token::TokenType.NEWLINE)
+    end
+    span := source::Span{source_id = name_tok.span.source_id, start = name_tok.span.start, stop}[.p]
+    return p.ast.add(span, ast::NodeKind.LOCAL_DECL{ast::LocalDecl{name = p.text(name_tok.span), initializer, annotation}}[.p])
+end
+
+
+throws func parse_return(p: state::Parser) -> int:
+    start := try p.expect(token::TokenType.KWD_RETURN)
+    value: Option[int] = None@
+    stop := start.span.stop
+    if p.current_type() != token::TokenType.NEWLINE:
+        expression := try expressions::parse_expression(p)
+        value = Some{expression}@
+        stop = p.ast.nodes[expression].span.stop
+    end
+    try p.expect(token::TokenType.NEWLINE)
+    span := source::Span{source_id = start.span.source_id, start = start.span.start, stop}@
+    return p.ast.add_return(span, value)
+end
+
+
+/// Return a block in the parser region, recovering from individual statement
+/// errors. Fail at EOF when the enclosing block has no closing delimiter.
+/// Branch, match-arm and handler delimiters stop nested bodies during recovery.
+/// The caller checks the closing token and consumes its own delimiters.
+throws func parse_body_until_end_or_branch(p: state::Parser, block_name: String) -> ast::Block:
+    body := ast::Block{}[.p]
+    p.skip_newlines()
+    while p.current_type() != token::TokenType.KWD_END and p.current_type() != token::TokenType.KWD_ELIF and p.current_type() != token::TokenType.KWD_ELSE and p.current_type() != token::TokenType.KWD_CASE and p.current_type() != token::TokenType.KWD_OTHER and p.current_type() != token::TokenType.KWD_EXCEPT:
+        if p.at_end():
+            actual := p.current()
+            diag::error(p.diagnostics, concat("unterminated ", block_name), "expected end", Some{actual.span})
+            fail("unterminated block")
+        end
+        try body_statement := parse_statement(p):
+            body.statements.push(body_statement)
+        except:
+            p.synchronize_statement()
+        end
+        p.skip_newlines()
+    end
+    return body
+end
+
+
+throws func parse_try_body(p: state::Parser, start: token::Token, call: int, binding: Option[int]) -> int:
+    body := try parse_body_until_end_or_branch(p, "try")
+    try p.expect(token::TokenType.KWD_EXCEPT)
+    try p.expect(token::TokenType.COLON)
+    try p.expect(token::TokenType.NEWLINE)
+    except_body := try parse_body_until_end_or_branch(p, "except")
+    close := try p.expect(token::TokenType.KWD_END)
+    span := source::Span{source_id = p.file.id, start = start.span.start, stop = close.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.TRY{ast::TryStmt{call, binding, body, except_body}}[.p])
+end
+
+
+throws func parse_try(p: state::Parser) -> int:
+    start := try p.expect(token::TokenType.KWD_TRY)
+    binding: Option[int][.p]
+    call := -1
+    if p.current_type() == token::TokenType.IDENTIFIER and p.pos + 1 < len(p.tokens) and (p.tokens[p.pos + 1].type == token::TokenType.DECLARE or p.tokens[p.pos + 1].type == token::TokenType.COLON):
+        declaration := try parse_declaration(p, true)
+        binding = Some{declaration}[.p]
+        local := p.ast.nodes[declaration].kind.LOCAL_DECL
+        if local.initializer is Some:
+            call = local.initializer?
+        end
+    else:
+        call = try expressions::parse_expression(p)
+    end
+    if call < 0 or not (p.ast.nodes[call].kind is CALL):
+        diag::error(p.diagnostics, "invalid try operand", "try requires a function call or a declaration initialized by a call", Some{start.span})
+        fail("parse error")
+    end
+    if binding is None and p.current_type() != token::TokenType.COLON:
+        try p.expect(token::TokenType.NEWLINE)
+        p.ast.nodes[call].kind.CALL.propagate = true
+        p.ast.nodes[call].span.start = start.span.start
+        return call
+    end
+    try p.expect(token::TokenType.COLON)
+    try p.expect(token::TokenType.NEWLINE)
+    saved_depth := p.try_depth
+    p.try_depth += 1
+    try id := parse_try_body(p, start, call, binding):
+        p.try_depth = saved_depth
+        return id
+    except:
+        p.try_depth = saved_depth
+        fail("parse error")
+    end
+end
+
+
+throws func parse_match_body(p: state::Parser, start: token::Token, value: int) -> int:
+    statement := ast::MatchStmt{value}[.p]
+    p.skip_newlines()
+    while p.current_type() == token::TokenType.KWD_CASE:
+        opening := p.advance()
+        tag := try p.expect(token::TokenType.IDENTIFIER)
+        arm := ast::MatchArm{span = copy(tag.span, .p), tag = p.text(tag.span), member = -1}[.p]
+        if p.current_type() == token::TokenType.LBRACE:
+            arm.has_braces = true
+            p.advance()
+            if p.current_type() != token::TokenType.RBRACE:
+                name := try p.expect(token::TokenType.IDENTIFIER)
+                binding := p.ast.add(name.span, ast::NodeKind.MATCH_BINDING{ast::MatchBinding{name = p.text(name.span), value}}[.p])
+                arm.binding = Some{binding}[.p]
+            end
+            try p.expect(token::TokenType.RBRACE)
+        end
+        colon := try p.expect(token::TokenType.COLON)
+        arm.span.start = opening.span.start
+        arm.span.stop = colon.span.stop
+        try p.expect(token::TokenType.NEWLINE)
+        arm.body = try parse_body_until_end_or_branch(p, "match arm")
+        statement.arms.push(arm)
+    end
+    if p.current_type() == token::TokenType.KWD_OTHER:
+        p.advance()
+        try p.expect(token::TokenType.COLON)
+        try p.expect(token::TokenType.NEWLINE)
+        body := try parse_body_until_end_or_branch(p, "match other")
+        statement.other_body = Some{body}[.p]
+        if p.current_type() != token::TokenType.KWD_END:
+            diag::error(p.diagnostics, "other must be the final match arm", "no case or other arm may follow other", Some{p.current().span})
+            fail("parse error")
+        end
+    end
+    close := try p.expect(token::TokenType.KWD_END)
+    span := source::Span{source_id = p.file.id, start = start.span.start, stop = close.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.MATCH{statement}[.p])
+end
+
+
+throws func parse_match(p: state::Parser) -> int:
+    start := p.advance()
+    value := try expressions::parse_expression(p)
+    try p.expect(token::TokenType.COLON)
+    try p.expect(token::TokenType.NEWLINE)
+    saved_depth := p.match_depth
+    p.match_depth += 1
+    try id := parse_match_body(p, start, value):
+        p.match_depth = saved_depth
+        return id
+    except:
+        p.match_depth = saved_depth
+        fail("parse error")
+    end
+end
+
+
+throws func parse_if(p: state::Parser) -> int:
+    start := try p.expect(token::TokenType.KWD_IF)
+    statement := ast::IfStmt{}[.p]
+    while true:
+        condition := try expressions::parse_expression(p)
+        try p.expect(token::TokenType.COLON)
+        try p.expect(token::TokenType.NEWLINE)
+        body := try parse_body_until_end_or_branch(p, "if")
+        statement.branches.push(ast::ConditionalBranch{condition, body}[.p])
+        if p.current_type() != token::TokenType.KWD_ELIF:
+            break
+        end
+        p.advance()
+    end
+    if p.current_type() == token::TokenType.KWD_ELSE:
+        p.advance()
+        try p.expect(token::TokenType.COLON)
+        try p.expect(token::TokenType.NEWLINE)
+        body := try parse_body_until_end_or_branch(p, "if")
+        statement.else_body = Some{body}[.p]
+    end
+
+    end_tok := try p.expect(token::TokenType.KWD_END)
+    span := source::Span{source_id = start.span.source_id, start = start.span.start, stop = end_tok.span.stop}@
+    return p.ast.add_if(span, statement)
+end
+
+
+throws func parse_while(p: state::Parser) -> int:
+    start := p.advance()
+    condition := try expressions::parse_expression(p)
+    try p.expect(token::TokenType.COLON)
+    try p.expect(token::TokenType.NEWLINE)
+    body := try parse_body_until_end_or_branch(p, "while")
+    close := try p.expect(token::TokenType.KWD_END)
+    span := source::Span{source_id = p.file.id, start = start.span.start, stop = close.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.WHILE{ast::WhileStmt{condition, body}}[.p])
+end
+
+
+throws func parse_for(p: state::Parser) -> int:
+    start := p.advance()
+    name := try p.expect(token::TokenType.IDENTIFIER)
+    variable := p.ast.add(name.span, ast::NodeKind.LOOP_VARIABLE{p.text(name.span)}[.p])
+    if p.current_type() == token::TokenType.KWD_IN or p.current_type() == token::TokenType.COMMA:
+        second: Option[int][.p]
+        if p.current_type() == token::TokenType.COMMA:
+            p.advance()
+            second_name := try p.expect(token::TokenType.IDENTIFIER)
+            second_variable := p.ast.add(second_name.span, ast::NodeKind.LOOP_VARIABLE{p.text(second_name.span)}[.p])
+            second = Some{second_variable}[.p]
+        end
+        try p.expect(token::TokenType.KWD_IN)
+        container := try expressions::parse_expression(p)
+        p.ast.nodes[variable].iteration_source = Some{container}[.p]
+        if second is Some:
+            p.ast.nodes[second?].iteration_source = Some{container}[.p]
+        end
+        try p.expect(token::TokenType.COLON)
+        try p.expect(token::TokenType.NEWLINE)
+        body := try parse_body_until_end_or_branch(p, "for")
+        close := try p.expect(token::TokenType.KWD_END)
+        span := source::Span{source_id = p.file.id, start = start.span.start, stop = close.span.stop}[.p]
+        return p.ast.add(span, ast::NodeKind.FOREACH{ast::ForeachStmt{first = variable, second, container, body}}[.p])
+    end
+    try p.expect(token::TokenType.ASSIGN)
+    first := try expressions::parse_expression(p)
+    try p.expect(token::TokenType.COMMA)
+    stop := try expressions::parse_expression(p)
+    try p.expect(token::TokenType.COLON)
+    try p.expect(token::TokenType.NEWLINE)
+    body := try parse_body_until_end_or_branch(p, "for")
+    close := try p.expect(token::TokenType.KWD_END)
+    span := source::Span{source_id = p.file.id, start = start.span.start, stop = close.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.FOR{ast::ForStmt{variable, start = first, stop, body}}[.p])
+end
+
+
+func compound_assignment_operator(kind: token::TokenType, r: Region) -> Option[ast::BinaryOp]:
+    match kind:
+    case OP_PLUS_EQ:
+        return Some{ast::BinaryOp.PLUS}[r]
+    case OP_MINUS_EQ:
+        return Some{ast::BinaryOp.MINUS}[r]
+    case OP_TIMES_EQ:
+        return Some{ast::BinaryOp.TIMES}[r]
+    case OP_DIV_EQ:
+        return Some{ast::BinaryOp.DIV}[r]
+    case OP_MOD_EQ:
+        return Some{ast::BinaryOp.MOD}[r]
+    other:
+        return None[r]
+    end
+end
+
+
+/// Append an assignment, retaining its compound marker and shared target ID.
+/// The binary RHS supplies arithmetic constraints; C emission captures complex
+/// targets once. Propagate malformed initializer or line-ending syntax.
+throws func finish_assignment(p: state::Parser, target: int) -> int:
+    operation := p.advance()
+    value := try parse_initializer(p, operation.type == token::TokenType.ASSIGN)
+    try p.expect(token::TokenType.NEWLINE)
+    compound := compound_assignment_operator(operation.type)
+    if compound is Some:
+        // Reuse checked arithmetic, retaining the compound operation so codegen
+        // can capture a field/element target instead of evaluating it twice.
+        value = p.ast.add_binary(target, value, compound?)
+    end
+    span := source::Span{source_id = p.file.id, start = p.ast.nodes[target].span.start, stop = p.ast.nodes[value].span.stop}[.p]
+    if p.ast.nodes[target].kind is INDEX:
+        p.ast.nodes[target].kind.INDEX.is_store = true
+    end
+    return p.ast.add(span, ast::NodeKind.ASSIGN{ast::AssignStmt{target, value, compound = compound is Some}})
+end
+
+
+throws func parse_assignment(p: state::Parser) -> int:
+    target := try expressions::parse_postfix(p)
+    assignment := try finish_assignment(p, target)
+    return assignment
+end
+
+
+throws func parse_statement(p: state::Parser) -> int:
+    if state::is_directive(p.current_type()):
+        directive := p.advance()
+        diag::error(p.diagnostics, "invalid directive placement", "native build directives must appear at module scope", Some{directive.span})
+        fail("parse error")
+    end
+    if p.current_type() == token::TokenType.EMBEDDED_C:
+        embedded := p.advance()
+        diag::error(p.diagnostics, "invalid embedded C placement", "embedded C blocks must appear at module scope", Some{embedded.span})
+        fail("parse error")
+    end
+    if p.current_type() == token::TokenType.KWD_TRY:
+        id := try parse_try(p)
+        return id
+    end
+    if p.current_type() == token::TokenType.KWD_MATCH:
+        id := try parse_match(p)
+        return id
+    end
+    if p.current_type() == token::TokenType.KWD_WHILE:
+        id := try parse_while(p)
+        return id
+    end
+    if p.current_type() == token::TokenType.KWD_FOR:
+        id := try parse_for(p)
+        return id
+    end
+    if p.current_type() == token::TokenType.KWD_BREAK or p.current_type() == token::TokenType.KWD_CONTINUE:
+        tok := p.advance()
+        try p.expect(token::TokenType.NEWLINE)
+        if tok.type == token::TokenType.KWD_BREAK:
+            return p.ast.add(tok.span, ast::NodeKind.BREAK{}[.p])
+        end
+        return p.ast.add(tok.span, ast::NodeKind.CONTINUE{}[.p])
+    end
+    // A stray branch delimiter must be consumed so statement recovery advances.
+    if p.current_type() == token::TokenType.KWD_EXCEPT:
+        unexpected := p.advance()
+        diag::error(p.diagnostics, "unexpected except", "except must belong to a try before its end", Some{unexpected.span})
+        fail("parse error")
+    end
+    if p.current_type() == token::TokenType.KWD_ELIF or p.current_type() == token::TokenType.KWD_ELSE:
+        unexpected := p.advance()
+        diag::error(p.diagnostics, "unexpected branch", "elif/else must belong to an if before its end", Some{unexpected.span})
+        fail("parse error")
+    end
+    if p.current_type() == token::TokenType.IDENTIFIER and p.pos + 1 < len(p.tokens):
+        following := p.tokens[p.pos + 1].type
+        if following == token::TokenType.ASSIGN or compound_assignment_operator(following) is Some:
+            assignment := try parse_assignment(p)
+            return assignment
+        end
+    end
+    if p.current_type() == token::TokenType.KWD_IF:
+        if_id := try parse_if(p)
+        return if_id
+    end
+    if p.current_type() == token::TokenType.KWD_RETURN:
+        return_id := try parse_return(p)
+        return return_id
+    end
+    if p.current_type() == token::TokenType.IDENTIFIER and p.pos + 1 < len(p.tokens) and (p.tokens[p.pos + 1].type == token::TokenType.DECLARE or p.tokens[p.pos + 1].type == token::TokenType.COLON):
+        declaration_id := try parse_declaration(p, false)
+        return declaration_id
+    end
+    expression := try expressions::parse_expression(p)
+    if p.current_type() == token::TokenType.ASSIGN or compound_assignment_operator(p.current_type()) is Some:
+        assignment := try finish_assignment(p, expression)
+        return assignment
+    end
+    if not (p.ast.nodes[expression].kind is CALL or p.ast.nodes[expression].kind is MUST):
+        diag::error(p.diagnostics, "invalid statement", "expected a function call", Some{p.ast.nodes[expression].span})
+        fail("parse error")
+    end
+    try p.expect(token::TokenType.NEWLINE)
+    return expression
+end
+
+

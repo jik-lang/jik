@@ -1,0 +1,24 @@
+use "shared"
+
+func primitive_foreign(foreign number, result: String) -> String:
+    println(number + 1)
+    return result
+end
+
+func invoke(box: shared::Box, values: Vec[int], counts: Dict[int]):
+    result := "result"
+    returned := shared::change(box, values, counts, result)
+    made := shared::make(box.text)
+    inferred := shared::inferred(box.text, result)
+    primitive_foreign(41, result)
+    shared::borrow(([box.text, result]), {"first": box.text})
+    println(returned, ":", made[0], ":", inferred)
+end
+
+func main():
+    box := shared::Box{text = "borrowed"}
+    values := [3]
+    counts := {"answer": 0}
+    invoke(box, values, counts)
+    println(box.count, ":", values[0], ":", values[1], ":", counts["answer"]?)
+end

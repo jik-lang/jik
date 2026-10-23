@@ -1,0 +1,23 @@
+// Must uses this function's signature, including its result and omitted Region,
+// rather than the unrelated builtin len signature.
+throws func len(foreign values: Vec[int], r: Region) -> String:
+    if values[0] == 0:
+        fail("receiver failure", 0)
+    end
+    return concat("custom-result", r)
+end
+
+
+func caller_owned(r: Region) -> String:
+    values := [1]
+    return values.len(r)!
+end
+
+
+func main():
+    values := [1]
+    result := values.len()!
+    assert(result == "custom-result")
+    assert(caller_owned() == "custom-result")
+    println("receiver-signature-ok")
+end

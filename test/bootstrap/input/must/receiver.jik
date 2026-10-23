@@ -1,0 +1,13 @@
+throws func len(values: Vec[int]) -> int:
+    values[0] += 1
+    return 99
+end
+
+
+func main():
+    values := [1, 2]
+    assert(values.len()! == 99)
+    assert((must values.len()) == 99)
+    assert(values[0] == 3)
+    println("receiver-must-ok")
+end

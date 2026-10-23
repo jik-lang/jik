@@ -1,0 +1,3 @@
+func make(r: Region) -> Vec[String]:
+    return ["module"]
+end

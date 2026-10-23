@@ -1,0 +1,205 @@
+use "library" as lib
+
+
+throws func plain(code: int) -> int:
+    if code != 42:
+        fail(code)
+    end
+    return 42
+end
+
+
+throws func no_region(code: int) -> int:
+    value := try plain(code)
+    return value
+end
+
+
+throws func escaped(code: int) -> int:
+    box := lib::Box{}
+    value := try relay(box, 3, code)
+    return value
+end
+
+
+throws func relay(box: lib::Box, depth: int, code: int) -> int:
+    scratch_values := [1, 2, 3]
+    if depth > 0:
+        nested_value := try relay(box, depth - 1, code)
+        return nested_value + len(scratch_values)
+    end
+    value := try box.step(code)
+    box.value += 1
+    return value
+end
+
+
+throws func set_value(box: lib::Box, code: int):
+    lib::destination(box).value = try lib::step(box, code)
+end
+
+
+throws func store(values: Vec[int], box: lib::Box, code: int):
+    values[0] = try lib::step(box, code)
+end
+
+
+throws func assign(box: lib::Box, code: int) -> int:
+    value := 7
+    value = try lib::step(box, code)
+    return value
+end
+
+
+throws func void_call(box: lib::Box, code: int):
+    try set_value(box, code)
+    box.value += 1
+end
+
+
+throws func discarded(box: lib::Box, code: int):
+    try lib::step(box, code)
+    box.value += 1
+end
+
+
+throws func returned(code: int, r: Region) -> String:
+    local := ["local"]
+    value := try lib::message(code, r)
+    assert(len(local) == 1)
+    return value
+end
+
+
+throws func optional(code: int, r: Region) -> Option[String]:
+    value := try lib::message(code, r)
+    return Some{value}[r]
+end
+
+
+throws func local_result(code: int) -> int:
+    value := try lib::message(code)
+    return len(value)
+end
+
+
+throws func in_handler(box: lib::Box, code: int):
+    try value := lib::step(box, 0):
+        box.value = value
+    except:
+        // This failure must leave the function, rather than reenter this except.
+        try void_call(box, code)
+    end
+end
+
+
+throws func loops(box: lib::Box, code: int) -> int:
+    for i = 0, 3:
+        values := [i]
+        if i == 1:
+            value := try lib::step(box, code)
+            assert(value == 42 and len(values) == 1)
+            continue
+        end
+    end
+    return 3
+end
+
+
+throws func in_success(box: lib::Box, code: int):
+    try value := lib::step(box, 42):
+        assert(value == 42)
+        try void_call(box, code)
+    except:
+        // Propagation from the success arm must not select this arm.
+        box.value = -100
+    end
+end
+
+
+func main():
+    box := lib::Box{value = 7}
+    try value := relay(box, 2, 42):
+        assert(value == 48 and box.value == 8 and box.calls == 1)
+    except:
+        assert(false)
+    end
+    try value := relay(box, 2, 0):
+        assert(false)
+    except:
+        assert(box.value == 8 and box.calls == 2)
+    end
+    try set_value(box, 0):
+        assert(false)
+    except:
+        assert(box.value == 8 and box.targets == 0)
+    end
+    try set_value(box, 42):
+        assert(box.value == 42 and box.targets == 1)
+    except:
+        assert(false)
+    end
+    values := [7]
+    try store(values, box, -7):
+        assert(false)
+    except:
+        assert(values[0] == 7)
+    end
+    try store(values, box, 42):
+        assert(values[0] == 42)
+    except:
+        assert(false)
+    end
+    try value := assign(box, 42):
+        assert(value == 42)
+    except:
+        assert(false)
+    end
+    try void_call(box, 42):
+        assert(box.value == 43)
+    except:
+        assert(false)
+    end
+    try discarded(box, 42):
+        assert(box.value == 44)
+    except:
+        assert(false)
+    end
+    try returned_value := returned(42):
+        assert(returned_value == "caller-owned")
+    except:
+        assert(false)
+    end
+    try result := optional(42):
+        assert(result is Some)
+        assert(result? == "caller-owned")
+    except:
+        assert(false)
+    end
+    try size := local_result(42):
+        assert(size == 12)
+    except:
+        assert(false)
+    end
+    try in_handler(box, 0):
+        assert(false)
+    except:
+        assert(box.value == 44)
+    end
+    try total := loops(box, 42):
+        assert(total == 3)
+    except:
+        assert(false)
+    end
+    try total := loops(box, 0):
+        assert(false)
+    except:
+        assert(box.value == 44)
+    end
+    try in_success(box, 0):
+        assert(false)
+    except:
+        assert(box.value == 44)
+    end
+    println("propagation-ok")
+end

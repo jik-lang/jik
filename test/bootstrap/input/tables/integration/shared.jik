@@ -1,0 +1,29 @@
+enum Key:
+    A
+    B
+end
+
+struct State:
+    count: int
+    values: Vec[int]
+end
+
+// Even this dependency's globals must wait for every importing table.
+initialized := initialize()
+alias := States[Key.A]
+
+table States[Key] -> State:
+    B: State{count=10}
+    A: State{count=1, values=[3]}
+end
+
+table Keys[Key] -> Key:
+    A: Key.B
+    B: Key.A
+end
+
+func initialize() -> int:
+    States[Key.A].count = States[Key.A].count + 1
+    push(States[Key.A].values, 5)
+    return States[Key.A].count
+end

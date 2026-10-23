@@ -1,0 +1,7 @@
+func bad():
+    number := 7
+    value := Some{1}[number]
+end
+func main():
+    return 42
+end

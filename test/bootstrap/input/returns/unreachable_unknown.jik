@@ -1,0 +1,7 @@
+func wrong():
+    return 1
+    value := missing
+end
+func main():
+    return 0
+end

@@ -1,0 +1,191 @@
+use "jik/testing" as test
+use "jik/bytes"
+use "jik/fs"
+use "jik/io"
+use "jik/path"
+use "jik/process"
+use "jik/string"
+use "jik/sys"
+
+use "../../src/bootstrap/version"
+use "../../src/bootstrap/cli/help" as help_command
+use "../../src/bootstrap/cli/run" as run_command
+use "language/utils"
+
+
+// Change only the test process environment; children inherit it. Restore each
+// original value before returning so subsequent compiler tests are unaffected.
+extern func bootstrap_test_environment as
+    set_environment(foreign name: String, foreign value: String, present: bool) -> int
+
+extern func bootstrap_test_make_executable as
+    make_executable(foreign path: String) -> int
+
+@embed{TEST_ENVIRONMENT}
+#ifndef _WIN32
+#include <sys/stat.h>
+extern int setenv(const char *, const char *, int);
+extern int unsetenv(const char *);
+#endif
+int bootstrap_test_environment(JikString *name, JikString *value, bool present)
+{
+#ifdef _WIN32
+    return _putenv_s(name->data, present ? value->data : "");
+#else
+    return present ? setenv(name->data, value->data, 1) : unsetenv(name->data);
+#endif
+}
+
+int bootstrap_test_make_executable(JikString *path)
+{
+#ifdef _WIN32
+    return 0;
+#else
+    return chmod(path->data, 0700);
+#endif
+}
+TEST_ENVIRONMENT
+
+
+func restore_environment(name: String, value: Option[String]):
+    if value is Some:
+        assert(set_environment(name, value?, true) == 0)
+    else:
+        assert(set_environment(name, "", false) == 0)
+    end
+end
+
+
+func capture(foreign tool: String, foreign args: Vec[String], r: Region) -> String:
+    result := must process::capture(tool, args)
+    if result.code != 0:
+        println(must bytes::to_string_ascii(result.err))
+    end
+    assert(result.code == 0)
+    assert(bytes::len(result.err) == 0)
+    text := must bytes::to_string_ascii(result.out)
+    return string::replace(text, "\r\n", "\n", r)
+end
+
+
+func check_failure(ts: test::TestSuite, foreign tool: String, foreign args: Vec[String], foreign expected: String):
+    result := must process::capture(tool, args)
+    test::suite_assert(ts, result.code != 0, site())
+    test::suite_assert(ts, bytes::len(result.out) == 0, site())
+    diagnostic := must bytes::to_string_ascii(result.err)
+    test::suite_assert(ts, string::contains(diagnostic, expected), site())
+    test::suite_assert(ts, not string::contains(diagnostic, "argparse:"), site())
+end
+
+
+func test_installation(ts: test::TestSuite):
+    tool := utils::compiler_command(_)
+    workspace := must run_command::make_workspace()
+    installed := path::join([workspace, "compiler with spaces.exe"])
+    must fs::copy_file(tool, installed)
+    // A byte copy does not preserve POSIX execute permission.
+    assert(make_executable(installed) == 0)
+    // Neither version nor env requires installed runtime/library/docs files.
+    test::suite_assert(ts, capture(installed, ["version"]) == concat("jik version: ", version::VERSION, "\n"), site())
+    old_cc := sys::getenv("JIK_CC")
+    old_pkg := sys::getenv("JIK_PKG_PATH")
+    old_path := sys::getenv("PATH")
+    missing := path::join([workspace, "missing compiler.exe"])
+    assert(set_environment("JIK_CC", missing, true) == 0)
+    assert(set_environment("JIK_PKG_PATH", "package directory with spaces", true) == 0)
+    text := capture(installed, ["env"])
+    test::suite_assert(ts, len(string::split(string::trim(text), "\n")) == 9, site())
+    test::suite_assert(ts, string::contains(text, concat("version=", version::VERSION, "\n")), site())
+    test::suite_assert(ts, string::contains(text, concat("platform=", sys::platform(), "\n")), site())
+    test::suite_assert(ts, string::contains(text, concat("root=", workspace, "\n")), site())
+    separator := "\\" if sys::platform() == "windows" else "/"
+    test::suite_assert(ts, string::contains(text, concat("jiklib=", path::join([workspace, "jiklib"]), separator, "\n")), site())
+    test::suite_assert(ts, string::contains(text, concat("core_include=", path::join([workspace, "support", "include"]), "\n")), site())
+    test::suite_assert(ts, string::contains(text, "pkg_path=package directory with spaces\n"), site())
+    test::suite_assert(ts, string::contains(text, concat("cc=", missing, "\ncc_target=unknown\ncc_profile=unknown\n")), site())
+    assert(set_environment("JIK_CC", "", false) == 0)
+    assert(set_environment("JIK_PKG_PATH", "", false) == 0)
+    assert(set_environment("PATH", workspace, true) == 0)
+    absent := capture(installed, ["env"])
+    test::suite_assert(ts, string::contains(absent, "pkg_path=\ncc=\ncc_target=unknown\ncc_profile=unknown\n"), site())
+    restore_environment("PATH", old_path)
+    restore_environment("JIK_CC", old_cc)
+    restore_environment("JIK_PKG_PATH", old_pkg)
+    check_failure(ts, installed, ["help", "topics"], "unknown help topic")
+    docs := path::join([workspace, "docs"])
+    must fs::mkdir(docs)
+    index := path::join([docs, "help-index.txt"])
+    must io::write_file(index, " # ignored\r\n\r\ninvalid row\n first , alias = topic.md \r\nmissing = absent.md\nversion = absent.md\n")
+    must io::write_file(path::join([docs, "topic.md"]), "Installed documentation.\n")
+    test::suite_assert(ts, capture(installed, ["help", "alias"]) == "Installed documentation.\n", site())
+    test::suite_assert(ts, capture(installed, ["help", "first"]) == "Installed documentation.\n", site())
+    test::suite_assert(ts, capture(installed, ["help", "topics"]) == "Documentation topics:\n\n    first , alias\n    missing\n    version\n", site())
+    test::suite_assert(ts, string::contains(capture(installed, ["help", "version"]), "jik version"), site())
+    check_failure(ts, installed, ["help", "missing"], "jik help topics")
+    check_failure(ts, installed, ["help", "Alias"], "unknown help topic")
+    must fs::remove_file(index)
+    must fs::remove_file(path::join([docs, "topic.md"]))
+    must fs::remove_dir(docs)
+    must run_command::cleanup(workspace)
+end
+
+
+func test_commands(ts: test::TestSuite):
+    tool := utils::compiler_command(_)
+    general := capture(tool, ["help"])
+    test::suite_assert(ts, string::contains(general, "version") and string::contains(general, "env"), site())
+    commands := ["tran", "check", "env", "build", "run", "help", "version"]
+    previous := -1
+    for command in commands:
+        position := string::find(general, concat("    ", command))
+        test::suite_assert(ts, position > previous, site())
+        previous = position
+        text := capture(tool, ["help", command])
+        test::suite_assert(ts, string::contains(text, concat("jik ", command)), site())
+        test::suite_assert(ts, not string::contains(text, "supported Jik features"), site())
+        if command == "help":
+            test::suite_assert(ts, string::starts_with(text, "Show help for a command or documentation topic."), site())
+            test::suite_assert(ts, string::contains(text, "jik help topics"), site())
+        elif command == "tran":
+            test::suite_assert(ts, string::contains(text, "core_include from `jik env`"), site())
+            test::suite_assert(ts, string::contains(text, "Fails if clang-format is not available."), site())
+        elif command == "run":
+            test::suite_assert(ts, string::contains(text, "temporary directory") and string::contains(text, "copied files"), site())
+        end
+    end
+    no_argument_commands := ["version", "env"]
+    for command in no_argument_commands:
+        check_failure(ts, tool, [command, "extra"], "unexpected argument: extra")
+        check_failure(ts, tool, [command, "--out", "file"], "unknown option")
+    end
+    check_failure(ts, tool, ["help", "topics", "extra"], "unexpected argument: extra")
+    check_failure(ts, tool, ["help", "no-such-topic"], "jik help topics")
+    // Every shipped alias resolves to its exact installed Markdown contents.
+    absolute_tool := copy(tool) if path::is_absolute(tool) else path::normalize(path::join([sys::cwd(), tool]))
+    root := path::dirname(absolute_tool)
+    docs := path::join([root, "docs"])
+    introduction := string::replace(must io::read_file(path::join([docs, "overview/01-introduction.md"])), "\r\n", "\n")
+    test::suite_assert(ts, capture(tool, ["help", "intro"]) == introduction, site())
+    index := must io::read_file(path::join([docs, "help-index.txt"]))
+    for line in string::split(index, "\n"):
+        clean := string::trim(line)
+        equals := string::find(clean, "=")
+        if len(clean) == 0 or clean[0] == '#' or equals < 0:
+            continue
+        end
+        keys := must string::slice(clean, 0, equals)
+        relative := string::trim(must string::slice(clean, equals + 1, len(clean)))
+        expected := string::replace(must io::read_file(path::join([docs, relative])), "\r\n", "\n")
+        for key in string::split(keys, ","):
+            actual := must help_command::documentation(docs, string::trim(key))
+            test::suite_assert(ts, string::replace(actual, "\r\n", "\n") == expected, site())
+        end
+    end
+end
+
+
+func run_tests(ts: test::TestSuite):
+    println("[test] test_help_env")
+    test_commands(ts)
+    test_installation(ts)
+end

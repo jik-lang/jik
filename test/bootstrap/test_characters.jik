@@ -1,0 +1,111 @@
+use "jik/testing" as test
+use "jik/string"
+
+use "support"
+use "test_strings"
+use "../../src/bootstrap/source"
+use "../../src/bootstrap/diag"
+use "../../src/bootstrap/lexer/lexer"
+use "../../src/bootstrap/lexer/token"
+use "../../src/bootstrap/lexer/string_literal"
+use "../../src/bootstrap/parser/format"
+use "../../src/bootstrap/language/types"
+use "../../src/bootstrap/semantic/typing/typecheck"
+
+
+func test_tokens(ts) -> void:
+    spellings := ["'a'", "' '", "'\\n'", "'\\t'", "'\\r'", "'\\0'", "'\\x00'", "'\\x7f'", "'\\x80'", "'\\xFF'", "'\\\\'", "'\\\''", "'\\\"'", "'''", "'\n'", "'\r'"]
+    expected := [97, 32, 10, 9, 13, 0, 0, 127, 128, 255, 92, 39, 34, 39, 10, 13]
+    for index, spelling in spellings:
+        file := source::SourceFile{id = 7, text = concat(" ", spelling, "+")}
+        diagnostics := diag::Diagnostics{}[.file]
+        scanned := lexer::tokenize(file, diagnostics)
+        // Adjacent punctuation must remain a separate token.
+        test::suite_assert(ts, diagnostics.error_count == 0, site())
+        test::suite_assert(ts, len(scanned) == 3, site())
+        if len(scanned) != 3:
+            continue
+        end
+        test::suite_assert(ts, scanned[0].type == token::TokenType.CHAR, site())
+        test::suite_assert(ts, string_literal::byte_value(scanned[0].character) == expected[index], site())
+        test::suite_assert(ts, scanned[0].span.source_id == 7 and scanned[0].span.start == 1 and scanned[0].span.stop == len(spelling) + 1, site())
+        test::suite_assert(ts, scanned[1].span.start == len(spelling) + 1, site())
+        test::suite_assert(ts, scanned[2].type == token::TokenType.EOF, site())
+    end
+end
+
+
+func test_types_and_ast(ts) -> void:
+    comp := test_strings::analyze("func identity(value):\n    return value\nend\nfunc main():\n    value: char = identity('a')\n    values := ['\\0', '\\xFF']\n    result := ('a' == value and '\\0' != '\\xFF') if true else false\nend\n")
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    support::check_signature(ts, comp, "identity", "func(char) -> char")
+    mod := comp.modules[0]
+    count := 0
+    for node in mod.ast.nodes:
+        if node.kind is CHAR_LITERAL:
+            count += 1
+            test::suite_assert(ts, node.inferred_type? == types::atom(mod.type_store, types::Atom.CHAR), site())
+        end
+    end
+    test::suite_assert(ts, count == 6, site())
+    text := format::format(mod.ast)
+    test::suite_assert(ts, string::find(text, "CHAR #") >= 0, site())
+    for node in mod.ast.nodes:
+        if node.kind is CHAR_LITERAL:
+            node.inferred_type = Some{types::atom(mod.type_store, types::Atom.INT)}[.node]
+            break
+        end
+    end
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count > 0, site())
+end
+
+
+func test_all_hex_bytes(ts) -> void:
+    digits := "0123456789ABCDEF"
+    for value = 0, 256:
+        hi := must string::slice(digits, value / 16, value / 16 + 1)
+        lo := must string::slice(digits, value % 16, value % 16 + 1)
+        file := source::SourceFile{text = concat("'\\x", hi, lo, "'")}
+        diagnostics := diag::Diagnostics{}[.file]
+        scanned := lexer::tokenize(file, diagnostics)
+        test::suite_assert(ts, diagnostics.error_count == 0 and len(scanned) == 2, site())
+        test::suite_assert(ts, scanned[0].type == token::TokenType.CHAR and string_literal::byte_value(scanned[0].character) == value, site())
+    end
+end
+
+
+func test_invalid_tokens_and_recovery(ts) -> void:
+    invalid := ["''", "'ab'", "'\\q'", "'\\x'", "'\\x1'", "'\\xGG'", "'\\x001'", "'\\00'", "'", "'\\", "'a", "'Ž'"]
+    for spelling in invalid:
+        file := source::SourceFile{text = concat(spelling, "\n42")}
+        diagnostics := diag::Diagnostics{}[.file]
+        scanned := lexer::tokenize(file, diagnostics)
+        test::suite_assert(ts, diagnostics.error_count == 1, site())
+        test::suite_assert(ts, len(scanned) == 4, site())
+        if len(scanned) == 4:
+            test::suite_assert(ts, scanned[0].type == token::TokenType.ERROR, site())
+            test::suite_assert(ts, scanned[1].type == token::TokenType.NEWLINE, site())
+            test::suite_assert(ts, scanned[2].type == token::TokenType.INTEGER, site())
+        end
+    end
+    parsed := support::parse_source("func broken():\n    value := '\\q'\n    return 1\nend\nfunc valid():\n    return 'z'\nend\n")
+    test::suite_assert(ts, parsed.diagnostics.error_count == 1, site())
+    root := parsed.ast.get_root_module()
+    test::suite_assert(ts, len(root.declarations) == 2, site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_characters")
+    test_tokens(ts)
+    test_all_hex_bytes(ts)
+    test_types_and_ast(ts)
+    test_invalid_tokens_and_recovery(ts)
+    test_strings::check_error(ts, "func bad():\n    value := 'a' + 'b'\nend\n", "invalid numeric operands")
+    test_strings::check_error(ts, "func bad():\n    value := 'a' == 97\nend\n", "invalid numeric operands")
+    test_strings::check_error(ts, "func bad():\n    value := -'a'\nend\n", "invalid unary operand")
+end

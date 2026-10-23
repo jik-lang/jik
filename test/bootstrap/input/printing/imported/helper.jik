@@ -1,0 +1,3 @@
+func show(values: Vec[String]):
+    println("imported:", values)
+end

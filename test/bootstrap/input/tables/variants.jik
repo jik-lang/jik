@@ -1,0 +1,27 @@
+variant Token:
+    TEXT: String
+    NUMBER: int
+    EOF
+end
+
+table Names[Token] -> String:
+    EOF: "eof"
+    NUMBER: "number"
+    TEXT: "text"
+end
+
+func logged(value: Token, calls: Vec[int]) -> Token:
+    calls[0] = calls[0] + 1
+    return value
+end
+
+func main():
+    first := Token.TEXT{"first"}
+    second := Token.TEXT{"second"}
+    number := Token.NUMBER{42}
+    eof := Token.EOF{}
+    calls := [0]
+    println(Names[first], ":", Names[second], ":", Names[number], ":", Names[eof])
+    name := Names[logged(number, calls)]
+    println(name, ":", calls[0])
+end

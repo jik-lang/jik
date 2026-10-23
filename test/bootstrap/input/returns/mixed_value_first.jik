@@ -1,0 +1,9 @@
+func mixed(flag: bool):
+    if flag:
+        return 1
+    end
+    return
+end
+func main():
+    return 0
+end

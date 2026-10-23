@@ -1,0 +1,6 @@
+use "./a"
+
+
+func value():
+    return 2
+end

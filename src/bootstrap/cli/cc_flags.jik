@@ -1,0 +1,88 @@
+//! Split user C compiler flags using the selected platform quoting rules.
+
+use "jik/strbuf"
+
+
+// Split the option's single string into compiler arguments without a shell.
+// Windows preserves path backslashes; POSIX additionally supports single quotes
+// and backslash escapes. Expansion and shell operators are not evaluated.
+throws func parse(foreign text: String, windows: bool, r: Region) -> Vec[String]:
+    args: Vec[String][r]
+    word := strbuf::new("")
+    quote: char = '\0'
+    started := false
+    index := 0
+    while index < len(text):
+        ch := text[index]
+        if quote == '\0' and (ch == ' ' or ch == '\t' or ch == '\r' or ch == '\n'):
+            if started:
+                args.push(strbuf::to_string(word, r))
+                strbuf::clear(word)
+                started = false
+            end
+            index += 1
+            continue
+        end
+        started = true
+        if windows and ch == '\\':
+            count := 0
+            while index < len(text) and text[index] == '\\':
+                count += 1
+                index += 1
+            end
+            if index < len(text) and text[index] == '"':
+                for slash = 0, count / 2:
+                    strbuf::append_char(word, '\\')
+                end
+                if count % 2 == 1:
+                    strbuf::append_char(word, '"')
+                elif quote == '"' and index + 1 < len(text) and text[index + 1] == '"':
+                    strbuf::append_char(word, '"')
+                    index += 1
+                else:
+                    quote = '"' if quote == '\0' else '\0'
+                end
+                index += 1
+            else:
+                for slash = 0, count:
+                    strbuf::append_char(word, '\\')
+                end
+            end
+            continue
+        end
+        if not windows and ch == '\\' and quote != '\'':
+            if index + 1 >= len(text):
+                fail("--ccflags: trailing escape")
+            end
+            next := text[index + 1]
+            if quote == '"' and next != '"' and next != '\\' and next != '$' and next != '`' and next != '\n':
+                strbuf::append_char(word, ch)
+                index += 1
+            else:
+                if next != '\n':
+                    strbuf::append_char(word, next)
+                end
+                index += 2
+            end
+            continue
+        end
+        if windows and ch == '"' and quote == '"' and index + 1 < len(text) and text[index + 1] == '"':
+            strbuf::append_char(word, '"')
+            index += 2
+            continue
+        end
+        if (ch == '"' or (not windows and ch == '\'')) and (quote == '\0' or quote == ch):
+            quote = ch if quote == '\0' else '\0'
+        else:
+            strbuf::append_char(word, ch)
+        end
+        index += 1
+    end
+    if quote != '\0':
+        fail("--ccflags: unterminated quote")
+    end
+    if started:
+        args.push(strbuf::to_string(word, r))
+    end
+    return args
+end

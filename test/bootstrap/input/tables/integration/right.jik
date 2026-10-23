@@ -1,0 +1,13 @@
+use "shared" as base
+
+global := Aliases[base::Key.A]
+
+table Aliases[base::Key] -> base::State:
+    A: base::States[base::Key.A]
+    B: base::States[base::Key.B]
+end
+
+table Snapshots[base::Key] -> int:
+    A: Aliases[base::Key.A].count
+    B: Aliases[base::Key.B].count
+end

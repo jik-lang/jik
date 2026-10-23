@@ -1,0 +1,12 @@
+use "helper"
+
+func main():
+    values := helper::make()
+    missing: Dict[helper::Item]
+    if helper::lookup(values)?.value != 42 or missing["item"] is Some:
+        return 1
+    end
+    values["item"]?.value = 7
+    println(helper::lookup(values)?.value)
+    return 42
+end

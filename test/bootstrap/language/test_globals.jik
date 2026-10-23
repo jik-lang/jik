@@ -1,0 +1,63 @@
+use "jik/testing" as test
+use "jik/sys" as sys
+
+use "support/globals"
+
+
+x := 3
+y := "foo"
+lst := [2 of 0]
+platform := sys::platform()
+prog := "a" if sys::platform() == "windows" else "b"
+labels := [1 of ""]
+label := "updated"
+joined := concat("global", " value")
+
+
+struct GlobalState:
+    count: int
+end
+
+
+state := GlobalState{count = 0}
+
+func foo(ts, y):
+    test::suite_assert(ts, y != "foo", site())
+end
+
+
+func update_globals(items: Vec[String], text: String, s: GlobalState):
+    push(items, text)
+    s.count = 1
+end
+
+func test_globals_01(ts):
+    test::suite_assert(ts, x == 3, site())
+    test::suite_assert(ts, y == "foo", site())
+    test::suite_assert(ts, joined == "global value", site())
+    foo(ts, "abc")
+    foo(ts, "")
+    test::suite_assert(ts, globals::x == 0, site())
+    test::suite_assert(ts, globals::VERSION == "1.2.3", site())
+    test::suite_assert(ts, len(lst) == 2, site())
+    test::suite_assert(ts, platform == sys::platform(_), site())
+    if sys::platform(_) == "windows":
+        test::suite_assert(ts, prog == "a", site())
+    else:
+        test::suite_assert(ts, prog == "b", site())
+    end
+    update_globals(labels, label, state)
+    labels[0] = label
+    test::suite_assert(ts, len(labels) == 2, site())
+    test::suite_assert(ts, labels[0] == "updated", site())
+    test::suite_assert(ts, labels[1] == "updated", site())
+    test::suite_assert(ts, state.count == 1, site())
+    clear(labels)
+    test::suite_assert(ts, len(labels) == 0, site())
+end
+
+
+func run_tests(ts):
+    println("[test] language/test_globals")
+    test_globals_01(ts)
+end

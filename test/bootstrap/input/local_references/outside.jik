@@ -1,0 +1,6 @@
+func main():
+    if 1:
+        inner := 2
+    end
+    return inner
+end

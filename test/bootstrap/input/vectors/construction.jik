@@ -1,0 +1,24 @@
+func main():
+    empty: Vec[int]
+    nested_empty: Vec[Vec[String]]
+    characters: Vec[char]
+    integers := [10, 20, 30]
+    flags := [false, true]
+    doubles := [1.5, 2.5]
+    words := ["first", "second"]
+    repeated := [3 of 7]
+    zero := [0 of 9]
+    if len(empty) != 0 or len(nested_empty) != 0 or len(zero) != 0 or len(characters) != 0:
+        return 1
+    end
+    if integers[1] != 20 or not flags[1] or doubles[0] != 1.5:
+        return 2
+    end
+    if words[1] != "second" or len(repeated) != 3 or repeated[2] != 7:
+        return 3
+    end
+    if len(words[0]) != 5:
+        return 4
+    end
+    return 42
+end

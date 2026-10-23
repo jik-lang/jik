@@ -1,0 +1,42 @@
+struct Record:
+    text: String
+end
+
+variant Child:
+    TEXT: String
+    EOF
+end
+
+variant Data:
+    CHILD: Child
+    TEXT: String
+    NUMS: Vec[int]
+    MAP: Dict[int]
+    MAYBE: Option[Child]
+    RECORD: Record
+    EOF
+end
+
+struct Holder:
+    value: Data
+end
+
+func main():
+    value: Data
+    println(value)
+    value = Data.TEXT{}
+    println(value)
+    value = Data.NUMS{}
+    println(value)
+    value = Data.MAP{}
+    println(value)
+    value = Data.MAYBE{}
+    println(value)
+    value = Data.RECORD{}
+    println(value)
+    holder := Holder{}
+    println(holder.value)
+    values: Vec[Data]
+    push(values, Data.CHILD{Child.TEXT{"nested"}})
+    println(values)
+end

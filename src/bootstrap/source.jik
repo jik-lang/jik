@@ -1,28 +1,34 @@
+//! Load and deduplicate source files with stable IDs and byte-based line indexes.
+
 use "jik/io"
 use "jik/path"
+use "jik/string"
 
 
-FILE_EXTENSION_JIK := ".jik"
-
-
+// Loaded source text and its line index, retained by SourceManager.
 struct SourceFile:
-    id: int
-    path: String
+    id: int    // Stable zero-based index in SourceManager.sources and Program.modules.
+    path: String    // Normalized filesystem path used to deduplicate sources.
     text: String
+    // Byte offsets in text; element 0 is 0, later entries follow newline bytes.
     line_starts: Vec[int]
+    origin: Origin    // Import root classification; constrains relative imports from this file.
 end
 
 
+variant Origin:
+    LOCAL
+    STDLIB: String
+    PACKAGE: String
+end
+
+
+// Compilation-wide source registry; source IDs remain stable as imports are discovered.
 struct SourceManager:
-    sources: Vec[SourceFile]
-    source_id_by_path: Dict[int]
-end
-
-
-func construct_full_path(sm: SourceManager, foreign path: String, foreign src: SourceFile) -> String:
-    base_dir := path::dirname(src.path, .sm)
-    full_path := path::join([base_dir, path], .sm)
-    return path::normalize(concat(full_path, FILE_EXTENSION_JIK, .sm), .sm)
+    sources: Vec[SourceFile]    // Discovery order; each SourceFile.id equals its index here.
+    source_id_by_path: Dict[int]    // Normalized filesystem path -> index in sources.
+    stdlib_path: String    // Installation's jiklib directory, supplied by compiler construction.
+    package_path: Option[String]    // Package repository root from JIK_PKG_PATH; None when unset.
 end
 
 
@@ -38,13 +44,26 @@ func _add_line_starts(sf: SourceFile) -> void:
 end
 
 
+/// Return a stable source ID, reusing a normalized path already loaded.
+/// Keep text and line indexes in the manager region; pass source I/O errors to the caller.
 throws func add_source(sm: SourceManager, foreign path: String) -> int:
     normalized := path::normalize(path, .sm)
     src_id := sm.source_id_by_path[normalized]
     if src_id is Some:
         return src_id?
     end
-    text := try io::read_file(path, .sm)    
+    text: String[.sm]
+    try loaded := io::read_file(normalized, .sm):
+        text = loaded
+    except:
+        msg := error_msg()
+        code := error_code()
+        prefix := "io::open: "
+        if string::starts_with(msg, prefix):
+            msg = must string::slice(msg, len(prefix), len(msg))
+        end
+        fail(concat("could not read source: ", normalized, ": ", msg), code)
+    end
     num_sources := len(sm.sources)
     sm.source_id_by_path[normalized] = num_sources
     sf := SourceFile{
@@ -58,10 +77,11 @@ throws func add_source(sm: SourceManager, foreign path: String) -> int:
 end
 
 
+// Source range using zero-based byte offsets and an exclusive end.
 struct Span:
-    source_id: int
-    start: int
-    stop: int
+    source_id: int    // Index in SourceManager.sources.
+    start: int    // Inclusive offset in the source file text.
+    stop: int    // Exclusive offset in the same text; equals start for an empty range.
 end
 
 

@@ -1,0 +1,9 @@
+use "shared"
+
+func main():
+    shared::box.value += 2
+    shared::values[0] *= 2
+    shared::Boxes[shared::Key.A].value -= 2
+    shared::Vectors[shared::Key.A][0] /= 2
+    println(shared::box.value, ":", shared::values[0], ":", shared::Boxes[shared::Key.A].value, ":", shared::Vectors[shared::Key.A][0])
+end

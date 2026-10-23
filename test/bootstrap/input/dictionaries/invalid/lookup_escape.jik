@@ -1,0 +1,7 @@
+func bad(r: Region) -> Option[int]:
+    values := {"key": 1}
+    return values["key"]
+end
+func main():
+    return 42
+end

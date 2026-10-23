@@ -1,0 +1,161 @@
+use "jik/string"
+use "jik/testing" as test
+
+use "support"
+use "test_strings"
+use "../../src/bootstrap/compiler"
+use "../../src/bootstrap/language/types"
+use "../../src/bootstrap/language/region_source"
+use "../../src/bootstrap/parser/format"
+
+
+func test_key_order_and_lookup(ts) -> void:
+    text := "enum Key:\n    ZEBRA\n    APPLE\nend\ntable Values[Key] -> int:\n    APPLE: 2\n    ZEBRA: 1\nend\nfunc read(key: Key):\n    return Values[key]\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    key_type := mod.ast.nodes[root.declarations[0]].kind.TYPE_DECL.resolved_type?
+    declaration := mod.ast.nodes[root.declarations[1]].kind.TABLE_DECL
+    test::suite_assert(ts, declaration.key_type? == key_type, site())
+    test::suite_assert(ts, declaration.value_type? == types::atom(mod.type_store, types::Atom.INT), site())
+    test::suite_assert(ts, declaration.entries[0].member == 1 and declaration.entries[1].member == 0, site())
+    test::suite_assert(ts, declaration.ordered_values[0] == declaration.entries[1].value, site())
+    test::suite_assert(ts, declaration.ordered_values[1] == declaration.entries[0].value, site())
+    count := 0
+    for node in mod.ast.nodes:
+        if node.kind is TABLE_LOOKUP:
+            value := node.kind.TABLE_LOOKUP
+            test::suite_assert(ts, value.target.source_id == 0 and value.target.origin == root.declarations[1], site())
+            test::suite_assert(ts, mod.ast.nodes[value.key].inferred_type? == key_type, site())
+            test::suite_assert(ts, node.inferred_type? == declaration.value_type?, site())
+            test::suite_assert(ts, must string::slice(text, node.span.start, node.span.stop) == "Values[key]", site())
+            count += 1
+        end
+    end
+    test::suite_assert(ts, count == 1, site())
+    rendered := format::format(mod.ast)
+    test::suite_assert(ts, string::find(rendered, "TABLE Values\n") >= 0, site())
+    test::suite_assert(ts, string::find(rendered, "TABLE_LOOKUP\n") >= 0, site())
+end
+
+
+func test_composite_regions(ts) -> void:
+    text := "enum Key:\n    A\nend\nstruct Box:\n    text: String\n    values: Vec[Option[int]]\nend\ntable Boxes[Key] -> Box:\n    A: Box{text=\"global\", values=[Some{1}]}\nend\nfunc read() -> int:\n    return len(Boxes[Key.A].values)\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    declaration := mod.ast.nodes[root.declarations[2]].kind.TABLE_DECL
+    allocated := 0
+    for id in declaration.initializer_nodes:
+        node := mod.ast.nodes[id]
+        if types::is_allocated(mod.type_store, node.inferred_type?):
+            test::suite_assert(ts, node.region_source.kind == region_source::Kind.GLOBAL, site())
+            test::suite_assert(ts, node.allocation_target is None, site())
+            allocated += 1
+        end
+    end
+    test::suite_assert(ts, allocated >= 4, site())
+    for node in mod.ast.nodes:
+        if node.kind is TABLE_LOOKUP:
+            test::suite_assert(ts, node.region_source.kind == region_source::Kind.GLOBAL, site())
+        end
+    end
+    test::suite_assert(ts, mod.ast.nodes[root.declarations[3]].kind.FUNCTION_DECL.is_region_safe, site())
+end
+
+
+func test_diagnostics(ts) -> void:
+    prefix := "enum Key:\n    A\n    B\nend\n"
+    test_strings::check_error(ts, concat(prefix, "table Values[Key] -> int:\n    A: 1\nend\n"), "missing table entry")
+    test_strings::check_error(ts, concat(prefix, "table Values[Key] -> int:\n    A: 1\n    A: 2\n    B: 3\nend\n"), "duplicate table entry")
+    test_strings::check_error(ts, concat(prefix, "table Values[Key] -> int:\n    A: 1\n    B: 2\n    C: 3\nend\n"), "unknown table key")
+    test_strings::check_error(ts, "table Values[int] -> int:\nend\n", "invalid table key type")
+    test_strings::check_error(ts, concat(prefix, "table Values[Key] -> void:\n    A: 1\n    B: 2\nend\n"), "invalid table value type")
+    test_strings::check_error(ts, concat(prefix, "table Values[Key] -> int:\n    A: \"text\"\n    B: 2\nend\n"), "type inference conflict")
+    test_strings::check_error(ts, concat(prefix, "table Values[Key] -> int:\n    A: 1\n    B: 2\nend\nfunc bad():\n    value := Values[0]\nend\n"), "type inference conflict")
+    test_strings::check_error(ts, concat(prefix, "table Values[Key] -> int:\n    A: 1\n    B: 2\nend\nfunc bad():\n    Values[Key.A] = 3\nend\n"), "table entries are immutable")
+    test_strings::check_error(ts, concat(prefix, "table Values[Key] -> int:\n    A: Values[Key.B]\n    B: 2\nend\n"), "table read before initialization")
+    test_strings::check_error(ts, concat(prefix, "table Values[Key] -> int:\n    A: len(\"text\")\n    B: 2\nend\n"), "table entries cannot call functions")
+end
+
+
+func test_spans_and_recovery(ts) -> void:
+    text := "table Names[base::Key] -> String:\n    A: \"first\"\nend\nfunc main():\n    name := base::Names[key]\nend\n"
+    parsed := support::parse_source(text, _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+    if parsed.diagnostics.error_count > 0:
+        return
+    end
+    root := parsed.ast.get_root_module()
+    declaration := parsed.ast.nodes[root.declarations[0]]
+    test::suite_assert(ts, must string::slice(text, declaration.span.start, declaration.span.stop) == "table Names[base::Key] -> String:\n    A: \"first\"\nend", site())
+    entry := declaration.kind.TABLE_DECL.entries[0]
+    test::suite_assert(ts, must string::slice(text, entry.span.start, entry.span.stop) == "A", site())
+    recovered := support::parse_source("table Broken[Key] -> int:\n    A: 1\nfunc valid():\n    return 0\nend\n", _)
+    test::suite_assert(ts, recovered.diagnostics.error_count == 1, site())
+    recovered_root := recovered.ast.get_root_module()
+    test::suite_assert(ts, len(recovered_root.declarations) == 1, site())
+    if len(recovered_root.declarations) == 1:
+        test::suite_assert(ts, recovered.ast.nodes[recovered_root.declarations[0]].kind.FUNCTION_DECL.name == "valid", site())
+    end
+end
+
+
+func test_global_integration(ts) -> void:
+    comp := must compiler::new(compiler::Config{input_path="test/bootstrap/input/tables/integration/main.jik"})
+    must compiler::translate(comp)
+    test::suite_assert(ts, comp.program.diagnostics.error_count == 0, site())
+    test::suite_assert(ts, len(comp.program.modules) == 4, site())
+    expected_order := 0
+    imported := 0
+    for source_id in comp.program.dependency_order:
+        mod := comp.program.modules[source_id]
+        for id in mod.ast.get_root_module().declarations:
+            node := mod.ast.nodes[id]
+            if node.kind is TABLE_DECL:
+                declaration := node.kind.TABLE_DECL
+                test::suite_assert(ts, declaration.initialization_order == expected_order, site())
+                expected_order += 1
+                for value_id in declaration.initializer_nodes:
+                    value := mod.ast.nodes[value_id]
+                    if types::is_allocated(mod.type_store, value.inferred_type?):
+                        test::suite_assert(ts, value.region_source.kind == region_source::Kind.GLOBAL, site())
+                        test::suite_assert(ts, value.allocation_target is None, site())
+                    end
+                    if value.kind is TABLE_LOOKUP:
+                        target := value.kind.TABLE_LOOKUP.target
+                        previous := comp.program.modules[target.source_id].ast.nodes[target.origin].kind.TABLE_DECL
+                        test::suite_assert(ts, previous.initialization_order < declaration.initialization_order, site())
+                        if target.source_id != source_id:
+                            imported += 1
+                        end
+                    end
+                end
+            elif node.kind is GLOBAL_DECL and types::is_allocated(mod.type_store, node.inferred_type?):
+                test::suite_assert(ts, node.region_source.kind == region_source::Kind.GLOBAL, site())
+                value := mod.ast.nodes[node.kind.GLOBAL_DECL.initializer]
+                test::suite_assert(ts, value.region_source.kind == region_source::Kind.GLOBAL, site())
+            end
+        end
+    end
+    test::suite_assert(ts, expected_order == 8, site())
+    test::suite_assert(ts, imported == 11, site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_tables")
+    test_key_order_and_lookup(ts)
+    test_composite_regions(ts)
+    test_diagnostics(ts)
+    test_spans_and_recovery(ts)
+    test_global_integration(ts)
+end

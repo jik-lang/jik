@@ -1,0 +1,9 @@
+global_text := concat("global", " init")
+
+func main(args):
+    local := concat("local", " allocation")
+    assert(global_text == "global init" and local == "local allocation")
+    if len(args) > 1:
+        return 23
+    end
+end

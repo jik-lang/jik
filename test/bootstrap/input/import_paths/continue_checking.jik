@@ -1,0 +1,8 @@
+use "helper" as first
+use "./helper" as independent
+use "../local_imports/shared" as independent
+
+
+func main():
+    return 0
+end

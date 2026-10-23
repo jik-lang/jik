@@ -1,0 +1,6 @@
+use "library" as lib
+
+func main():
+    must lib::void_result(-17)
+    println("unreachable")
+end

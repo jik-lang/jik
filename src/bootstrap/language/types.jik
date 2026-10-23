@@ -1,0 +1,416 @@
+//! Store each type once and describe its members, containers, and function signature.
+
+use "jik/strbuf"
+use "jik/string"
+
+
+enum Atom:
+    INT
+    DOUBLE
+    BOOL
+    CHAR
+    STRING
+    VOID
+    REGION
+    SITE
+end
+
+
+table AtomNames[Atom] -> String:
+    INT: "int"
+    DOUBLE: "double"
+    BOOL: "bool"
+    CHAR: "char"
+    STRING: "String"
+    VOID: "void"
+    REGION: "Region"
+    SITE: "Site"
+end
+
+
+enum Container:
+    VECTOR
+    DICTIONARY
+    OPTION
+end
+
+
+table ContainerNames[Container] -> String:
+    VECTOR: "Vec"
+    DICTIONARY: "Dict"
+    OPTION: "Option"
+end
+
+
+enum NamedKind:
+    STRUCT
+    ENUM
+    VARIANT
+    EXTERN_STRUCT
+end
+
+
+// Declaration and members of a named type in the shared type store.
+struct NamedType:
+    kind: NamedKind
+    source_id: int    // Source ID of the declaring module; indexes the module collection.
+    declaration_id: int    // TYPE_DECL node ID in that module's Ast.nodes.
+    name: String
+    // Validated external initializer, if one is registered.
+    initializer: Option[ExternInitializer]
+    // Type IDs in this Store, aligned with member_names for structs/variants;
+    // void marks a variant member with no value.
+    // Enums have names without payload types.
+    member_types: Vec[int]
+    member_names: Vec[String]
+end
+
+
+// Cross-module reference to an external type initializer function.
+struct ExternInitializer:
+    source_id: int    // Source ID of the declaring module; indexes the module collection.
+    declaration_id: int    // FUNCTION_DECL node ID in that module's Ast.nodes.
+end
+
+
+// A vector, dictionary, or option type and its element type.
+struct ContainerType:
+    kind: Container
+    element_type: int    // Type ID in the same Store; dictionaries always have String keys.
+end
+
+
+// Function parameter and return types; names and bodies stay in the AST.
+struct FunctionType:
+    is_throwing: bool
+    parameter_types: Vec[int]    // Type IDs in the same Store, in call argument order.
+    return_type: int    // Type ID in the same Store, including VOID for no result.
+end
+
+
+variant TypeKind:
+    ATOM: Atom
+    CONTAINER: ContainerType
+    NAMED: NamedType
+    FUNCTION: FunctionType
+end
+
+
+// One type entry, identified by its index in Store.types.
+struct Type:
+    kind: TypeKind
+end
+
+
+// Type store shared by all modules in one compilation.
+// Equal types use the same ID within one store. An unknown type is recorded
+// as None, not as a type entry shared by unrelated unknowns.
+struct Store:
+    types: Vec[Type]    // Unique type entries; a type ID is a zero-based index in this vector.
+end
+
+
+func valid_id(store: Store, id: int) -> bool:
+    return id >= 0 and id < len(store.types)
+end
+
+
+func atom(store: Store, value: Atom) -> int:
+    for existing_id, ty in store.types:
+        if ty.kind is ATOM and ty.kind.ATOM == value:
+            return existing_id
+        end
+    end
+    id := len(store.types)
+    store.types.push(Type{kind = TypeKind.ATOM{value}})
+    return id
+end
+
+
+func builtin(store: Store, name: String) -> Option[int]:
+    if name == AtomNames[Atom.INT]:
+        return Some{atom(store, Atom.INT)}
+    elif name == AtomNames[Atom.DOUBLE]:
+        return Some{atom(store, Atom.DOUBLE)}
+    elif name == AtomNames[Atom.BOOL]:
+        return Some{atom(store, Atom.BOOL)}
+    elif name == AtomNames[Atom.CHAR]:
+        return Some{atom(store, Atom.CHAR)}
+    elif name == AtomNames[Atom.STRING]:
+        return Some{atom(store, Atom.STRING)}
+    elif name == AtomNames[Atom.VOID]:
+        return Some{atom(store, Atom.VOID)}
+    elif name == AtomNames[Atom.REGION]:
+        return Some{atom(store, Atom.REGION)}
+    elif name == AtomNames[Atom.SITE]:
+        return Some{atom(store, Atom.SITE)}
+    end
+    return None
+end
+
+
+func initialize(store: Store) -> void:
+    atom(store, Atom.INT)
+    atom(store, Atom.DOUBLE)
+    atom(store, Atom.BOOL)
+    atom(store, Atom.CHAR)
+    atom(store, Atom.STRING)
+    atom(store, Atom.VOID)
+    atom(store, Atom.REGION)
+    atom(store, Atom.SITE)
+end
+
+
+throws func container(store: Store, kind: Container, element_type: int) -> int:
+    if not valid_id(store, element_type):
+        fail("invalid container element type ID")
+    end
+    for existing_id, ty in store.types:
+        if ty.kind is CONTAINER:
+            value := ty.kind.CONTAINER
+            if value.kind == kind and value.element_type == element_type:
+                return existing_id
+            end
+        end
+    end
+    id := len(store.types)
+    store.types.push(Type{kind = TypeKind.CONTAINER{ContainerType{kind, element_type}}})
+    return id
+end
+
+
+throws func named(store: Store, kind: NamedKind, source_id: int, declaration_id: int, foreign name: String) -> int:
+    if source_id < 0 or declaration_id < 0:
+        fail("invalid named type declaration ID")
+    end
+    for existing_id, ty in store.types:
+        if ty.kind is NAMED:
+            value := ty.kind.NAMED
+            if value.kind == kind and value.source_id == source_id and value.declaration_id == declaration_id:
+                return existing_id
+            end
+        end
+    end
+    id := len(store.types)
+    store.types.push(Type{kind = TypeKind.NAMED{NamedType{kind, source_id, declaration_id, name = copy(name, .store)}}})
+    return id
+end
+
+
+func same_parameters(left: Vec[int], right: Vec[int]) -> bool:
+    if len(left) != len(right):
+        return false
+    end
+    for i, value in left:
+        if value != right[i]:
+            return false
+        end
+    end
+    return true
+end
+
+
+throws func function(store: Store, foreign parameters: Vec[int], return_type: int, is_throwing: bool) -> int:
+    if not valid_id(store, return_type):
+        fail("invalid function return type ID")
+    end
+    for parameter_type_id in parameters:
+        if not valid_id(store, parameter_type_id):
+            fail("invalid function parameter type ID")
+        end
+    end
+    for existing_id, ty in store.types:
+        if ty.kind is FUNCTION:
+            value := ty.kind.FUNCTION
+            if value.is_throwing == is_throwing and value.return_type == return_type and same_parameters(value.parameter_types, parameters):
+                return existing_id
+            end
+        end
+    end
+    id := len(store.types)
+    store.types.push(Type{kind = TypeKind.FUNCTION{FunctionType{is_throwing, parameter_types = copy(parameters, .store), return_type}}})
+    return id
+end
+
+
+func equal(store: Store, left: int, right: int) -> bool:
+    return valid_id(store, left) and valid_id(store, right) and left == right
+end
+
+
+func append_type(foreign store: Store, id: int, output: strbuf::StrBuf) -> void:
+    match store.types[id].kind:
+    case ATOM{value}:
+        output.append(AtomNames[value])
+    case CONTAINER{value}:
+        output.append(ContainerNames[value.kind])
+        output.append("[")
+        append_type(store, value.element_type, output)
+        output.append("]")
+    case NAMED{value}:
+        output.append("module[")
+        output.append(string::from_int(value.source_id))
+        output.append("]::")
+        output.append(value.name)
+    case FUNCTION{value}:
+        if value.is_throwing:
+            output.append("throws ")
+        end
+        output.append("func(")
+        for i, parameter in value.parameter_types:
+            if i > 0:
+                output.append(", ")
+            end
+            append_type(store, parameter, output)
+        end
+        output.append(") -> ")
+        append_type(store, value.return_type, output)
+    end
+end
+
+
+throws func format(foreign store: Store, id: int, r: Region) -> String:
+    if not valid_id(store, id):
+        fail("invalid type ID")
+    end
+    output := strbuf::new("", r)
+    append_type(store, id, output)
+    return strbuf::to_string(output, r)
+end
+
+
+func is_allocated(store: Store, id: int) -> bool:
+    if not valid_id(store, id):
+        return false
+    end
+    match store.types[id].kind:
+    case ATOM{atom}:
+        return atom == Atom.STRING
+    case CONTAINER:
+        return true
+    case NAMED{named}:
+        return named.kind != NamedKind.ENUM
+    case FUNCTION:
+        return false
+    end
+end
+
+
+func is_extern_struct(store: Store, id: int) -> bool:
+    return valid_id(store, id) and store.types[id].kind is NAMED and store.types[id].kind.NAMED.kind == NamedKind.EXTERN_STRUCT
+end
+
+
+func find_missing_extern_initializer(store: Store, id: int, visited: Vec[bool]) -> Option[int]:
+    if visited[id]:
+        return None
+    end
+    visited[id] = true
+    kind := store.types[id].kind
+    if is_extern_struct(store, id):
+        if kind.NAMED.initializer is None:
+            return Some{id}
+        end
+        return None
+    elif kind is CONTAINER:
+        if kind.CONTAINER.kind == Container.OPTION:
+            return None
+        end
+        return find_missing_extern_initializer(store, kind.CONTAINER.element_type, visited)
+    elif kind is NAMED:
+        for member in kind.NAMED.member_types:
+            missing := find_missing_extern_initializer(store, member, visited)
+            if missing is Some:
+                return missing
+            end
+        end
+    end
+    return None
+end
+
+
+func missing_extern_initializer(store: Store, id: int) -> Option[int]:
+    return find_missing_extern_initializer(store, id, [len(store.types) of false])
+end
+
+
+func is_struct(store: Store, id: int) -> bool:
+    return valid_id(store, id) and store.types[id].kind is NAMED and store.types[id].kind.NAMED.kind == NamedKind.STRUCT
+end
+
+
+func is_variant(store: Store, id: int) -> bool:
+    return valid_id(store, id) and store.types[id].kind is NAMED and store.types[id].kind.NAMED.kind == NamedKind.VARIANT
+end
+
+
+func is_record(store: Store, id: int) -> bool:
+    return is_struct(store, id) or is_variant(store, id)
+end
+
+
+func is_enum(store: Store, id: int) -> bool:
+    return valid_id(store, id) and store.types[id].kind is NAMED and store.types[id].kind.NAMED.kind == NamedKind.ENUM
+end
+
+
+func record_member(foreign store: Store, id: int, foreign name: String, r: Region) -> Option[int]:
+    if is_record(store, id):
+        for index, existing in store.types[id].kind.NAMED.member_names:
+            if name == existing:
+                return Some{index}[r]
+            end
+        end
+    end
+    return None[r]
+end
+
+
+func dict_element(store: Store, id: int) -> Option[int]:
+    if valid_id(store, id):
+        kind := store.types[id].kind
+        if kind is CONTAINER and kind.CONTAINER.kind == Container.DICTIONARY:
+            return Some{kind.CONTAINER.element_type}
+        end
+    end
+    return None
+end
+
+
+func option_element(store: Store, id: int) -> Option[int]:
+    if valid_id(store, id):
+        kind := store.types[id].kind
+        if kind is CONTAINER and kind.CONTAINER.kind == Container.OPTION:
+            return Some{kind.CONTAINER.element_type}
+        end
+    end
+    return None
+end
+
+
+func vector_element(store: Store, id: int) -> Option[int]:
+    if valid_id(store, id):
+        kind := store.types[id].kind
+        if kind is CONTAINER and kind.CONTAINER.kind == Container.VECTOR:
+            return Some{kind.CONTAINER.element_type}
+        end
+    end
+    return None
+end
+
+
+func iteration_element(store: Store, id: int) -> Option[int]:
+    if id == atom(store, Atom.STRING):
+        return Some{atom(store, Atom.CHAR)}
+    end
+    dictionary := dict_element(store, id)
+    if dictionary is Some:
+        return dictionary
+    end
+    return vector_element(store, id)
+end
+
+
+func iteration_key(store: Store, id: int) -> int:
+    return atom(store, Atom.STRING) if dict_element(store, id) is Some else atom(store, Atom.INT)
+end

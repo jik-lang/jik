@@ -1,0 +1,6 @@
+use "pkg/escape"
+
+
+func main():
+    return 0
+end

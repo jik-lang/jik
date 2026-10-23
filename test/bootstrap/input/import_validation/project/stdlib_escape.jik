@@ -1,0 +1,6 @@
+use "jik/escape"
+
+
+func main():
+    return 0
+end

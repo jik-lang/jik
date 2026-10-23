@@ -1,0 +1,10 @@
+func main():
+    empty: Vec[int]
+    println(empty)
+    println([1, -2, 3], "|", [true, false], "|", [1.5, 2.5])
+    println(["one", "two"])
+    println([[1, 2], [3]], "|", [["nested"], ["value"]])
+    rows: Vec[Vec[String]]
+    println(rows)
+    return 42
+end

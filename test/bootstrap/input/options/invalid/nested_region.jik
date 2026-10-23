@@ -1,0 +1,6 @@
+func bad(r: Region):
+    value := Some{"text"[r]}
+end
+func main():
+    return 42
+end

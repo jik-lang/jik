@@ -1,0 +1,44 @@
+enum Key:
+    ZEBRA
+    APPLE
+    MIDDLE
+end
+
+enum Group:
+    FIRST
+    SECOND
+end
+
+table Values[Key] -> int:
+    MIDDLE: 0
+    ZEBRA: 7
+    APPLE: -2
+end
+
+table Flags[Key] -> bool:
+    ZEBRA: true
+    APPLE: false
+    MIDDLE: 1 < 2
+end
+
+table Doubles[Key] -> double:
+    ZEBRA: 1.5
+    APPLE: 2.5
+    MIDDLE: 3.5
+end
+
+table Groups[Key] -> Group:
+    ZEBRA: Group.FIRST
+    APPLE: Group.SECOND
+    MIDDLE: Group.FIRST
+end
+
+func read(key: Key):
+    return Values[key]
+end
+
+func main():
+    key := Key.APPLE
+    println(read(Key.ZEBRA), ":", read(key), ":", read(Key.MIDDLE))
+    println(Flags[key], ":", Doubles[key], ":", Groups[key])
+end

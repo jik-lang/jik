@@ -1,0 +1,11 @@
+func main():
+    values := {
+        "a": 1,
+        "b": 2,
+    }
+    if values["a"]? != 1 or values["b"]? != 2:
+        return 1
+    end
+    println("multiline:", len(values))
+    return 42
+end

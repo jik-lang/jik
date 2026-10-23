@@ -1,0 +1,48 @@
+variant Value:
+    NUMBER: int
+    TEXT: String
+end
+
+payload := 99
+
+
+func atom(value: int) -> int:
+    return value + 1
+end
+
+
+func named(value: String) -> int:
+    return len(value)
+end
+
+
+func read(value: Value) -> int:
+    match value:
+        case NUMBER{atom}:
+            return atom
+        case TEXT{named}:
+            return len(named)
+    end
+end
+
+
+func read_global(value: Value) -> int:
+    match value:
+        case NUMBER{payload}:
+            return payload
+        case TEXT{payload}:
+            return len(payload)
+    end
+end
+
+
+func main():
+    assert(read(Value.NUMBER{42}) == 42)
+    assert(read(Value.TEXT{"abc"}) == 3)
+    assert(read_global(Value.NUMBER{7}) == 7)
+    assert(read_global(Value.TEXT{"text"}) == 4)
+    assert(atom(4) == 5)
+    assert(named("xy") == 2)
+    assert(payload == 99)
+    println("match-module-names-ok")
+end

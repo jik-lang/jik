@@ -1,0 +1,15 @@
+func choose() -> Color:
+    return Color.SECOND
+end
+
+func main():
+    first: Color
+    second := choose()
+    println(first, ":", second)
+    return 0
+end
+
+enum Color:
+    FIRST
+    SECOND
+end

@@ -1,0 +1,21 @@
+use "shared" as base
+use "bridge"
+
+struct Node:
+    value: int
+    next: Option[Node]
+end
+
+struct Holder:
+    nodes: Vec[Option[Dict[base::Node]]]
+end
+
+func main():
+    values := bridge::make()
+    holder := Holder{nodes=values}
+    println(holder.nodes[0]?["key"]?.value)
+    holder.nodes[0]?["key"]?.next = Some{{"key": [base::Node{value=43}]}}
+    println(holder)
+    local := Node{value=7}
+    println(local)
+end

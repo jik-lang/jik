@@ -1,0 +1,3 @@
+func pass(value):
+    return value
+end

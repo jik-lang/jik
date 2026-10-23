@@ -1,0 +1,61 @@
+// Run from the repository root after building jik2 and jik3.
+use "jik/bytes"
+use "jik/fs"
+use "jik/io"
+use "jik/process"
+use "jik/string"
+use "jik/sys"
+
+
+throws func translate(foreign name: String, r: Region) -> bytes::Bytes:
+    output := "scratch/bootstrap-sequence/bootstrap.c"
+    if fs::is_file(output):
+        try fs::remove_file(output)
+    end
+    suffix := ".exe" if sys::platform() == "windows" else ""
+    executable := concat("./", name, suffix)
+    println("Comparing bootstrap C: ", executable)
+    status := try process::run(executable, ["tran", "src/bootstrap/main.jik", "--out", output])
+    if status != 0:
+        fail(concat(name, " translation failed (exit ", string::from_int(status), ")"))
+    end
+    data := try io::read_file_bytes(output, r)
+    if bytes::len(data) == 0:
+        fail(concat(name, " produced empty C output"))
+    end
+    try io::write_file_bytes(concat("scratch/bootstrap-sequence/", name, ".c"), data)
+    return data
+end
+
+
+throws func compare() -> void:
+    try fs::mkdir_all("scratch/bootstrap-sequence")
+    outputs := ["bootstrap.c", "jik2.c", "jik3.c", "comparison.diff"]
+    for name in outputs:
+        output := concat("scratch/bootstrap-sequence/", name)
+        if fs::is_file(output):
+            try fs::remove_file(output)
+        end
+    end
+    // Identical output paths prevent filenames from affecting generated C.
+    first := try translate("jik2", _)
+    second := try translate("jik3", _)
+    if not bytes::equals(first, second):
+        offset := 0
+        while offset < bytes::len(first) and offset < bytes::len(second) and bytes::get(first, offset) == bytes::get(second, offset):
+            offset += 1
+        end
+        fail(concat("jik2 and jik3 generated different C at byte ", string::from_int(offset),
+            "; inspect scratch/bootstrap-sequence/jik2.c and jik3.c"))
+    end
+    println("C comparison passed: jik2 and jik3 generated identical C.")
+end
+
+
+func main():
+    try compare():
+    except:
+        println("Bootstrap comparison failed: ", error_msg())
+        sys::exit(1)
+    end
+end

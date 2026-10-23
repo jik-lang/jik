@@ -1,0 +1,26 @@
+struct Item:
+    value: int
+end
+
+enum Kind:
+    FIRST
+    SECOND
+end
+
+variant Result:
+    VALUE: int
+    EMPTY
+end
+
+table Weights[Kind] -> int:
+    FIRST: 20
+    SECOND: 22
+end
+
+OFFSET := 0
+
+throws func answer() -> int:
+    item := Item{value = Weights[Kind.FIRST]}
+    result := Result.VALUE{Weights[Kind.SECOND]}
+    return item.value + result.VALUE + OFFSET
+end

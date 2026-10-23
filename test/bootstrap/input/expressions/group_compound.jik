@@ -1,0 +1,5 @@
+func main():
+    values := [[1]]
+    ((values[0]))[0] += 2
+    println(values)
+end

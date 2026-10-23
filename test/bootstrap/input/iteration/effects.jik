@@ -1,0 +1,29 @@
+func vector(counter: Vec[int], values: Vec[int]) -> Vec[int]:
+    counter[0] += 1
+    return values
+end
+
+func text(counter: Vec[int], value: String) -> String:
+    counter[0] += 1
+    return value
+end
+
+func main():
+    counter := [0]
+    values := [1, 2][.counter]
+    word := "ab"[.counter]
+    visits := 0
+    for value in vector(counter, values):
+        visits += 1
+    end
+    for index, value in vector(counter, values):
+        visits += 1
+    end
+    for byte in text(counter, word):
+        visits += 1
+    end
+    for index, byte in text(counter, word):
+        visits += 1
+    end
+    println(counter[0], ":", visits)
+end

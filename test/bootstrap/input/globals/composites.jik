@@ -1,0 +1,46 @@
+struct State:
+    count: int
+    labels: Vec[String]
+end
+
+enum Color:
+    RED
+    BLUE
+end
+
+variant Data:
+    TEXT: String
+    EOF
+end
+
+state := State{count=1, labels=["first"]}
+alias := state
+text := "second"
+options := [Some{1}, Some{2}]
+dictionary := {"key": "old"}
+data := Data.TEXT{"old"}
+color := Color.BLUE
+nested := Some{State{count=3}}
+
+func update(s: State, value: String):
+    s.count = s.count + 1
+    push(s.labels, value)
+end
+
+func main():
+    update(alias, text)
+    state.labels[0] = text
+    dictionary["key"] = text
+    data.TEXT = text
+    options[0] = options[1]
+    nested?.count = 9
+    println(alias)
+    println(dictionary["key"]?, ":", data, ":", color)
+    println(options, ":", nested)
+    local_state := state
+    allocated := "third"[.local_state]
+    push(alias.labels, allocated)
+    println(state.labels)
+    clear(dictionary)
+    println(len(dictionary))
+end

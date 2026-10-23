@@ -1,0 +1,12 @@
+//! Module selection for recursive semantic analysis.
+
+use "../program"
+use "../modules/module"
+
+
+// Same-region view of a program and one of its modules for a single phase walk.
+// mod aliases an element of program.modules; recursion never changes the selection.
+struct ModuleContext:
+    program: program::Program
+    mod: module::Module
+end

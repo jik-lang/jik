@@ -1123,6 +1123,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         ht->size = 0;                                                                              \
         for (size_t i = 0; i < ht->capacity; i++) {                                                \
             ht->items[i].key = NULL;                                                               \
+            ht->items[i].ok = false;                                                               \
         }                                                                                          \
     }                                                                                              \
                                                                                                    \

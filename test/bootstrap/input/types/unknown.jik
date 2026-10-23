@@ -1,0 +1,6 @@
+func f(value: Missing):
+end
+
+func main():
+    return 0
+end

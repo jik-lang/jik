@@ -1,0 +1,16 @@
+func allocate(r: Region, owner: Vec[String]) -> int:
+    values: Vec[String][r]
+    return len(values)
+end
+
+func inspect(owner: Vec[String]) -> int:
+    return allocate(_, owner)
+end
+
+func main():
+    owner := ["borrowed"]
+    if inspect(owner) != 0:
+        return 1
+    end
+    return 42
+end

@@ -1,0 +1,37 @@
+func identity(value: char) -> char:
+    return value
+end
+
+func main():
+    zero: char
+    if identity('\0') != zero or '\x00' != zero:
+        return 1
+    end
+    if 'a' != '\x61' or '\n' != '\x0A' or '\r' != '\x0d' or '\t' != '\x09':
+        return 2
+    end
+    if '\\' != '\x5C' or '\'' != '\x27' or '\"' != '\x22':
+        return 3
+    end
+    if not ('a' == identity('a')) or 'a' == 'b':
+        return 4
+    end
+    selected := 'a' if true else 'b'
+    if selected != 'a':
+        return 5
+    end
+    truth := 0
+    if 'a':
+        truth += 1
+    end
+    if '\0':
+        return 6
+    end
+    value := 'a'
+    while value:
+        value = '\0'
+        truth += 1
+    end
+    print('J', 'i', 'k', '\t', '\'', '\\', '\"', '\n')
+    println(selected, ":", truth)
+end

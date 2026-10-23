@@ -1,0 +1,858 @@
+//! Assign compiled-program region sources and validate stores, calls, and returns.
+
+use "../context"
+use "../../program"
+use "../../language/builtin"
+use "../../language/region_source"
+use "../../language/types"
+use "region_safety"
+use "literal_rules"
+use "tables"
+use "../../parser/ast"
+use "../../modules/module"
+use "../../diag"
+
+
+// Position of an expression in the compiled program, independent of AST storage.
+// Global initializers have no function declaration or implicit result parameter.
+variant AnalysisScope:
+    GLOBAL_INITIALIZER
+    FUNCTION: ast::FunctionDecl
+end
+
+
+func is_region_input(mod: module::Module, node: ast::Node) -> bool:
+    return node.inferred_type? == types::atom(mod.type_store, types::Atom.REGION) or types::is_allocated(mod.type_store, node.inferred_type?)
+end
+
+
+func same_region(left: region_source::Source, right: region_source::Source) -> bool:
+    // Compare region classes, not parameter IDs. Parameters of a storing/returning
+    // function share the caller region; NONE and FOREIGN never establish that match.
+    return left.kind != region_source::Kind.NONE and left.kind != region_source::Kind.FOREIGN and left.kind == right.kind
+end
+
+
+func retarget(mod: module::Module, node: ast::Node, foreign source: region_source::Source) -> void:
+    // Table initialization assigns global storage explicitly. Ordinary literal
+    // retargeting must never promote a local value into global storage or
+    // treat a foreign input as part of the shared caller region.
+    if source.kind == region_source::Kind.GLOBAL or source.kind == region_source::Kind.FOREIGN:
+        return
+    end
+    node.region_source = copy(source, .node)
+    node.allocation_target = None[.node]
+    if source.kind == region_source::Kind.CALLER:
+        node.allocation_target = Some{source.parameter_id}[.node]
+    end
+    match node.kind:
+    case VECTOR_LITERAL{literal}:
+        for element in literal.elements:
+            child := mod.ast.nodes[element]
+            if literal_rules::retargetable(child):
+                retarget(mod, child, source)
+            end
+        end
+    case STRUCT_LITERAL{literal}:
+        for field in literal.fields:
+            child := mod.ast.nodes[field.value]
+            if literal_rules::retargetable(child):
+                retarget(mod, child, source)
+            end
+        end
+    case VARIANT_LITERAL{literal}:
+        if literal.value is Some:
+            child := mod.ast.nodes[literal.value?]
+            if literal_rules::retargetable(child):
+                retarget(mod, child, source)
+            end
+        end
+    case OPTION_LITERAL{literal}:
+        if literal.value is Some:
+            child := mod.ast.nodes[literal.value?]
+            if literal_rules::retargetable(child):
+                retarget(mod, child, source)
+            end
+        end
+    case DICT_LITERAL{literal}:
+        for entry in literal.entries:
+            key := mod.ast.nodes[entry.key]
+            value := mod.ast.nodes[entry.value]
+            if literal_rules::retargetable(key):
+                retarget(mod, key, source)
+            end
+            if literal_rules::retargetable(value):
+                retarget(mod, value, source)
+            end
+        end
+    other:
+    end
+end
+
+
+// A storing/returning function uses its first eligible parameter. A region-safe
+// function can infer a destination only from one eligible, independent input.
+func implicit_region_parameter(foreign mod: module::Module, foreign function: ast::FunctionDecl, r: Region) -> Option[int]:
+    target: Option[int] = None[r]
+    for id in function.parameters:
+        parameter := mod.ast.nodes[id]
+        if is_region_input(mod, parameter) and (not parameter.kind.PARAMETER.is_foreign or parameter.inferred_type? == types::atom(mod.type_store, types::Atom.REGION)):
+            if not function.is_region_safe:
+                return Some{id}[r]
+            end
+            // Independent inputs have no shared region in a region-safe call.
+            if target is Some:
+                return None[r]
+            end
+            target = Some{id}[r]
+        end
+    end
+    return target
+end
+
+
+func expression_needs_local_region(mod: module::Module, id: int) -> bool:
+    node := mod.ast.nodes[id]
+    match node.kind:
+    case LOCAL_REGION:
+        return true
+    case STRING_LITERAL:
+        return node.region_source.kind == region_source::Kind.LOCAL
+    case DEFAULT_VALUE:
+        return node.region_source.kind == region_source::Kind.LOCAL
+    case VARIANT_LITERAL{literal}:
+        return node.region_source.kind == region_source::Kind.LOCAL or (literal.value is Some and expression_needs_local_region(mod, literal.value?))
+    case OPTION_LITERAL{literal}:
+        return node.region_source.kind == region_source::Kind.LOCAL or (literal.value is Some and expression_needs_local_region(mod, literal.value?))
+    case DICT_LITERAL{literal}:
+        if node.region_source.kind == region_source::Kind.LOCAL:
+            return true
+        end
+        for entry in literal.entries:
+            if expression_needs_local_region(mod, entry.key) or expression_needs_local_region(mod, entry.value):
+                return true
+            end
+        end
+    case VARIANT_CHECK{check}:
+        return expression_needs_local_region(mod, check.value)
+    case OPTION_CHECK{check}:
+        return expression_needs_local_region(mod, check.value)
+    case UNWRAP{value}:
+        return expression_needs_local_region(mod, value)
+    case STRUCT_LITERAL{literal}:
+        if node.region_source.kind == region_source::Kind.LOCAL:
+            return true
+        end
+        for field in literal.fields:
+            if expression_needs_local_region(mod, field.value):
+                return true
+            end
+        end
+    case FIELD{field}:
+        return expression_needs_local_region(mod, field.value)
+    case VECTOR_LITERAL{literal}:
+        if node.region_source.kind == region_source::Kind.LOCAL:
+            return true
+        end
+        if literal.count is Some and expression_needs_local_region(mod, literal.count?):
+            return true
+        end
+        for element in literal.elements:
+            if expression_needs_local_region(mod, element):
+                return true
+            end
+        end
+    case TABLE_LOOKUP{value}:
+        return expression_needs_local_region(mod, value.key)
+    case INDEX{index}:
+        return expression_needs_local_region(mod, index.value) or expression_needs_local_region(mod, index.index)
+    case SLICE{slice}:
+        return expression_needs_local_region(mod, slice.value) or (slice.start is Some and expression_needs_local_region(mod, slice.start?)) or (slice.stop is Some and expression_needs_local_region(mod, slice.stop?))
+    case CALL{call}:
+        if call.builtin is Some and call.builtin? == builtin::Kind.CONCAT and node.region_source.kind == region_source::Kind.LOCAL:
+            return true
+        end
+        if call.builtin is Some and builtin::is_output(call.builtin?):
+            for argument in call.arguments:
+                if mod.ast.nodes[argument].inferred_type? != types::atom(mod.type_store, types::Atom.STRING):
+                    return true    // Scalar/vector textual representations need scratch storage.
+                end
+            end
+        end
+        for argument in call.arguments:
+            if expression_needs_local_region(mod, argument):
+                return true
+            end
+        end
+    case BINARY{binary}:
+        return expression_needs_local_region(mod, binary.left) or expression_needs_local_region(mod, binary.right)
+    case CONDITIONAL{conditional}:
+        return expression_needs_local_region(mod, conditional.condition) or expression_needs_local_region(mod, conditional.when_true) or expression_needs_local_region(mod, conditional.when_false)
+    case GROUP{inner}:
+        return expression_needs_local_region(mod, inner)
+    case MUST{required}:
+        return expression_needs_local_region(mod, required.call)
+    case UNARY{unary}:
+        return expression_needs_local_region(mod, unary.operand)
+    other:
+    end
+    return false
+end
+
+
+func block_needs_local_region(mod: module::Module, body: ast::Block) -> bool:
+    for id in body.statements:
+        node := mod.ast.nodes[id]
+        match node.kind:
+        case LOCAL_DECL{local}:
+            if local.initializer is Some and expression_needs_local_region(mod, local.initializer?):
+                return true
+            end
+        case ASSIGN{statement}:
+            if expression_needs_local_region(mod, statement.target) or expression_needs_local_region(mod, statement.value):
+                return true
+            end
+        case CALL:
+            if expression_needs_local_region(mod, id):
+                return true
+            end
+        case MUST:
+            if expression_needs_local_region(mod, id):
+                return true
+            end
+        case RETURN{statement}:
+            if statement.value is Some and expression_needs_local_region(mod, statement.value?):
+                return true
+            end
+        case TRY{statement}:
+            if expression_needs_local_region(mod, statement.call) or block_needs_local_region(mod, statement.body) or block_needs_local_region(mod, statement.except_body):
+                return true
+            end
+        case IF{statement}:
+            for branch in statement.branches:
+                if expression_needs_local_region(mod, branch.condition) or block_needs_local_region(mod, branch.body):
+                    return true
+                end
+            end
+            if statement.else_body is Some and block_needs_local_region(mod, statement.else_body?):
+                return true
+            end
+        case MATCH{statement}:
+            if expression_needs_local_region(mod, statement.value):
+                return true
+            end
+            for arm in statement.arms:
+                if block_needs_local_region(mod, arm.body):
+                    return true
+                end
+            end
+            if statement.other_body is Some and block_needs_local_region(mod, statement.other_body?):
+                return true
+            end
+        case WHILE{loop}:
+            if expression_needs_local_region(mod, loop.condition) or block_needs_local_region(mod, loop.body):
+                return true
+            end
+        case FOR{loop}:
+            if expression_needs_local_region(mod, loop.start) or expression_needs_local_region(mod, loop.stop) or block_needs_local_region(mod, loop.body):
+                return true
+            end
+        case FOREACH{loop}:
+            if expression_needs_local_region(mod, loop.container) or block_needs_local_region(mod, loop.body):
+                return true
+            end
+        other:
+        end
+    end
+    return false
+end
+
+
+func literal_source(ctx: context::ModuleContext, node: ast::Node, destination: Option[int], implicit: bool, scope: AnalysisScope) -> void:
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    node.region_source.kind = region_source::Kind.LOCAL
+    if destination is Some:
+        target := destination?
+        destination_node := mod.ast.nodes[target]
+        if scope is FUNCTION and destination_node.kind is REGION_OF:
+            owner := mod.ast.nodes[destination_node.kind.REGION_OF]
+            if owner.kind is IDENTIFIER_EXPR and owner.kind.IDENTIFIER_EXPR.global_origin is Some:
+                diag::error(diagnostics, "allocation in region of global symbol", "allocation suffixes inside functions require a local binding or parameter", Some{owner.span})
+                return
+            end
+        end
+        analyze_expression_regions(ctx, target, scope)
+        node.region_source = copy(mod.ast.nodes[target].region_source, .node)
+        node.allocation_target = Some{target}[.node]
+    elif scope is GLOBAL_INITIALIZER:
+        node.region_source.kind = region_source::Kind.GLOBAL
+    elif implicit:
+        target := implicit_region_parameter(mod, scope.FUNCTION)
+        if target is None:
+            diag::error(diagnostics, "invalid implicit allocation", "cannot determine which caller region @ should use", Some{node.span})
+            return
+        end
+        node.region_source = copy(mod.ast.nodes[target?].region_source, .node)
+        node.allocation_target = Some{target?}[.node]
+    end
+end
+
+
+func shared_argument(modules: Vec[module::Module], call: ast::CallExpr, index: int) -> bool:
+    if call.builtin is Some:
+        return true
+    end
+    target := call.target?
+    callee := modules[target.source_id].ast.nodes[target.origin].kind.FUNCTION_DECL
+    return not modules[target.source_id].ast.nodes[callee.parameters[index]].kind.PARAMETER.is_foreign
+end
+
+
+// Only the direct fresh container is exempt from the final entry-region check.
+// Storage is still local; nested literals are checked separately, and composite
+// entries retain their references. The emitter has no special flag-dependent path.
+func mark_foreign_argument_literal(mod: module::Module, id: int) -> void:
+    node := mod.ast.nodes[id]
+    if node.kind is GROUP:
+        mark_foreign_argument_literal(mod, node.kind.GROUP)
+    elif (node.kind is VECTOR_LITERAL or node.kind is DICT_LITERAL) and literal_rules::retargetable(node):
+        node.foreign_argument_literal = true
+    end
+end
+
+
+func check_shared_call(ctx: context::ModuleContext, node: ast::Node) -> void:
+    modules := ctx.program.modules
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    call := node.kind.CALL
+    anchor: Option[int]
+    for index, argument in call.arguments:
+        value := mod.ast.nodes[argument]
+        if shared_argument(modules, call, index) and is_region_input(mod, value):
+            if anchor is None or not literal_rules::retargetable(value):
+                anchor = Some{argument}
+            end
+            if not literal_rules::retargetable(value):
+                break
+            end
+        end
+    end
+    if anchor is Some:
+        source := mod.ast.nodes[anchor?].region_source
+        for index, argument in call.arguments:
+            value := mod.ast.nodes[argument]
+            if argument != anchor? and shared_argument(modules, call, index) and is_region_input(mod, value):
+                if literal_rules::retargetable(value):
+                    retarget(mod, value, source)
+                end
+                if not same_region(source, value.region_source):
+                    diag::error(diagnostics, "region mismatch", "all storing/returning call arguments must belong to the same region", Some{value.span})
+                    return
+                end
+            end
+        end
+        if types::is_allocated(store, node.inferred_type?):
+            node.region_source = copy(source, .node)
+        end
+    elif types::is_allocated(store, node.inferred_type?):
+        diag::error(diagnostics, "unknown result region", "allocate the result in a region supplied by the caller", Some{node.span})
+    end
+end
+
+
+/// Run after successful inference/type checking. Region sources propagate through
+/// String/vector construction, calls, aliases, stores and conditional expressions.
+/// Follow the resolved operands; region retargeting updates metadata in place.
+/// This walk does not append nodes or change operand/statement lists.
+func analyze_expression_regions(ctx: context::ModuleContext, id: int, scope: AnalysisScope) -> void:
+    modules := ctx.program.modules
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    if diagnostics.error_count > 0:
+        return
+    end
+    node := mod.ast.nodes[id]
+    node.region_source = region_source::Source{}[.node]
+    node.allocation_target = None[.node]
+    match node.kind:
+    case STRING_LITERAL{literal}:
+        literal_source(ctx, node, literal.destination, literal.implicit, scope)
+    case DEFAULT_VALUE:
+        if types::is_allocated(store, node.inferred_type?):
+            node.region_source.kind = region_source::Kind.GLOBAL if scope is GLOBAL_INITIALIZER else region_source::Kind.LOCAL
+        end
+    case VARIANT_LITERAL{literal}:
+        literal_source(ctx, node, literal.destination, literal.implicit, scope)
+        if literal.value is Some:
+            analyze_expression_regions(ctx, literal.value?, scope)
+            child := mod.ast.nodes[literal.value?]
+            if types::is_allocated(store, child.inferred_type?) and literal_rules::retargetable(child):
+                retarget(mod, child, node.region_source)
+            end
+        end
+    case OPTION_LITERAL{literal}:
+        literal_source(ctx, node, literal.destination, literal.implicit, scope)
+        if literal.value is Some:
+            analyze_expression_regions(ctx, literal.value?, scope)
+            child := mod.ast.nodes[literal.value?]
+            if types::is_allocated(store, child.inferred_type?) and literal_rules::retargetable(child):
+                retarget(mod, child, node.region_source)
+            end
+        end
+    case DICT_LITERAL{literal}:
+        literal_source(ctx, node, literal.destination, literal.implicit, scope)
+        for entry in literal.entries:
+            analyze_expression_regions(ctx, entry.key, scope)
+            analyze_expression_regions(ctx, entry.value, scope)
+            key := mod.ast.nodes[entry.key]
+            value := mod.ast.nodes[entry.value]
+            if literal_rules::retargetable(key):
+                retarget(mod, key, node.region_source)
+            end
+            if types::is_allocated(store, value.inferred_type?) and literal_rules::retargetable(value):
+                retarget(mod, value, node.region_source)
+            end
+        end
+    case VARIANT_CHECK{check}:
+        analyze_expression_regions(ctx, check.value, scope)
+    case OPTION_CHECK{check}:
+        analyze_expression_regions(ctx, check.value, scope)
+    case UNWRAP{value}:
+        analyze_expression_regions(ctx, value, scope)
+        if types::is_allocated(store, node.inferred_type?):
+            node.region_source = copy(mod.ast.nodes[value].region_source, .node)
+        end
+    case STRUCT_LITERAL{literal}:
+        literal_source(ctx, node, literal.destination, literal.implicit, scope)
+        for field in literal.fields:
+            analyze_expression_regions(ctx, field.value, scope)
+            child := mod.ast.nodes[field.value]
+            if types::is_allocated(store, child.inferred_type?) and literal_rules::retargetable(child):
+                retarget(mod, child, node.region_source)
+            end
+        end
+    case FIELD{field}:
+        analyze_expression_regions(ctx, field.value, scope)
+        if types::is_allocated(store, node.inferred_type?):
+            node.region_source = copy(mod.ast.nodes[field.value].region_source, .node)
+        end
+    case VECTOR_LITERAL{literal}:
+        literal_source(ctx, node, literal.destination, literal.implicit, scope)
+        if literal.count is Some:
+            analyze_expression_regions(ctx, literal.count?, scope)
+        end
+        for element in literal.elements:
+            analyze_expression_regions(ctx, element, scope)
+            child := mod.ast.nodes[element]
+            if literal_rules::retargetable(child):
+                retarget(mod, child, node.region_source)
+            end
+        end
+    case TABLE_LOOKUP{value}:
+        analyze_expression_regions(ctx, value.key, scope)
+        if types::is_allocated(store, node.inferred_type?):
+            node.region_source.kind = region_source::Kind.GLOBAL
+        end
+    case INDEX{index}:
+        analyze_expression_regions(ctx, index.value, scope)
+        analyze_expression_regions(ctx, index.index, scope)
+        if types::is_allocated(store, node.inferred_type?):
+            node.region_source = copy(mod.ast.nodes[index.value].region_source, .node)
+        end
+    case SLICE{slice}:
+        analyze_expression_regions(ctx, slice.value, scope)
+        if slice.start is Some:
+            analyze_expression_regions(ctx, slice.start?, scope)
+        end
+        if slice.stop is Some:
+            analyze_expression_regions(ctx, slice.stop?, scope)
+        end
+        node.region_source = copy(mod.ast.nodes[slice.value].region_source, .node)
+    case GLOBAL_REGION:
+        node.region_source.kind = region_source::Kind.GLOBAL
+    case LOCAL_REGION:
+        node.region_source.kind = region_source::Kind.LOCAL
+    case IDENTIFIER_EXPR{identifier}:
+        if identifier.global_origin is Some:
+            if types::is_allocated(store, node.inferred_type?):
+                node.region_source.kind = region_source::Kind.GLOBAL
+            end
+        else:
+            node.region_source = copy(mod.ast.nodes[identifier.local_origin?].region_source, .node)
+        end
+    case REGION_OF{inner}:
+        analyze_expression_regions(ctx, inner, scope)
+        node.region_source = copy(mod.ast.nodes[inner].region_source, .node)
+    case GROUP{inner}:
+        analyze_expression_regions(ctx, inner, scope)
+        node.region_source = copy(mod.ast.nodes[inner].region_source, .node)
+    case MUST{required}:
+        analyze_expression_regions(ctx, required.call, scope)
+        node.region_source = copy(mod.ast.nodes[required.call].region_source, .node)
+    case UNARY{unary}:
+        analyze_expression_regions(ctx, unary.operand, scope)
+    case BINARY{binary}:
+        analyze_expression_regions(ctx, binary.left, scope)
+        analyze_expression_regions(ctx, binary.right, scope)
+    case CONDITIONAL{conditional}:
+        analyze_expression_regions(ctx, conditional.condition, scope)
+        analyze_expression_regions(ctx, conditional.when_true, scope)
+        analyze_expression_regions(ctx, conditional.when_false, scope)
+        if diagnostics.error_count > 0:
+            return
+        end
+        if types::is_allocated(store, node.inferred_type?):
+            first := mod.ast.nodes[conditional.when_true]
+            second := mod.ast.nodes[conditional.when_false]
+            if literal_rules::retargetable(first) and not literal_rules::retargetable(second):
+                retarget(mod, first, second.region_source)
+            elif literal_rules::retargetable(second):
+                retarget(mod, second, first.region_source)
+            end
+            if not same_region(first.region_source, second.region_source):
+                diag::error(diagnostics, "region mismatch", "conditional branches must belong to the same region", Some{node.span})
+                return
+            end
+            node.region_source = copy(first.region_source, .node)
+        end
+    case CALL{call}:
+        for argument in call.arguments:
+            analyze_expression_regions(ctx, argument, scope)
+        end
+        if diagnostics.error_count > 0:
+            return
+        end
+        requires_shared_region := false
+        if call.builtin is Some:
+            kind := call.builtin?
+            if kind == builtin::Kind.CONCAT:
+                if call.auto_region:
+                    node.region_source.kind = region_source::Kind.GLOBAL if scope is GLOBAL_INITIALIZER else region_source::Kind.LOCAL
+                else:
+                    node.region_source = copy(mod.ast.nodes[call.arguments[len(call.arguments) - 1]].region_source, .node)
+                end
+            end
+            if kind == builtin::Kind.COPY or builtin::is_site_text(kind):
+                node.region_source = copy(mod.ast.nodes[call.arguments[1]].region_source, .node)
+            end
+            if kind == builtin::Kind.ERROR_MSG:
+                node.region_source = copy(mod.ast.nodes[call.arguments[0]].region_source, .node)
+            end
+            if (kind == builtin::Kind.POP or kind == builtin::Kind.UNWRAP) and types::is_allocated(store, node.inferred_type?):
+                node.region_source = copy(mod.ast.nodes[call.arguments[0]].region_source, .node)
+            end
+            requires_shared_region = kind == builtin::Kind.PUSH and types::is_allocated(store, mod.ast.nodes[call.arguments[1]].inferred_type?)
+        else:
+            target := call.target?
+            callee := modules[target.source_id].ast.nodes[target.origin].kind.FUNCTION_DECL
+            for index, argument in call.arguments:
+                if modules[target.source_id].ast.nodes[callee.parameters[index]].kind.PARAMETER.is_foreign:
+                    mark_foreign_argument_literal(mod, argument)
+                end
+            end
+            requires_shared_region = not callee.is_region_safe
+        end
+        if requires_shared_region:
+            check_shared_call(ctx, node)
+        end
+    case INTEGER_LITERAL:
+    case ENUM_VALUE:
+    case DOUBLE_LITERAL:
+    case BOOL_LITERAL:
+    case CHAR_LITERAL:
+    other:
+        diag::error(diagnostics, "unsupported region expression", "region analysis has no rule for this expression", Some{node.span})
+    end
+end
+
+
+// Called only for function bodies; all recursive blocks retain that function scope.
+func analyze_block_regions(ctx: context::ModuleContext, body: ast::Block, scope: AnalysisScope) -> void:
+    function := scope.FUNCTION
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    region_type := types::atom(store, types::Atom.REGION)
+    for id in body.statements:
+        node := mod.ast.nodes[id]
+        match node.kind:
+        case LOCAL_DECL{local}:
+            if node.inferred_type? == region_type:
+                diag::error(diagnostics, "invalid region declaration", "Region values cannot be declared or aliased", Some{node.span})
+                return
+            end
+            if local.initializer is Some:
+                analyze_expression_regions(ctx, local.initializer?, scope)
+                node.region_source = copy(mod.ast.nodes[local.initializer?].region_source, .node)
+            end
+        case ASSIGN{statement}:
+            if mod.ast.nodes[statement.target].inferred_type? == region_type:
+                diag::error(diagnostics, "invalid region assignment", "Region parameters cannot be reassigned or aliased", Some{node.span})
+                return
+            end
+            analyze_expression_regions(ctx, statement.target, scope)
+            analyze_expression_regions(ctx, statement.value, scope)
+            if diagnostics.error_count > 0:
+                return
+            end
+            target := mod.ast.nodes[statement.target]
+            value := mod.ast.nodes[statement.value]
+            if (target.kind is INDEX or target.kind is FIELD) and literal_rules::retargetable(value):
+                retarget(mod, value, target.region_source)
+            end
+            if types::is_allocated(store, target.inferred_type?) and not same_region(target.region_source, value.region_source):
+                diag::error(diagnostics, "region mismatch", "the assigned value must belong to the destination's region", Some{node.span})
+                return
+            end
+        case CALL:
+            analyze_expression_regions(ctx, id, scope)
+        case MUST:
+            analyze_expression_regions(ctx, id, scope)
+        case TRY{statement}:
+            analyze_expression_regions(ctx, statement.call, scope)
+            if diagnostics.error_count > 0:
+                return
+            end
+            if statement.binding is Some:
+                binding := mod.ast.nodes[statement.binding?]
+                if binding.inferred_type? == region_type:
+                    diag::error(diagnostics, "invalid region declaration", "Region values cannot be declared or aliased", Some{binding.span})
+                    return
+                end
+                binding.region_source = copy(mod.ast.nodes[statement.call].region_source, .binding)
+            end
+            analyze_block_regions(ctx, statement.body, scope)
+            analyze_block_regions(ctx, statement.except_body, scope)
+        case IF{statement}:
+            for branch in statement.branches:
+                analyze_expression_regions(ctx, branch.condition, scope)
+                analyze_block_regions(ctx, branch.body, scope)
+            end
+            if statement.else_body is Some:
+                analyze_block_regions(ctx, statement.else_body?, scope)
+            end
+        case MATCH{statement}:
+            analyze_expression_regions(ctx, statement.value, scope)
+            for arm in statement.arms:
+                if arm.binding is Some:
+                    binding := mod.ast.nodes[arm.binding?]
+                    if types::is_allocated(store, binding.inferred_type?):
+                        binding.region_source = copy(mod.ast.nodes[statement.value].region_source, .binding)
+                    end
+                end
+                analyze_block_regions(ctx, arm.body, scope)
+            end
+            if statement.other_body is Some:
+                analyze_block_regions(ctx, statement.other_body?, scope)
+            end
+        case WHILE{loop}:
+            analyze_expression_regions(ctx, loop.condition, scope)
+            analyze_block_regions(ctx, loop.body, scope)
+        case FOR{loop}:
+            analyze_expression_regions(ctx, loop.start, scope)
+            analyze_expression_regions(ctx, loop.stop, scope)
+            analyze_block_regions(ctx, loop.body, scope)
+        case FOREACH{loop}:
+            analyze_expression_regions(ctx, loop.container, scope)
+            source := mod.ast.nodes[loop.container].region_source
+            first := mod.ast.nodes[loop.first]
+            if types::is_allocated(store, first.inferred_type?):
+                first.region_source = copy(source, .first)
+            end
+            if loop.second is Some:
+                second := mod.ast.nodes[loop.second?]
+                if types::is_allocated(store, second.inferred_type?):
+                    second.region_source = copy(source, .second)
+                end
+            end
+            analyze_block_regions(ctx, loop.body, scope)
+        case BREAK:
+        case CONTINUE:
+        case RETURN{statement}:
+            if statement.value is Some:
+                value := mod.ast.nodes[statement.value?]
+                if value.inferred_type? == region_type:
+                    diag::error(diagnostics, "invalid region return", "Region values cannot be returned", Some{node.span})
+                    return
+                end
+                analyze_expression_regions(ctx, statement.value?, scope)
+                if diagnostics.error_count > 0:
+                    return
+                end
+                if types::is_allocated(store, value.inferred_type?):
+                    if literal_rules::retargetable(value):
+                        target := implicit_region_parameter(mod, function)
+                        if target is Some:
+                            retarget(mod, value, mod.ast.nodes[target?].region_source)
+                        end
+                    end
+                    if value.region_source.kind == region_source::Kind.GLOBAL:
+                        diag::error(diagnostics, "cannot return global allocation", "composite results must belong to the caller's region", Some{value.span})
+                        return
+                    end
+                    if value.region_source.kind == region_source::Kind.FOREIGN:
+                        diag::error(diagnostics, "cannot return foreign composite value", "composite results must belong to the shared caller region", Some{value.span})
+                        return
+                    end
+                    if value.region_source.kind != region_source::Kind.CALLER:
+                        diag::error(diagnostics, "cannot return local allocation", "return composites in a caller-owned region", Some{value.span})
+                        return
+                    end
+                end
+            end
+        other:
+            diag::error(diagnostics, "unsupported region statement", "region analysis has no rule for this statement", Some{node.span})
+        end
+        if diagnostics.error_count > 0:
+            return
+        end
+    end
+end
+
+
+/// Check after call/return/store retargeting has reached every nested literal.
+/// Bound elements retain their source; literal elements follow their container.
+/// Scan storage to include synthetic defaults in the same diagnostic order.
+func check_literal_regions(ctx: context::ModuleContext) -> void:
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    for node in mod.ast.nodes:
+        if node.foreign_argument_literal or node.inferred_type is None:
+            continue
+        end
+        match node.kind:
+        case DICT_LITERAL{literal}:
+            for entry in literal.entries:
+                child := mod.ast.nodes[entry.value]
+                if types::is_allocated(store, child.inferred_type?) and not same_region(node.region_source, child.region_source):
+                    diag::error(diagnostics, "region mismatch", "dictionary values must belong to the containing dictionary's region", Some{child.span})
+                    return
+                end
+            end
+        case VARIANT_LITERAL{literal}:
+            if literal.value is None:
+                continue
+            end
+            child := mod.ast.nodes[literal.value?]
+            if types::is_allocated(store, child.inferred_type?) and not same_region(node.region_source, child.region_source):
+                diag::error(diagnostics, "region mismatch", "variant payloads must belong to the containing variant's region", Some{child.span})
+                return
+            end
+        case OPTION_LITERAL{literal}:
+            if literal.value is None:
+                continue
+            end
+            child := mod.ast.nodes[literal.value?]
+            if types::is_allocated(store, child.inferred_type?) and not same_region(node.region_source, child.region_source):
+                diag::error(diagnostics, "region mismatch", "Option payloads must belong to the containing Option's region", Some{child.span})
+                return
+            end
+        case STRUCT_LITERAL{literal}:
+            for field in literal.fields:
+                child := mod.ast.nodes[field.value]
+                if types::is_allocated(store, child.inferred_type?) and not same_region(node.region_source, child.region_source):
+                    diag::error(diagnostics, "region mismatch", "struct fields must belong to the containing struct's region", Some{child.span})
+                    return
+                end
+            end
+        case VECTOR_LITERAL{literal}:
+            for element in literal.elements:
+                child := mod.ast.nodes[element]
+                if types::is_allocated(store, child.inferred_type?) and not same_region(node.region_source, child.region_source):
+                    diag::error(diagnostics, "region mismatch", "vector elements must belong to the containing vector's region", Some{child.span})
+                    return
+                end
+            end
+        other:
+        end
+    end
+end
+
+
+// Within each module, global declarations retain their order and precede functions.
+func analyze_global_initializers(ctx: context::ModuleContext) -> void:
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    scope := AnalysisScope.GLOBAL_INITIALIZER{}[.mod]
+    root := mod.ast.get_root_module()
+    for id in root.declarations:
+        node := mod.ast.nodes[id]
+        if node.kind is GLOBAL_DECL:
+            analyze_expression_regions(ctx, node.kind.GLOBAL_DECL.initializer, scope)
+            if types::is_allocated(mod.type_store, node.inferred_type?):
+                node.region_source.kind = region_source::Kind.GLOBAL
+                value := mod.ast.nodes[node.kind.GLOBAL_DECL.initializer]
+                if value.region_source.kind != region_source::Kind.GLOBAL:
+                    diag::error(diagnostics, "invalid global allocation", "global composites require global lifetime", Some{value.span})
+                end
+            end
+        end
+    end
+end
+
+
+// Seed parameter sources before walking stores/returns; compute cleanup needs
+// after literal retargeting has finished. The selected function is shared by reference.
+func analyze_function_regions(ctx: context::ModuleContext, function: ast::FunctionDecl) -> void:
+    mod := ctx.mod
+    region_type := types::atom(mod.type_store, types::Atom.REGION)
+    function.needs_local_region = false
+    for parameter_id in function.parameters:
+        parameter := mod.ast.nodes[parameter_id]
+        if is_region_input(mod, parameter):
+            parameter.region_source = region_source::Source{kind = region_source::Kind.CALLER, parameter_id}[.parameter]
+            if parameter.kind.PARAMETER.is_foreign and parameter.inferred_type? != region_type:
+                parameter.region_source.kind = region_source::Kind.FOREIGN
+            end
+        end
+    end
+    scope := AnalysisScope.FUNCTION{function}[.mod]
+    analyze_block_regions(ctx, function.body, scope)
+    function.needs_local_region = block_needs_local_region(mod, function.body)
+end
+
+
+/// Analyze successfully type-checked modules and select allocation destinations.
+/// Infer function safety first, reset stale metadata, then validate stores/returns
+/// and nested literals. Record errors without throwing or appending syntax nodes.
+func run(program: program::Program) -> void:
+    modules := program.modules
+    dependency_order := program.dependency_order
+    diagnostics := program.diagnostics
+    if diagnostics.error_count > 0:
+        return
+    end
+    // Safety inference reads typed syntax/calls, not the region sources assigned below.
+    region_safety::infer_function_safety(modules, dependency_order)
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        ctx := context::ModuleContext{program, mod}[.program]
+        // Repeated analysis must start without stale sources or literal exceptions.
+        for node in mod.ast.nodes:
+            node.region_source = region_source::Source{}[.node]
+            node.foreign_argument_literal = false
+        end
+        tables::assign_global_regions(mod)
+        analyze_global_initializers(ctx)
+        for id in mod.ast.get_root_module().declarations:
+            node := mod.ast.nodes[id]
+            if not (node.kind is FUNCTION_DECL):
+                continue
+            end
+            analyze_function_regions(ctx, node.kind.FUNCTION_DECL)
+            if diagnostics.error_count > 0:
+                return
+            end
+        end
+        // All stores/returns/calls have finished retargeting before this check.
+        check_literal_regions(ctx)
+        if diagnostics.error_count > 0:
+            return
+        end
+    end
+end

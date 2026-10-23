@@ -1,0 +1,47 @@
+@embed{C}
+struct DefaultHandle { JikRegion *jik_region; int32_t value; };
+struct BareHandle { JikRegion *jik_region; int32_t value; };
+static int32_t default_creations;
+static struct DefaultHandle *native_default(JikRegion *r) {
+    struct DefaultHandle *h = jik_region_alloc(r, sizeof(*h));
+    h->jik_region = r;
+    h->value = 0;
+    default_creations++;
+    return h;
+}
+static int32_t native_count(void) { return default_creations; }
+static int32_t native_get(struct DefaultHandle *h) { return h->value; }
+static void native_set(struct DefaultHandle *h, int32_t value) { h->value = value; }
+static bool native_owner(struct DefaultHandle *h, JikRegion *r) { return h->jik_region == r; }
+static struct BareHandle *native_bare(JikRegion *r) {
+    struct BareHandle *h = jik_region_alloc(r, sizeof(*h));
+    h->jik_region = r;
+    h->value = 42;
+    return h;
+}
+static int32_t native_bare_get(struct BareHandle *h) { return h->value; }
+C
+
+// The initializer can precede its type, and its public name is arbitrary.
+init extern func native_default as arbitrary(r: Region) -> Handle
+extern struct DefaultHandle as Handle
+extern func native_count as creations() -> int
+extern func native_get as get(value: Handle) -> int
+extern func native_set as set(value: Handle, number: int) -> void
+extern func native_owner as owned_by(value: Handle, r: Region) -> bool
+
+extern struct BareHandle as Bare
+extern func native_bare as bare(r: Region) -> Bare
+extern func native_bare_get as bare_get(value: Bare) -> int
+
+struct Holder:
+    handle: Handle
+    optional: Option[Bare]
+    handles: Vec[Handle]
+    dictionary: Dict[Handle]
+end
+
+variant Value:
+    Empty
+    Full: Handle
+end

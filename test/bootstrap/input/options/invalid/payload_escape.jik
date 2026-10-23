@@ -1,0 +1,7 @@
+func bad(r: Region) -> Option[String]:
+    text := "local"
+    return Some{text}
+end
+func main():
+    return 42
+end

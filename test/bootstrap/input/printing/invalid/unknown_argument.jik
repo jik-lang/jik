@@ -1,0 +1,4 @@
+func main():
+    println(42, missing)
+    return 0
+end

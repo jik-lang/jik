@@ -1,0 +1,5 @@
+func check(value: bool):
+    // Diagnostics must refer to this imported file and this call's line.
+
+    assert(value)
+end

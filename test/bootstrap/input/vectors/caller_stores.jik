@@ -1,0 +1,21 @@
+func allocate(r: Region, owner: Vec[String]) -> int:
+    values := ["caller"][r]
+    return len(values) + len(owner)
+end
+
+func replace(values: Vec[Vec[String]]):
+    values[0] = ["new"]
+end
+
+func main():
+    words := ["anchor"]
+    if allocate(_, words) != 2:
+        return 1
+    end
+    rows := [["old"]]
+    replace(rows)
+    if rows[0][0] != "new":
+        return 2
+    end
+    return 42
+end

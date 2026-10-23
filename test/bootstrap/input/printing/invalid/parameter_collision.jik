@@ -1,0 +1,7 @@
+func invalid(println: int) -> int:
+    return println
+end
+
+func main():
+    return 0
+end

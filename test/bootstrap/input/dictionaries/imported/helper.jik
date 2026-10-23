@@ -1,0 +1,11 @@
+struct Item:
+    value: int
+end
+
+func make(r: Region) -> Dict[Item]:
+    return {"item": Item{value = 42}}
+end
+
+func lookup(values: Dict[Item]) -> Option[Item]:
+    return values["item"]
+end

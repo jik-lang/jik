@@ -1,0 +1,8 @@
+func wrong(r: Region):
+    return r
+end
+
+
+func main():
+    return 0
+end

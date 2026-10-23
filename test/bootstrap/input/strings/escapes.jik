@@ -1,0 +1,11 @@
+func main():
+    text := "quote:\" slash:\\ tab:\t newline:\n return:\r hex:\x41F utf8:Ž😀"
+    same := "quote:\" slash:\\ tab:\t newline:\n return:\r hex:AF utf8:Ž😀"
+    multiline := """first
+second\n"quoted" Ž😀"""
+    expected := "first\nsecond\\n\"quoted\" Ž😀"
+    if text != same or multiline != expected:
+        return 1
+    end
+    return 42
+end

@@ -1,0 +1,6 @@
+func bad():
+    value := {}
+end
+func main():
+    return 42
+end

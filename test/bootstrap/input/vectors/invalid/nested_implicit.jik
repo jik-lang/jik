@@ -1,0 +1,7 @@
+func invalid(r: Region) -> Vec[String]:
+    return ["nested"@]
+end
+
+func main():
+    return 0
+end

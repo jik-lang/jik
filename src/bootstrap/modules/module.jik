@@ -1,0 +1,30 @@
+//! Each source file's AST, imports, and shared analysis data.
+
+use "../lexer/token"
+use "../parser/ast"
+use "../language/symbol"
+use "../source"
+use "../language/types"
+
+
+// Per-source compilation state, populated by loading and successive semantic passes.
+struct Module:
+    source_id: int    // Stable index in Program.sources.sources and Program.modules.
+    tokens: Vec[token::Token]
+    ast: ast::Ast
+    global_scope: symbol::Scope    // Module declarations, populated by name resolution.
+    imports: Vec[ResolvedImport]    // Resolved outgoing import edges in source order.
+    // Validated main declaration node ID in ast.nodes; None without an entry.
+    entry_origin: Option[int]
+    // Same composite as Program.type_store, attached by declaration resolution.
+    // Module-local helpers use this view; modules never initialize their own store.
+    type_store: types::Store
+end
+
+
+// Import edge after path resolution; aliases belong to the importing module.
+struct ResolvedImport:
+    target_id: int    // Source ID of the imported module; indexes Program.modules.
+    alias: String
+    span: source::Span    // Import declaration location in the importing source.
+end

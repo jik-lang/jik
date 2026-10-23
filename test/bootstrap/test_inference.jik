@@ -1,0 +1,144 @@
+use "jik/testing" as test
+
+use "../../src/bootstrap/program"
+use "../../src/bootstrap/semantic/resolution/resolve"
+use "support"
+use "../../src/bootstrap/semantic/typing/inference"
+use "../../src/bootstrap/language/types"
+use "../../src/bootstrap/modules/module"
+
+
+func test_forward_and_recursion(ts) -> void:
+    forward := support::infer_source("func main():\n    return first(42)\nend\nfunc first(x):\n    return second(x)\nend\nfunc second(y):\n    return y\nend\n", 0)
+    support::check_signature(ts, forward, "first", "func(int) -> int")
+    support::check_signature(ts, forward, "second", "func(int) -> int")
+    recursive := support::infer_source("func count(n):\n    if n < 1:\n        return 0\n    end\n    return 1 + count(n - 1)\nend\nfunc main():\n    return count(4)\nend\n", 0)
+    support::check_signature(ts, recursive, "count", "func(int) -> int")
+    mutual := support::infer_source("func first(n):\n    if n < 1:\n        return 0\n    end\n    return second(n - 1)\nend\nfunc second(n):\n    return first(n) + 1\nend\nfunc main():\n    return first(4)\nend\n", 0)
+    support::check_signature(ts, mutual, "first", "func(int) -> int")
+    support::check_signature(ts, mutual, "second", "func(int) -> int")
+end
+
+
+func test_bool_void_and_annotations(ts) -> void:
+    boolean := support::infer_source("func pass(value):\n    return value\nend\nfunc decide():\n    return pass(1 < 2)\nend\n", -1)
+    support::check_signature(ts, boolean, "pass", "func(bool) -> bool")
+    support::check_signature(ts, boolean, "decide", "func() -> bool")
+    arithmetic := support::infer_source("func add(value: double):\n    result := value + 1\n    return result\nend\nfunc identity(value) -> int:\n    return value\nend\nfunc letter(value: char):\n    return value\nend\n", -1)
+    support::check_signature(ts, arithmetic, "add", "func(double) -> double")
+    support::check_signature(ts, arithmetic, "identity", "func(int) -> int")
+    support::check_signature(ts, arithmetic, "letter", "func(char) -> char")
+    empty := support::infer_source("func empty():\n    value := 1\nend\nfunc stop():\n    return\nend\nfunc main():\nend\n", 0)
+    support::check_signature(ts, empty, "empty", "func() -> void")
+    support::check_signature(ts, empty, "stop", "func() -> void")
+    support::check_signature(ts, empty, "main", "func() -> int")
+    composite := support::infer_source("struct Box:\n    value: int\nend\nfunc identity(value: Vec[Option[Box]]):\n    return value\nend\n", -1)
+    support::check_signature(ts, composite, "identity", "func(Vec[Option[module[0]::Box]]) -> Vec[Option[module[0]::Box]]")
+end
+
+
+func test_cross_module_constraints(ts) -> void:
+    comp := program::Program{}
+    support::add_source(comp, "func pass(value):\n    return value\nend\n", 0)
+    support::add_source(comp, "func main():\n    choice := helper::pass(1 < 2)\n    if choice:\n        return 42\n    end\n    return 0\nend\n", 1)
+    span := comp.modules[0].ast.nodes[0].span
+    comp.modules[1].imports.push(module::ResolvedImport{target_id = 0, alias = "helper", span})
+    resolve::resolve_declarations(comp)
+    if comp.diagnostics.error_count == 0:
+        inference::run(comp, 1)
+    end
+    support::check_signature(ts, comp, "pass", "func(bool) -> bool")
+    for node in comp.modules[1].ast.nodes:
+        if node.kind is LOCAL_DECL:
+            test::suite_assert(ts, node.inferred_type is Some, site())
+            if node.inferred_type is Some:
+                test::suite_assert(ts, must types::format(comp.modules[1].type_store, node.inferred_type?) == "bool", site())
+            end
+        end
+    end
+end
+
+
+func check_error(ts, foreign text: String, foreign expected: String) -> void:
+    comp := support::infer_source(text, 0)
+    test::suite_assert(ts, comp.diagnostics.error_count == 1, site())
+    if len(comp.diagnostics.messages) != 1:
+        return
+    end
+    message := comp.diagnostics.messages[0]
+    test::suite_assert(ts, message.summary == expected, site())
+    test::suite_assert(ts, message.span is Some, site())
+    if message.span is Some:
+        span := message.span?
+        test::suite_assert(ts, span.source_id == 0 and span.stop > span.start, site())
+    end
+end
+
+
+func test_conflicts_and_unresolved_types(ts) -> void:
+    check_error(ts, "func f(value: int):\n    if value < 1:\n        return 1\n    end\n    return 1 < 2\nend\nfunc main():\n    return 0\nend\n", "type inference conflict")
+    check_error(ts, "func f(value: bool):\n    return value\nend\nfunc main():\n    result := f(1)\n    return 0\nend\n", "type inference conflict")
+    check_error(ts, "func f(value):\n    return 0\nend\nfunc main():\n    first := f(1)\n    second := f(1 < 2)\n    return 0\nend\n", "type inference conflict")
+    check_error(ts, "func f(value: int):\n    if value < 1:\n        return\n    end\n    return 0\nend\nfunc main():\n    return 0\nend\n", "type inference conflict")
+    check_error(ts, "func f() -> int:\n    return 1 < 2\nend\nfunc main():\n    return 0\nend\n", "type inference conflict")
+    check_error(ts, "func f(value: double) -> int:\n    return value\nend\nfunc main():\n    return 0\nend\n", "type inference conflict")
+    check_error(ts, "func f():\n    return f()\nend\nfunc main():\n    return 0\nend\n", "unresolved type")
+    check_error(ts, "func f(value):\n    return 0\nend\nfunc main():\n    return 0\nend\n", "unresolved type")
+    check_error(ts, "func f(value):\n    return value + 1\nend\nfunc main():\n    return 0\nend\n", "unresolved type")
+    check_error(ts, "func f(value, known: double) -> double:\n    return value + known\nend\nfunc main():\n    return 0\nend\n", "unresolved type")
+    check_error(ts, "func f():\nend\nfunc main():\n    value := f()\n    return 0\nend\n", "void value")
+    check_error(ts, "func main():\n    return\nend\n", "type inference conflict")
+    check_error(ts, "func f(value: int):\n    return value\nend\nfunc main():\n    return f(1, 2)\nend\n", "call arity mismatch")
+    check_error(ts, "func f(value: bool):\n    return value + value\nend\nfunc main():\n    return 0\nend\n", "invalid numeric operands")
+end
+
+
+func test_failed_inference_publishes_nothing(ts) -> void:
+    comp := program::Program{}
+    support::add_source(comp, "func ready(value: int) -> int:\n    return value\nend\n", 0)
+    support::add_source(comp, "func unresolved(value):\n    return value\nend\n", 1)
+    resolve::resolve_declarations(comp)
+    inference::run(comp, -1)
+    test::suite_assert(ts, comp.diagnostics.error_count == 1, site())
+    for mod in comp.modules:
+        for node in mod.ast.nodes:
+            test::suite_assert(ts, node.inferred_type is None, site())
+            test::suite_assert(ts, node.inference_slot == -1, site())
+            if node.kind is TYPE_NAME:
+                test::suite_assert(ts, node.kind.TYPE_NAME.resolved_type is Some, site())
+            end
+        end
+    end
+    for stored in comp.modules[0].type_store.types:
+        test::suite_assert(ts, not (stored.kind is FUNCTION), site())
+    end
+end
+
+
+func test_inference_reads_annotations_on_each_run(ts) -> void:
+    comp := support::infer_source("func pass(value):\n    return value\nend\nfunc main():\n    first := pass(1)\n    choice := 1 < 2\n    return 0\nend\n", 0)
+    support::check_signature(ts, comp, "pass", "func(int) -> int")
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    main_id := mod.global_scope.symbols["main"]?.origin
+    main := mod.ast.nodes[main_id].kind.FUNCTION_DECL
+    first := mod.ast.nodes[main.body.statements[0]].kind.LOCAL_DECL
+    choice := mod.ast.nodes[main.body.statements[1]].kind.LOCAL_DECL
+    // Change the supplied value's type without changing declarations/annotations.
+    mod.ast.nodes[first.initializer?].kind.CALL.arguments[0] = choice.initializer?
+    inference::run(comp, 0)
+    support::check_signature(ts, comp, "pass", "func(bool) -> bool")
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_inference")
+    test_forward_and_recursion(ts)
+    test_bool_void_and_annotations(ts)
+    test_cross_module_constraints(ts)
+    test_conflicts_and_unresolved_types(ts)
+    test_failed_inference_publishes_nothing(ts)
+    test_inference_reads_annotations_on_each_run(ts)
+end

@@ -1,0 +1,62 @@
+use "jik/bytes"
+
+use "opaque_library" as lib
+
+@embed{C}
+struct IncompleteOpaque;
+static struct IncompleteOpaque *print_incomplete(JikRegion *r) { (void)r; return NULL; }
+C
+
+// The public basename deliberately collides with lib::Handle.
+extern struct IncompleteOpaque as Handle
+extern func print_incomplete as null_handle(r: Region) -> Handle
+
+struct Holder:
+    handle: lib::Handle
+    optional: Option[lib::Handle]
+    values: Vec[lib::Handle]
+    lookup: Dict[lib::Handle]
+end
+
+variant Value:
+    Empty
+    Full: lib::Handle
+end
+
+struct Node:
+    handle: lib::Handle
+    next: Option[Node]
+end
+
+
+func main():
+    value := lib::make()
+    null_value := lib::null_handle()
+    incomplete := null_handle()
+    print(value)
+    println(null_value, incomplete)
+    optional := Some{value}
+    absent: Option[lib::Handle]
+    println(optional)
+    println(absent)
+    values := [value, null_value]
+    println(values)
+    empty_values: Vec[lib::Handle]
+    println(empty_values)
+    lookup: Dict[lib::Handle]
+    lookup["key"] = value
+    println(lookup)
+    empty_lookup: Dict[lib::Handle]
+    println(empty_lookup)
+    holder := Holder{handle=value, optional=optional, values=values, lookup=lookup}
+    println(holder)
+    full := Value.Full{value}
+    empty := Value.Empty{}
+    println(full)
+    println(empty)
+    node := Node{handle=value, next=Some{Node{handle=null_value}}}
+    println(node)
+    b := bytes::Bytes{}
+    buf := bytes::ByteBuf{}
+    println(b, buf)
+end

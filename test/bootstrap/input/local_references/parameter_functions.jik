@@ -1,0 +1,23 @@
+func earlier() -> int:
+    return 7
+end
+
+
+func combine(earlier: int, later: int) -> int:
+    return earlier + later
+end
+
+
+func later() -> int:
+    return 9
+end
+
+
+func identity(identity: int) -> int:
+    return identity
+end
+
+
+func main():
+    println(combine(20, 22), ":", earlier(), ":", later(), ":", identity(5))
+end

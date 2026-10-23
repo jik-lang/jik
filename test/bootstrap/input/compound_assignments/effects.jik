@@ -1,0 +1,32 @@
+struct Box:
+    value: int
+end
+
+func field_receiver(counts: Vec[int], box: Box) -> Box:
+    counts[0] = counts[0] + 1
+    return box
+end
+
+func vector_receiver(counts: Vec[int], values: Vec[int]) -> Vec[int]:
+    counts[1] = counts[1] + 1
+    return values
+end
+
+func index(counts: Vec[int]) -> int:
+    counts[2] = counts[2] + 1
+    return 0
+end
+
+func rhs(counts: Vec[int]) -> int:
+    counts[3] = counts[3] + 1
+    return 2
+end
+
+func main():
+    counts := [0, 0, 0, 0]
+    box := Box{value=10}
+    values := [20]
+    field_receiver(counts, box).value += rhs(counts)
+    vector_receiver(counts, values)[index(counts)] *= rhs(counts)
+    println(counts, ":", box.value, ":", values[0])
+end

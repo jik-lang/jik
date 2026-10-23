@@ -1,7 +1,10 @@
-use "source"
+//! Collect and render diagnostics with source spans in reporting order.
+
 use "jik/io"
 use "jik/string"
 use "jik/strbuf"
+
+use "source"
 
 
 enum MessageLevel:
@@ -16,16 +19,18 @@ table MessageLevelNames[MessageLevel] -> String:
 end
 
 
+// One diagnostic with optional source context.
 struct Message:
     level: MessageLevel
-    summary: String
-    detail: String
-    span: Option[source::Span]
+    summary: String    // Primary diagnostic text.
+    detail: String    // Additional explanation; empty when no detail is needed.
+    span: Option[source::Span]    // None for diagnostics without a source location.
 end
 
+// Accumulated diagnostics for one compilation.
 struct Diagnostics:
-    messages: Vec[Message]
-    error_count: int
+    messages: Vec[Message]    // Diagnostics in reporting order.
+    error_count: int    // Number of ERROR messages; warnings do not block compilation.
 end
 
 
@@ -39,6 +44,8 @@ func new_message(level: MessageLevel, foreign summary: String, foreign detail: S
 end
 
 
+/// Append an error in reporting order, copying message text into diagnostics.
+/// The optional span must belong to the diagnostics region.
 func error(diag: Diagnostics, foreign summary: String, foreign detail: String, span: Option[source::Span]) -> void:
     message := new_message(MessageLevel.ERROR, summary, detail, span, .diag)
     diag.messages.push(message)
@@ -93,7 +100,13 @@ func append_message(sb: strbuf::StrBuf, foreign message: Message, foreign src_mn
     sb.append("\n")
     append_spaces(sb, len(line_number) + 1)
     sb.append("|")
-    append_spaces(sb, column)
+    for i = 0, column:
+        if i < len(line_text) and line_text[i] == '\t':
+            sb.append("\t")
+        else:
+            sb.append(" ")
+        end
+    end
     sb.append("^\n")
 
     if len(message.detail) > 0:
@@ -104,10 +117,16 @@ func append_message(sb: strbuf::StrBuf, foreign message: Message, foreign src_mn
 end
 
 
-func print_all(diag: Diagnostics, foreign src_mngr: source::SourceManager) -> void:
-    sb := strbuf::new("")
+/// Render accumulated messages into a String allocated in r.
+func format_all(foreign diag: Diagnostics, foreign src_mngr: source::SourceManager, r: Region) -> String:
+    sb := strbuf::new("", r)
     for m in diag.messages:
         append_message(sb, m, src_mngr)
     end
-    io::write_stderr(strbuf::to_string(sb))
+    return strbuf::to_string(sb, r)
+end
+
+
+func print_all(diag: Diagnostics, foreign src_mngr: source::SourceManager) -> void:
+    io::write_stderr(format_all(diag, src_mngr))
 end

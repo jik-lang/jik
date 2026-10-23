@@ -1,0 +1,8 @@
+struct Point:
+    text: String
+end
+
+enum Kind:
+    A
+    B
+end

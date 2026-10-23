@@ -1,0 +1,7 @@
+func repeat():
+    return repeat()
+end
+
+func main():
+    return 0
+end

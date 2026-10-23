@@ -1,0 +1,39 @@
+use "library" as lib
+use "bridge"
+
+global_handle := lib::arbitrary()
+
+func main():
+    assert(global_handle.get() == 0)
+    before := lib::creations()
+    first: lib::Handle
+    second := lib::Handle{}
+    assert(lib::creations() == before + 2)
+    assert(first.get() == 0 and second.get() == 0)
+    first.set(17)
+    assert(bridge::read(first) == 17 and second.get() == 0)
+    explicit := lib::arbitrary()
+    assert(explicit.get() == 0)
+    holder := lib::Holder{}
+    assert(holder.handle.get() == 0 and holder.optional is None)
+    assert(len(holder.handles) == 0 and len(holder.dictionary) == 0)
+    variant_default: lib::Value
+    assert(variant_default is Empty)
+    variant_full := lib::Value.Full{}
+    assert(variant_full.Full.get() == 0)
+    empty_vector: Vec[lib::Handle]
+    empty_dict: Dict[lib::Handle]
+    assert(len(empty_vector) == 0 and len(empty_dict) == 0)
+    before_repeat := lib::creations()
+    handles := [3 of lib::Handle{}]
+    assert(lib::creations() == before_repeat + 3)
+    handles[0].set(42)
+    assert(handles[1].get() == 0 and handles[2].get() == 0)
+    bare := lib::bare()
+    bare_values := [bare]
+    bare_dict := {"bare": bare}
+    maybe := Some{bare}
+    assert(bare_values[0].bare_get() == 42 and bare_dict["bare"]?.bare_get() == 42)
+    assert(maybe?.bare_get() == 42)
+    println("extern-defaults-ok")
+end

@@ -1,0 +1,155 @@
+//! Check imports and determine module analysis and initialization order.
+
+use "jik/strbuf"
+
+use "module"
+use "../source"
+use "../diag"
+
+
+enum VisitState:
+    UNVISITED
+    VISITING
+    VISITED
+end
+
+
+// Temporary depth-first traversal for dependency ordering and import-cycle diagnostics.
+struct Traversal:
+    // Indexed by stable source ID, as are sources.sources and states.
+    modules: Vec[module::Module]
+    sources: source::SourceManager
+    diagnostics: diag::Diagnostics
+    states: Vec[VisitState]    // Visit state for each source ID.
+    stack: Vec[int]    // Source IDs on the active DFS path, used to describe a cycle.
+    ordered: Vec[int]    // Completed source IDs, with dependencies before importers.
+end
+
+
+func report_cycle(t: Traversal, target_id: int, span: source::Span) -> void:
+    detail := strbuf::new("")
+    in_cycle := false
+    for id in t.stack:
+        if id == target_id:
+            in_cycle = true
+        end
+        if in_cycle:
+            detail.append(t.sources.sources[id].path)
+            detail.append(" -> ")
+        end
+    end
+    detail.append(t.sources.sources[target_id].path)
+    diag::error(t.diagnostics, "module import cycle detected", strbuf::to_string(detail), Some{span})
+end
+
+
+func visit(t: Traversal, id: int) -> bool:
+    t.states[id] = VisitState.VISITING
+    t.stack.push(id)
+    mod := t.modules[id]
+    for import in mod.imports:
+        if t.states[import.target_id] == VisitState.VISITING:
+            report_cycle(t, import.target_id, import.span)
+            return false
+        end
+        if t.states[import.target_id] == VisitState.UNVISITED:
+            if not visit(t, import.target_id):
+                return false
+            end
+        end
+    end
+    t.stack.pop()
+    t.states[id] = VisitState.VISITED
+    t.ordered.push(id)
+    return true
+end
+
+
+/// Return dependency-first source IDs in r, or an empty vector with a cycle
+/// diagnostic. Require module storage and import edges to use valid source IDs.
+/// Discovery stores modules at their source IDs and edges in source order.
+/// Visit each dependency before appending its importer. A cycle has no order.
+/// Semantic passes, diagnostic traversal and deterministic C declaration scans use
+/// this order; startup side effects use the distinct initialization_order below.
+func dependency_order(modules: Vec[module::Module], sources: source::SourceManager, diagnostics: diag::Diagnostics, r: Region) -> Vec[int]:
+    assert(len(modules) == len(sources.sources))
+    for id, mod in modules:
+        assert(mod.source_id == id)
+        for import in mod.imports:
+            assert(import.target_id >= 0 and import.target_id < len(modules))
+        end
+    end
+    t := Traversal{modules, sources, diagnostics, states = [len(modules) of VisitState.UNVISITED]}[r]
+    for id = 0, len(modules):
+        if t.states[id] == VisitState.UNVISITED:
+            if not visit(t, id):
+                t.ordered.clear()
+                return t.ordered
+            end
+        end
+    end
+    return t.ordered
+end
+
+
+/// Return the startup order for modules reachable from the entry file, allocated in r.
+/// Require a graph already checked for cycles. Keep this order separate from DFS.
+/// Reproduce the seed's startup schedule, also used for native directives (include
+/// paths, linker arguments and file copies). Both expose ordering to the user.
+/// Preparation calls this only after import-cycle validation succeeds and retains
+/// the result in Program; neither C emission nor native building chooses an order.
+/// Discover with a LIFO worklist, drain leaves in reverse discovery order, then
+/// repeatedly scan branches in discovery order, appending each ready importer.
+/// Do not replace this tie-breaking with the DFS dependency order.
+func initialization_order(foreign modules: Vec[module::Module], entry_id: int, r: Region) -> Vec[int]:
+    pending := [entry_id]
+    seen := [len(modules) of false]
+    initialized := [len(modules) of false]
+    leaves: Vec[int]
+    branches: Vec[int]
+    result: Vec[int][r]
+    while len(pending) > 0:
+        id := pending.pop()
+        if seen[id]:
+            continue
+        end
+        seen[id] = true
+        if len(modules[id].imports) == 0:
+            leaves.push(id)
+        else:
+            branches.push(id)
+        end
+        for edge in modules[id].imports:
+            pending.push(edge.target_id)
+        end
+    end
+    while len(leaves) > 0:
+        id := leaves.pop()
+        result.push(id)
+        initialized[id] = true
+    end
+    remaining := len(branches)
+    while remaining > 0:
+        progressed := false
+        for id in branches:
+            if initialized[id]:
+                continue
+            end
+            ready := true
+            for edge in modules[id].imports:
+                if not initialized[edge.target_id]:
+                    ready = false
+                    break
+                end
+            end
+            if ready:
+                result.push(id)
+                initialized[id] = true
+                remaining -= 1
+                progressed = true
+            end
+        end
+        assert(progressed)
+    end
+    return result
+end

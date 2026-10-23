@@ -1,0 +1,29 @@
+func main():
+    alphabet := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+    values: Dict[int]
+    for i = 0, len(alphabet):
+        text := alphabet[i:i+1]
+        values[text] = i
+    end
+    values["A"] = 100
+    if len(values) != 64 or values["A"]? != 100 or values["-"]? != 63:
+        return 1
+    end
+    total := 0
+    for label, value in values:
+        total = total + value
+    end
+    if total != 2116:
+        return 2
+    end
+    clear(values)
+    if len(values) != 0:
+        return 3
+    end
+    values["new"] = 7
+    if len(values) != 1 or values["new"]? != 7:
+        return 4
+    end
+    println(total, ":", len(values), ":", values["new"]?)
+    return 42
+end

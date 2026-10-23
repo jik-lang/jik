@@ -1,0 +1,30 @@
+func source(counter: Vec[int], value: String) -> String:
+    counter[0] = counter[0] + 1
+    return value
+end
+
+func bound(counter: Vec[int], value: int) -> int:
+    counter[0] = counter[0] + 1
+    return value
+end
+
+func main():
+    counter := [0]
+    value := "abcd"[.counter]
+    part := source(counter, value)[bound(counter, 1):bound(counter, 3)]
+    if counter[0] != 3 or part != "bc":
+        return 1
+    end
+    counter[0] = 0
+    byte := source(counter, value)[bound(counter, 2)]
+    if counter[0] != 2 or byte != value[2]:
+        return 2
+    end
+    counter[0] = 0
+    whole := source(counter, value)[:]
+    if counter[0] != 1 or whole != value:
+        return 3
+    end
+    println(part, ":", byte, ":", whole)
+    return 42
+end

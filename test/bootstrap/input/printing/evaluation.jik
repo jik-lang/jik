@@ -1,0 +1,16 @@
+func tick(counts: Vec[int]) -> int:
+    counts[0] = counts[0] + 1
+    return counts[0]
+end
+
+func main():
+    counts := [0]
+    println(tick(counts), ":", tick(counts), ":", tick(counts))
+    if counts[0] != 3:
+        return 1
+    end
+    values := [10, 20]
+    println(pop(values), ":", values)
+    println(values)
+    return 42
+end

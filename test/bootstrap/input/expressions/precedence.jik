@@ -1,0 +1,37 @@
+func dangerous(zero: int) -> int:
+    return 1 / zero
+end
+
+func main():
+    values := [2, 3]
+    optional := Some{3}
+    missing: Option[int]
+    arithmetic := 20 / 5 * 2 + 19 % 6 * 2
+    negative := -values[1] * 2
+    selection := 10 + 2 * 3 if false or true and false else 20 - 6 / 2
+    nested := 1 if false else 2 if true else 3
+    condition := 1 if true if false else true else 2
+    if arithmetic != 10 or negative != -6 or selection != 17 or nested != 2 or condition != 1:
+        return 1
+    end
+    if not (true or false and false) or (not false and false):
+        return 2
+    end
+    if not (true == false == false) or not (1 < 2 == true):
+        return 3
+    end
+    if not (optional is Some and optional? == 3) or not (missing is None or missing? == 0):
+        return 4
+    end
+    if false and dangerous(0) == 0:
+        return 5
+    end
+    if not (true or dangerous(0) == 0):
+        return 6
+    end
+    lazy := values[99] if false else values[0]
+    if lazy != 2:
+        return 7
+    end
+    println(arithmetic, ":", negative, ":", selection, ":", nested, ":", condition)
+end

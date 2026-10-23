@@ -1,0 +1,4 @@
+func main():
+    value := not 1
+    return 0
+end

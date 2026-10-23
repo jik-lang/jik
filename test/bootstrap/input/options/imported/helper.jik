@@ -1,0 +1,12 @@
+struct Item:
+    value: int
+    next: Option[Item]
+end
+
+func make(value: int, r: Region) -> Option[Item]:
+    return Some{Item{value}}
+end
+
+func read(value: Option[Item]) -> int:
+    return value?.value
+end

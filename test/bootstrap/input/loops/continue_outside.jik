@@ -1,0 +1,6 @@
+func main():
+    if true:
+        continue
+    end
+    return 0
+end

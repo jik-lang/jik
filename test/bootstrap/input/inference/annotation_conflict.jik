@@ -1,0 +1,7 @@
+func choose() -> bool:
+    return 1
+end
+
+func main():
+    return 0
+end

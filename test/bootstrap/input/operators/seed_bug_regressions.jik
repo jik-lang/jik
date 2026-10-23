@@ -1,0 +1,10 @@
+// Correct bootstrap behavior for the two documented seed C emission defects.
+func main():
+    if 0008 != 8:
+        return 1
+    end
+    if --21 != 21:
+        return 2
+    end
+    return 42
+end

@@ -1,0 +1,12 @@
+func len(values: Vec[int]) -> int:
+    return 99
+end
+
+func pop(values: Vec[int]) -> int:
+    return 88
+end
+
+func main():
+    values := [1, 2]
+    println(values.len(), ":", values.pop())
+end

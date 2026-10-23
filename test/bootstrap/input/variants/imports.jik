@@ -1,0 +1,17 @@
+use "shared"
+use "left"
+use "right"
+
+variant Result:
+    OK: String
+    ERR: int
+end
+
+func main():
+    value := left::make()
+    println(value, ":", right::inspect(value))
+    value = shared::Result.EOF{}
+    println(value)
+    local := Result.OK{"local"}
+    println(local)
+end

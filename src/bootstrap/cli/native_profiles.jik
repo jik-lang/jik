@@ -1,0 +1,79 @@
+//! Probe the C target and validate platform/profile restrictions.
+
+use "jik/bytes"
+use "jik/process"
+use "jik/sys"
+
+use "../compiler"
+use "../diag"
+use "../language/native"
+
+
+// Result of probing the native C compiler target.
+struct Target:
+    profile: native::Profile    // UNKNOWN if probing fails or the target is unsupported.
+    description: String    // Compiler probe output or a diagnostic explaining probe failure.
+end
+
+
+func host_platform() -> native::Platform:
+    return native::Platform.WINDOWS if sys::platform() == "windows" else native::Platform.LINUX
+end
+
+
+func probe(foreign cc: String, foreign flags: Vec[String], r: Region) -> Target:
+    target := Target{profile = native::Profile.UNKNOWN, description = "unknown"}[r]
+    args := copy(flags)
+    args.push("-dumpmachine")
+    try result := process::capture(cc, args):
+        try output := bytes::to_string_ascii(result.out):
+            try errors := bytes::to_string_ascii(result.err):
+                target.description = concat(output, errors, r)
+                if result.code == 0:
+                    target.profile = native::normalize_target(target.description)
+                end
+            except:
+                target.description = copy("compiler target probe returned non-text diagnostics", r)
+            end
+        except:
+            target.description = copy("compiler target probe returned non-text output", r)
+        end
+    except:
+        target.description = copy(error_msg(), r)
+    end
+    return target
+end
+
+
+throws func validate(comp: compiler::Compiler, foreign cc: String, foreign flags: Vec[String]) -> native::Profile:
+    host := host_platform()
+    needs_probe := false
+    for mod in comp.program.modules:
+        if native::requires_profile(mod.ast.get_root_module().requirements, host):
+            needs_probe = true
+        end
+    end
+    if not needs_probe:
+        return native::Profile.UNKNOWN
+    end
+    target := probe(cc, flags)
+    for source_id in comp.program.dependency_order:
+        mod := comp.program.modules[source_id]
+        requirements := mod.ast.get_root_module().requirements
+        if native::supports_profile(requirements, host, target.profile):
+            continue
+        end
+        for requirement in requirements:
+            if native::platform_active(requirement.platform, host) and requirement.profile != native::Profile.ALL:
+                detail := concat("selected profile: ", native::ProfileNames[target.profile], "\ncompiler target: ", target.description)
+                diag::error(comp.program.diagnostics, "native dependencies are unsupported by the selected toolchain", detail, Some{requirement.span})
+                break
+            end
+        end
+    end
+    if comp.program.diagnostics.error_count > 0:
+        comp.print_diagnostics()
+        fail(compiler::ERROR_REPORTED)
+    end
+    return target.profile
+end

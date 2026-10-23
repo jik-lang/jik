@@ -1,0 +1,7 @@
+struct Node:
+    next: Vec[Node]
+end
+
+func main():
+    return 0
+end

@@ -1,0 +1,113 @@
+use "jik/testing" as test
+use "jik/string"
+
+use "../../src/bootstrap/semantic/context"
+use "support"
+use "../../src/bootstrap/semantic/typing/typecheck"
+use "../../src/bootstrap/language/types"
+
+
+func test_valid_programs(ts) -> void:
+    comp := support::infer_source("func bump(value: int):\n    value = value + 1\n    return value\nend\nfunc main():\n    value := bump(39)\n    if value < 42:\n        result := value + 2\n        value = result\n    end\n    return value\nend\n", 0)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    pointer_conditions := support::infer_source("struct Box:\n    value: int\nend\nenum Mode:\n    ON\n    OFF\nend\nfunc text(value: String):\n    if value:\n        return 1\n    end\n    return 0\nend\nfunc items(value: Vec[int]):\n    if value:\n        return 1\n    end\n    return 0\nend\nfunc option(value: Option[int]):\n    if value:\n        return 1\n    end\n    return 0\nend\nfunc box(value: Box):\n    if value:\n        return 1\n    end\n    return 0\nend\nfunc mode(value: Mode):\n    if value:\n        return 1\n    end\n    return 0\nend\n", -1)
+    test::suite_assert(ts, pointer_conditions.diagnostics.error_count == 0, site())
+    typecheck::run(pointer_conditions)
+    test::suite_assert(ts, pointer_conditions.diagnostics.error_count == 0, site())
+end
+
+
+func test_site_condition(ts) -> void:
+    text := "func inspect(value: Site):\n    if value:\n        return 1\n    end\n    return 0\nend\nfunc main():\n    return 0\nend\n"
+    comp := support::infer_source(text, 0)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 1, site())
+    if len(comp.diagnostics.messages) == 1:
+        message := comp.diagnostics.messages[0]
+        test::suite_assert(ts, message.summary == "invalid condition type", site())
+        test::suite_assert(ts, message.span is Some, site())
+        if message.span is Some:
+            expected_start := string::find(text, "if value:") + 3
+            test::suite_assert(ts, message.span?.start == expected_start and message.span?.stop == expected_start + 5, site())
+        end
+    end
+end
+
+
+func test_checker_rejects_inconsistent_results(ts) -> void:
+    // The checker independently validates typed ASTs, even after a later pass
+    // has changed an expression while retaining an earlier inferred type.
+    comp := support::infer_source("func main():\n    value := 1 + 2\n    return value\nend\n", 0)
+    mod := comp.modules[0]
+    bool_type := types::atom(mod.type_store, types::Atom.BOOL)
+    for node in mod.ast.nodes:
+        if node.kind is BINARY:
+            node.inferred_type = Some{bool_type}[.node]
+        end
+    end
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count > 0, site())
+    test::suite_assert(ts, comp.diagnostics.messages[0].summary == "type mismatch", site())
+    call := support::infer_source("func accept(value: int):\n    return value\nend\nfunc main():\n    result := accept(1)\n    comparison_value := 1 < 2\n    return result\nend\n", 0)
+    call_mod := call.modules[0]
+    main_id := call_mod.global_scope.symbols["main"]?.origin
+    main := call_mod.ast.nodes[main_id].kind.FUNCTION_DECL
+    result := call_mod.ast.nodes[main.body.statements[0]].kind.LOCAL_DECL
+    comparison := call_mod.ast.nodes[main.body.statements[1]].kind.LOCAL_DECL
+    call_mod.ast.nodes[result.initializer?].kind.CALL.arguments[0] = comparison.initializer?
+    typecheck::run(call)
+    test::suite_assert(ts, call.diagnostics.error_count == 1, site())
+    test::suite_assert(ts, call.diagnostics.messages[0].summary == "type mismatch", site())
+    assignment := support::infer_source("func main():\n    value := 1\n    value = 2\n    flag := 1 < 2\n    return value\nend\n", 0)
+    assign_mod := assignment.modules[0]
+    assign_main := assign_mod.ast.nodes[assign_mod.global_scope.symbols["main"]?.origin].kind.FUNCTION_DECL
+    flag := assign_mod.ast.nodes[assign_main.body.statements[2]].kind.LOCAL_DECL
+    assign_mod.ast.nodes[assign_main.body.statements[1]].kind.ASSIGN.value = flag.initializer?
+    typecheck::run(assignment)
+    test::suite_assert(ts, assignment.diagnostics.error_count == 1, site())
+    test::suite_assert(ts, assignment.diagnostics.messages[0].summary == "type mismatch", site())
+end
+
+
+func test_missing_metadata(ts) -> void:
+    comp := support::infer_source("func main():\n    return 42\nend\n", 0)
+    mod := comp.modules[0]
+    for node in mod.ast.nodes:
+        if node.kind is INTEGER_LITERAL:
+            node.inferred_type = None
+        end
+    end
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 1, site())
+    test::suite_assert(ts, comp.diagnostics.messages[0].summary == "missing inferred type", site())
+end
+
+
+func test_void_call_contexts(ts) -> void:
+    comp := support::infer_source("func empty():\nend\nfunc stop():\n    return\nend\nfunc discard(value):\nend\nfunc main():\n    empty()\n    stop()\n    discard(42)\n    return 42\nend\n", 0)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    mod := comp.modules[0]
+    main := mod.ast.nodes[mod.global_scope.symbols["main"]?.origin].kind.FUNCTION_DECL
+    call_node := mod.ast.nodes[main.body.statements[0]]
+    test::suite_assert(ts, call_node.inferred_type? == types::atom(mod.type_store, types::Atom.VOID), site())
+    // The same checked call is valid as a statement but invalid as a value.
+    result := typecheck::check_value(context::ModuleContext{program = comp, mod = mod}[.comp], main.body.statements[0])
+    test::suite_assert(ts, result is None, site())
+    test::suite_assert(ts, comp.diagnostics.error_count == 1, site())
+    test::suite_assert(ts, comp.diagnostics.messages[0].summary == "void value", site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_typecheck")
+    test_void_call_contexts(ts)
+    test_valid_programs(ts)
+    test_site_condition(ts)
+    test_checker_rejects_inconsistent_results(ts)
+    test_missing_metadata(ts)
+end

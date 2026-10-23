@@ -1,0 +1,11 @@
+use "defining_builtin_helper" as helper
+
+func main():
+    value := helper::Value{number = 42}
+    assert(value.len() == 42)
+    duplicate := value.copy()
+    assert(duplicate.number == 42)
+    values := [1, 2]
+    assert(values.len() == 2)
+    println("defining-builtin-ok")
+end

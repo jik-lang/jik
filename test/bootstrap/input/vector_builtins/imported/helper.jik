@@ -1,0 +1,11 @@
+func add(values: Vec[String]):
+    push(values, "imported")
+end
+
+func take(values: Vec[String]) -> String:
+    return pop(values)
+end
+
+func clear(value: int) -> int:
+    return value
+end

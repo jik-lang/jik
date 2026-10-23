@@ -1,0 +1,10 @@
+use "helper"
+
+func main():
+    value := "abcd"
+    if helper::middle(value) != "bc" or helper::first(value) != value[0]:
+        return 1
+    end
+    println(helper::middle(value), ":", helper::first(value))
+    return 42
+end

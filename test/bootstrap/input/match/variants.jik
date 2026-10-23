@@ -1,0 +1,35 @@
+variant Value:
+    INT: int
+    TEXT: String
+    NUMS: Vec[int]
+    EOF
+end
+
+func describe(value: Value):
+    match value:
+        case INT{payload}:
+            println(payload, ":", value.INT)
+        case TEXT{payload}:
+            println(payload)
+        case NUMS{payload}:
+            payload[0] = 9
+            println(value.NUMS)
+        case EOF:
+            println("eof")
+    end
+end
+
+func main():
+    describe(Value.INT{7})
+    describe(Value.TEXT{"hello"})
+    describe(Value.NUMS{[1, 2]})
+    describe(Value.EOF{})
+    match Value.TEXT{"literal"}:
+        case INT{}:
+            println("wrong")
+        case TEXT:
+            println("ignored payload")
+        other:
+            println("wrong fallback")
+    end
+end

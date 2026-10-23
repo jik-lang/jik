@@ -1,118 +1,32 @@
-use "jik/string"
+//! Module declarations and parse entry point; composes the expression and statement grammar.
 
+use "state"
+use "expressions"
+use "statements"
+use "ast"
 use "../diag"
 use "../source"
 use "../lexer/token"
-use "ast"
+use "../language/native"
+use "../language/types"
 
 
-struct Parser:
-    file: source::SourceFile
-    tokens: Vec[token::Token]
-    diagnostics: diag::Diagnostics
-    pos: int
-    ast: ast::Ast
-end
-
-
-func new(file: source::SourceFile, tokens: Vec[token::Token], diagnostics: diag::Diagnostics) -> Parser:
-    p := Parser{file, tokens, diagnostics, ast = ast::Ast{}}@
-    span := source::Span{source_id = file.id, start = 0, stop = len(file.text)}@
-    p.ast.root = p.ast.add_module(span)
-    return p
-end
-
-
-func current(p: Parser) -> token::Token:
-    return p.tokens[p.pos]
-end
-
-
-func current_type(p: Parser) -> token::TokenType:
-    return p.tokens[p.pos].type
-end
-
-
-func at_end(p: Parser) -> bool:
-    return p.current_type() == token::TokenType.EOF
-end
-
-
-func advance(p: Parser) -> token::Token:
-    tok := p.current()
-    if not p.at_end():
-        p.pos += 1
-    end
-    return tok
-end
-
-
-throws func expect(p: Parser, kind: token::TokenType) -> token::Token:
-    if p.current_type() != kind:
-        actual := p.current()
-        if actual.type == token::TokenType.ERROR:
-            p.advance()
-            fail("parse error")
-        end
-        diag::error(p.diagnostics, "unexpected token", concat("expected ", token::TokenTypeNames[kind]), Some{actual.span})
-        fail("parse error")
-    end
-    return p.advance()
-end
-
-
-func skip_newlines(p: Parser) -> void:
-    while p.current_type() == token::TokenType.NEWLINE:
-        p.advance()
-    end
-end
-
-
-func synchronize_statement(p: Parser) -> void:
-    while not p.at_end():
-        if p.current_type() == token::TokenType.NEWLINE:
-            p.advance()
-            return
-        end
-        if p.current_type() == token::TokenType.KWD_END:
-            return
-        end
-        p.advance()
-    end
-end
-
-
-func synchronize_top_level(p: Parser) -> void:
-    while not p.at_end():
-        if p.current_type() == token::TokenType.KWD_USE or p.current_type() == token::TokenType.KWD_FUNC:
-            return
-        end
-        p.advance()
-    end
-end
-
-
-func text(p: Parser, span: source::Span) -> String:
-    return must string::slice(p.file.text, span.start, span.stop, .p)
-end
-
-
-func add_import(p: Parser, id: int) -> void:
+func add_import(p: state::Parser, id: int) -> void:
     module := p.ast.nodes[p.ast.root].kind.MODULE
     module.imports.push(id)
 end
 
 
-func add_function(p: Parser, id: int) -> void:
+func add_declaration(p: state::Parser, id: int) -> void:
     module := p.ast.nodes[p.ast.root].kind.MODULE
     module.declarations.push(id)
 end
 
 
-throws func parse_import(p: Parser) -> int:
+throws func parse_import(p: state::Parser) -> int:
     start := try p.expect(token::TokenType.KWD_USE)
     path_tok := try p.expect(token::TokenType.STRING)
-    path := must string::slice(p.file.text, path_tok.span.start + 1, path_tok.span.stop - 1, .p)
+    path := copy(path_tok.text?, .p)
     stop := path_tok.span.stop
 
     alias: Option[String] = None@
@@ -129,163 +43,12 @@ throws func parse_import(p: Parser) -> int:
 end
 
 
-throws func parse_primary(p: Parser) -> int:
-    tok := p.current()
-    if tok.type == token::TokenType.INTEGER:
+throws func parse_parameter(p: state::Parser) -> int:
+    start := p.current().span.start
+    is_foreign := p.current_type() == token::TokenType.KWD_FOREIGN
+    if is_foreign:
         p.advance()
-        return p.ast.add_integer(tok.span)
-    elif tok.type == token::TokenType.IDENTIFIER:
-        p.advance()
-        qualifier: Option[String] = None@
-        name := p.text(tok.span)
-        last_span := tok.span
-        if p.current_type() == token::TokenType.DOUBLE_COLON:
-            p.advance()
-            qualifier = Some{name}@
-            member := try p.expect(token::TokenType.IDENTIFIER)
-            name = p.text(member.span)
-            last_span = member.span
-        end
-        identifier_id := p.ast.add_identifier(tok.span, last_span, qualifier, name)
-        if p.current_type() == token::TokenType.LPAREN:
-            p.advance()
-            arguments: Vec[int]@
-            if p.current_type() != token::TokenType.RPAREN:
-                argument := try p.parse_expression()
-                arguments.push(argument)
-                while p.current_type() == token::TokenType.COMMA:
-                    p.advance()
-                    argument = try p.parse_expression()
-                    arguments.push(argument)
-                end
-            end
-            close := try p.expect(token::TokenType.RPAREN)
-            return p.ast.add_call(identifier_id, arguments, close.span)
-        end
-        return identifier_id
     end
-    if tok.type == token::TokenType.ERROR:
-        p.advance()
-    else:
-        diag::error(p.diagnostics, "expected expression", "expected integer or identifier", Some{tok.span})
-    end
-    fail("parse error")
-end
-
-
-throws func parse_additive(p: Parser) -> int:
-    left := try p.parse_primary()
-    while p.current_type() == token::TokenType.OP_PLUS or p.current_type() == token::TokenType.OP_MINUS:
-        op_type := p.current_type()
-        p.advance()
-        right := try p.parse_primary()
-        op := ast::BinaryOp.PLUS
-        if op_type == token::TokenType.OP_MINUS:
-            op = ast::BinaryOp.MINUS
-        end
-        left = p.ast.add_binary(left, right, op)
-    end
-    return left
-end
-
-
-throws func parse_expression(p: Parser) -> int:
-    left := try p.parse_additive()
-    while p.current_type() == token::TokenType.OP_LT:
-        p.advance()
-        right := try p.parse_additive()
-        left = p.ast.add_binary(left, right, ast::BinaryOp.LT)
-    end
-    return left
-end
-
-
-
-throws func parse_declaration(p: Parser) -> int:
-    name_tok := try p.expect(token::TokenType.IDENTIFIER)
-    try p.expect(token::TokenType.DECLARE)
-    value := try p.parse_expression()
-    try p.expect(token::TokenType.NEWLINE)
-    span := source::Span{source_id = name_tok.span.source_id, start = name_tok.span.start, stop = p.ast.nodes[value].span.stop}@
-    return p.ast.add_local_decl(span, p.text(name_tok.span), value)
-end
-
-
-throws func parse_return(p: Parser) -> int:
-    start := try p.expect(token::TokenType.KWD_RETURN)
-    value: Option[int] = None@
-    stop := start.span.stop
-    if p.current_type() != token::TokenType.NEWLINE:
-        expression := try p.parse_expression()
-        value = Some{expression}@
-        stop = p.ast.nodes[expression].span.stop
-    end
-    try p.expect(token::TokenType.NEWLINE)
-    span := source::Span{source_id = start.span.source_id, start = start.span.start, stop}@
-    return p.ast.add_return(span, value)
-end
-
-
-throws func parse_if(p: Parser) -> int:
-    start := try p.expect(token::TokenType.KWD_IF)
-    condition := try p.parse_expression()
-    try p.expect(token::TokenType.COLON)
-    try p.expect(token::TokenType.NEWLINE)
-
-    statement := ast::IfStmt{condition}@
-    p.skip_newlines()
-    while p.current_type() != token::TokenType.KWD_END:
-        if p.at_end():
-            actual := p.current()
-            diag::error(p.diagnostics, "unterminated if", "expected end", Some{actual.span})
-            fail("unterminated if")
-        end
-        try body_statement := p.parse_statement():
-            statement.body.statements.push(body_statement)
-        except:
-            p.synchronize_statement()
-        end
-        p.skip_newlines()
-    end
-
-    end_tok := try p.expect(token::TokenType.KWD_END)
-    span := source::Span{source_id = start.span.source_id, start = start.span.start, stop = end_tok.span.stop}@
-    return p.ast.add_if(span, statement)
-end
-
-
-throws func parse_statement(p: Parser) -> int:
-    if p.current_type() == token::TokenType.KWD_IF:
-        if_id := try p.parse_if()
-        return if_id
-    end
-    if p.current_type() == token::TokenType.KWD_RETURN:
-        return_id := try p.parse_return()
-        return return_id
-    end
-    declaration_id := try p.parse_declaration()
-    return declaration_id
-end
-
-
-throws func parse_type_name(p: Parser) -> int:
-    first := try p.expect(token::TokenType.IDENTIFIER)
-    qualifier: Option[String] = None@
-    name := p.text(first.span)
-    last_span := first.span
-    if p.current_type() == token::TokenType.DOUBLE_COLON:
-        p.advance()
-        qualifier = Some{name}@
-        member := try p.expect(token::TokenType.IDENTIFIER)
-        name = p.text(member.span)
-        last_span = member.span
-    end
-    return p.ast.add_type_name(first.span, last_span, qualifier, name)
-end
-
-
-
-throws func parse_parameter(p: Parser) -> int:
     name_tok := try p.expect(token::TokenType.IDENTIFIER)
     annotation: Option[int] = None@
     stop := name_tok.span.stop
@@ -295,31 +58,83 @@ throws func parse_parameter(p: Parser) -> int:
         annotation = Some{type_name}@
         stop = p.ast.nodes[type_name].span.stop
     end
-    span := source::Span{source_id = name_tok.span.source_id, start = name_tok.span.start, stop}@
-    return p.ast.add_parameter(span, p.text(name_tok.span), annotation)
+    span := source::Span{source_id = name_tok.span.source_id, start, stop}@
+    id := p.ast.add_parameter(span, p.text(name_tok.span), annotation)
+    p.ast.nodes[id].kind.PARAMETER.is_foreign = is_foreign
+    return id
 end
 
 
 
-throws func parse_function(p: Parser) -> int:
-    start := try p.expect(token::TokenType.KWD_FUNC)
+throws func parse_function(p: state::Parser) -> int:
+    start := p.current()
+    is_throwing := false
+    is_external := false
+    is_initializer := false
+    while true:
+        if p.current_type() == token::TokenType.KWD_THROWS and not is_throwing:
+            is_throwing = true
+            p.advance()
+        elif p.current_type() == token::TokenType.KWD_EXTERN and not is_external:
+            is_external = true
+            p.advance()
+        elif p.current_type() == token::TokenType.KWD_INIT and not is_initializer:
+            is_initializer = true
+            p.advance()
+        else:
+            break
+        end
+    end
+    if is_initializer and (not is_external or is_throwing):
+        diag::error(p.diagnostics, "invalid init declaration", "init requires a nonthrowing extern function", Some{start.span})
+        fail("parse error")
+    end
+    try p.expect(token::TokenType.KWD_FUNC)
     name_tok := try p.expect(token::TokenType.IDENTIFIER)
+    external_name: Option[String] = None[.p]
+    if is_external:
+        external_name = Some{p.text(name_tok.span)}[.p]
+        try p.expect(token::TokenType.KWD_AS)
+        p.skip_newlines()
+        name_tok = try p.expect(token::TokenType.IDENTIFIER)
+    end
     try p.expect(token::TokenType.LPAREN)
-    parameters: Vec[int]@
+    parameters: Vec[int][.p]
     if p.current_type() != token::TokenType.RPAREN:
-        param_id := try p.parse_parameter()
+        param_id := try parse_parameter(p)
         parameters.push(param_id)
         while p.current_type() == token::TokenType.COMMA:
             p.advance()
-            param_id = try p.parse_parameter()
+            p.skip_newlines()
+            param_id = try parse_parameter(p)
             parameters.push(param_id)
         end
     end
     try p.expect(token::TokenType.RPAREN)
+    if is_external:
+        for parameter_id in parameters:
+            p.ast.nodes[parameter_id].kind.PARAMETER.is_external = true
+            if p.ast.nodes[parameter_id].kind.PARAMETER.annotation is None:
+                diag::error(p.diagnostics, "expected type annotation", "extern parameters require explicit types", Some{p.ast.nodes[parameter_id].span})
+                fail("parse error")
+            end
+        end
+        try p.expect(token::TokenType.ARROW)
+        annotation := try p.parse_type_name()
+        function := ast::FunctionDecl{is_throwing, external_name, is_initializer, name = p.text(name_tok.span), parameters, return_annotation = Some{annotation}}[.p]
+        span := source::Span{source_id = start.span.source_id, start = start.span.start, stop = p.ast.nodes[annotation].span.stop}@
+        return p.ast.add_function_decl(span, function)
+    end
+    return_annotation: Option[int] = None[.p]
+    if p.current_type() == token::TokenType.ARROW:
+        p.advance()
+        annotation := try p.parse_type_name()
+        return_annotation = Some{annotation}[.p]
+    end
     try p.expect(token::TokenType.COLON)
     try p.expect(token::TokenType.NEWLINE)
 
-    function := ast::FunctionDecl{name = p.text(name_tok.span), parameters}@
+    function := ast::FunctionDecl{is_throwing, name = p.text(name_tok.span), parameters, return_annotation}[.p]
     p.skip_newlines()
     while p.current_type() != token::TokenType.KWD_END:
         if p.at_end():
@@ -327,7 +142,7 @@ throws func parse_function(p: Parser) -> int:
             diag::error(p.diagnostics, "unterminated function", "expected end", Some{actual.span})
             fail("unterminated function")
         end
-        try statement := p.parse_statement():
+        try statement := statements::parse_statement(p):
             function.body.statements.push(statement)
         except:
             p.synchronize_statement()
@@ -341,8 +156,181 @@ throws func parse_function(p: Parser) -> int:
 end
 
 
+throws func parse_type_declaration(p: state::Parser) -> int:
+    start := p.advance()
+    name_tok := try p.expect(token::TokenType.IDENTIFIER)
+    kind := types::NamedKind.STRUCT
+    if start.type == token::TokenType.KWD_ENUM:
+        kind = types::NamedKind.ENUM
+    elif start.type == token::TokenType.KWD_VARIANT:
+        kind = types::NamedKind.VARIANT
+    end
+    declaration := ast::TypeDecl{name = p.text(name_tok.span), kind}[.p]
+    try p.expect(token::TokenType.COLON)
+    try p.expect(token::TokenType.NEWLINE)
+    p.skip_newlines()
+    while p.current_type() != token::TokenType.KWD_END:
+        if p.at_end() or state::is_declaration_start(p.current_type()) or state::is_global_start(p):
+            diag::error(p.diagnostics, "unterminated type declaration", "expected end", Some{p.current().span})
+            fail("parse error")
+        end
+        member_tok := try p.expect(token::TokenType.IDENTIFIER)
+        member := ast::TypeMember{name = p.text(member_tok.span)}[.p]
+        stop := member_tok.span.stop
+        if kind == types::NamedKind.STRUCT or (kind == types::NamedKind.VARIANT and p.current_type() == token::TokenType.COLON):
+            try p.expect(token::TokenType.COLON)
+            annotation := try p.parse_type_name()
+            member.annotation = Some{annotation}
+            stop = p.ast.nodes[annotation].span.stop
+        end
+        try p.expect(token::TokenType.NEWLINE)
+        span := source::Span{source_id = p.file.id, start = member_tok.span.start, stop}[.p]
+        declaration.members.push(p.ast.add(span, ast::NodeKind.TYPE_MEMBER{member}))
+        p.skip_newlines()
+    end
+    end_tok := try p.expect(token::TokenType.KWD_END)
+    span := source::Span{source_id = p.file.id, start = start.span.start, stop = end_tok.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.TYPE_DECL{declaration})
+end
+
+
+throws func parse_extern_type(p: state::Parser) -> int:
+    start := try p.expect(token::TokenType.KWD_EXTERN)
+    try p.expect(token::TokenType.KWD_STRUCT)
+    external := try p.expect(token::TokenType.IDENTIFIER)
+    try p.expect(token::TokenType.KWD_AS)
+    p.skip_newlines()
+    name_tok := try p.expect(token::TokenType.IDENTIFIER)
+    try p.expect(token::TokenType.NEWLINE)
+    declaration := ast::TypeDecl{name = p.text(name_tok.span), kind = types::NamedKind.EXTERN_STRUCT, external_name = Some{p.text(external.span)}}[.p]
+    span := source::Span{source_id = p.file.id, start = start.span.start, stop = name_tok.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.TYPE_DECL{declaration})
+end
+
+
+throws func parse_table(p: state::Parser) -> int:
+    start := try p.expect(token::TokenType.KWD_TABLE)
+    name := try p.expect(token::TokenType.IDENTIFIER)
+    try p.expect(token::TokenType.LBRACKET)
+    key := try p.parse_type_name()
+    try p.expect(token::TokenType.RBRACKET)
+    try p.expect(token::TokenType.ARROW)
+    value := try p.parse_type_name()
+    try p.expect(token::TokenType.COLON)
+    try p.expect(token::TokenType.NEWLINE)
+    declaration := ast::TableDecl{name = p.text(name.span), key_annotation = key, value_annotation = value, initialization_order = -1}[.p]
+    p.skip_newlines()
+    while p.current_type() != token::TokenType.KWD_END:
+        if p.at_end() or state::is_declaration_start(p.current_type()) or state::is_global_start(p):
+            diag::error(p.diagnostics, "unterminated table", "expected end", Some{p.current().span})
+            fail("parse error")
+        end
+        tag := try p.expect(token::TokenType.IDENTIFIER)
+        try p.expect(token::TokenType.COLON)
+        entry := try expressions::parse_expression(p)
+        try p.expect(token::TokenType.NEWLINE)
+        declaration.entries.push(ast::TableEntry{name = p.text(tag.span), span = copy(tag.span, .p), value = entry, member = -1}[.p])
+        p.skip_newlines()
+    end
+    close := try p.expect(token::TokenType.KWD_END)
+    span := source::Span{source_id = p.file.id, start = start.span.start, stop = close.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.TABLE_DECL{declaration}[.p])
+end
+
+
+throws func parse_global(p: state::Parser) -> int:
+    name := try p.expect(token::TokenType.IDENTIFIER)
+    try p.expect(token::TokenType.DECLARE)
+    initializer := try expressions::parse_expression(p)
+    if not p.at_end():
+        try p.expect(token::TokenType.NEWLINE)
+    end
+    span := source::Span{source_id = p.file.id, start = name.span.start, stop = p.ast.nodes[initializer].span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.GLOBAL_DECL{ast::GlobalDecl{name = p.text(name.span), initializer}}[.p])
+end
+
+
+throws func parse_named_declaration(p: state::Parser) -> int:
+    if p.current_type() == token::TokenType.KWD_TABLE:
+        id := try parse_table(p)
+        return id
+    end
+    if p.current_type() == token::TokenType.KWD_EXTERN:
+        declaration := try parse_extern_type(p)
+        return declaration
+    end
+    declaration := try parse_type_declaration(p)
+    return declaration
+end
+
+
+throws func parse_directive(p: state::Parser) -> void:
+    start := p.advance()
+    try p.expect(token::TokenType.LPAREN)
+    if start.type == token::TokenType.DIRECTIVE_PLATFORM or start.type == token::TokenType.DIRECTIVE_PROFILE:
+        value := try p.expect(token::TokenType.IDENTIFIER)
+        name := p.text(value.span)
+        if start.type == token::TokenType.DIRECTIVE_PROFILE:
+            while p.current_type() == token::TokenType.OP_MINUS:
+                p.advance()
+                part := try p.expect(token::TokenType.IDENTIFIER)
+                name = concat(name, "-", p.text(part.span), .p)
+            end
+            if name == "all":
+                p.build_profile = native::Profile.ALL
+            elif name == "windows-x64-mingw":
+                p.build_profile = native::Profile.WINDOWS_X64_MINGW
+            elif name == "linux-x64-gnu":
+                p.build_profile = native::Profile.LINUX_X64_GNU
+            else:
+                diag::error(p.diagnostics, "unknown build profile", name, Some{value.span})
+                fail("parse error")
+            end
+        else:
+            if name == "all":
+                p.build_platform = native::Platform.ALL
+            elif name == "windows":
+                p.build_platform = native::Platform.WINDOWS
+            elif name == "linux":
+                p.build_platform = native::Platform.LINUX
+            else:
+                diag::error(p.diagnostics, "unknown build platform", name, Some{value.span})
+                fail("parse error")
+            end
+        end
+        try p.expect(token::TokenType.RPAREN)
+    else:
+        kind := native::Kind.INCLUDE_DIR
+        if start.type == token::TokenType.DIRECTIVE_LIBDIR:
+            kind = native::Kind.LIB_DIR
+        elif start.type == token::TokenType.DIRECTIVE_LINK:
+            kind = native::Kind.LINK
+        elif start.type == token::TokenType.DIRECTIVE_COPY:
+            kind = native::Kind.COPY
+        end
+        requirement := native::Requirement{kind, platform = p.build_platform, profile = p.build_profile}[.p]
+        while true:
+            argument := try p.expect(token::TokenType.STRING)
+            requirement.arguments.push(copy(argument.text?, .p))
+            if p.current_type() != token::TokenType.COMMA:
+                break
+            end
+            p.advance()
+        end
+        close := try p.expect(token::TokenType.RPAREN)
+        requirement.span = source::Span{source_id = p.file.id, start = start.span.start, stop = close.span.stop}[.p]
+        p.ast.nodes[p.ast.root].kind.MODULE.requirements.push(requirement)
+    end
+    if not p.at_end():
+        try p.expect(token::TokenType.NEWLINE)
+    end
+end
+
+
+/// Parse one module into the inferred result region. Recover from declaration
+/// errors and return partial syntax with diagnostics; callers must gate later phases.
 func parse(file: source::SourceFile, tokens: Vec[token::Token], diagnostics: diag::Diagnostics) -> ast::Ast:
-    p := new(file, tokens, diagnostics)
+    p := state::new(file, tokens, diagnostics)
     imports_finished := false
     p.skip_newlines()
     while not p.at_end():
@@ -351,17 +339,39 @@ func parse(file: source::SourceFile, tokens: Vec[token::Token], diagnostics: dia
                 actual := p.current()
                 diag::error(p.diagnostics, "imports must precede top-level declarations", "", Some{actual.span})
             end
-            try import := p.parse_import():
+            try import := parse_import(p):
                 if not imports_finished:
-                    p.add_import(import)
+                    add_import(p, import)
                 end
             except:
                 p.synchronize_top_level()
             end
-        elif p.current_type() == token::TokenType.KWD_FUNC:
+        elif state::is_directive(p.current_type()):
+            try parse_directive(p):
+            except:
+                p.synchronize_top_level()
+            end
+        elif p.current_type() == token::TokenType.EMBEDDED_C:
+            embedded := p.advance()
+            add_declaration(p, p.ast.add(copy(embedded.span, .p), ast::NodeKind.EMBEDDED_C{copy(embedded.text?, .p)}[.p]))
+        elif p.current_type() == token::TokenType.KWD_INIT or p.current_type() == token::TokenType.KWD_FUNC or p.current_type() == token::TokenType.KWD_THROWS or (p.current_type() == token::TokenType.KWD_EXTERN and p.tokens[p.pos + 1].type != token::TokenType.KWD_STRUCT):
             imports_finished = true
-            try function := p.parse_function():
-                p.add_function(function)
+            try function := parse_function(p):
+                add_declaration(p, function)
+            except:
+                p.synchronize_top_level()
+            end
+        elif p.current_type() == token::TokenType.IDENTIFIER:
+            imports_finished = true
+            try declaration := parse_global(p):
+                add_declaration(p, declaration)
+            except:
+                p.synchronize_top_level()
+            end
+        elif state::is_declaration_start(p.current_type()):
+            imports_finished = true
+            try declaration := parse_named_declaration(p):
+                add_declaration(p, declaration)
             except:
                 p.synchronize_top_level()
             end

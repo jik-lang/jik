@@ -1,0 +1,29 @@
+enum Key:
+    A
+    B
+end
+
+table First[Key] -> int:
+    A: 1
+    B: 2
+end
+
+table Second[Key] -> int:
+    A: First[Key.B] + 10
+    B: First[Key.A] * 2
+end
+
+table Labels[Key] -> String:
+    A: "first"
+    B: "second"
+end
+
+table Alias[Key] -> String:
+    A: Labels[Key.B]
+    B: Labels[Key.A]
+end
+
+func main():
+    println(Second[Key.A], ":", Second[Key.B])
+    println(Alias[Key.A], ":", Alias[Key.B])
+end

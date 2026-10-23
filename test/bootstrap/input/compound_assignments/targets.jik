@@ -1,0 +1,46 @@
+struct Box:
+    value: int
+    real: double
+end
+
+variant Number:
+    VALUE: int
+    OTHER
+end
+
+func main():
+    box := Box{value=20, real=4.0}
+    box.value += 4
+    box.value -= 2
+    box.value *= 3
+    box.value /= 2
+    box.value %= 10
+    box.real += 2
+    box.real -= 1.5
+    box.real *= 2
+    box.real /= 3
+    values := [20]
+    values[0] += 4
+    values[0] -= 2
+    values[0] *= 3
+    values[0] /= 2
+    values[0] %= 10
+    reals := [4.0]
+    reals[0] += 2
+    reals[0] -= 1.5
+    reals[0] *= 2
+    reals[0] /= 3
+    number := Number.VALUE{5}
+    number.VALUE *= 3
+    nested := [[10]]
+    nested[0][0] += 2
+    boxes := [Box{value=4}]
+    boxes[0].value *= 2
+    optional := Some{Box{value=7}}
+    optional?.value -= 2
+    dictionary := {"box": Box{value=7}}
+    dictionary["box"]?.value += 2
+    println(box.value, ":", box.real, ":", values[0], ":", reals[0])
+    println(number.VALUE, ":", nested[0][0], ":", boxes[0].value, ":", optional?.value)
+    println(dictionary["box"]?.value)
+end

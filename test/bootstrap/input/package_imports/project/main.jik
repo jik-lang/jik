@@ -1,0 +1,7 @@
+use "pkg/demo"
+use "pkg/demo/nested/offset"
+
+
+func main():
+    return demo::value()
+end

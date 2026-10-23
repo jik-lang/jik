@@ -1,0 +1,14 @@
+struct Label:
+    text: String
+    count: int
+end
+struct Holder:
+    label: Label
+end
+func bad(r: Region) -> Holder:
+    label := Label{}
+    return Holder{label}
+end
+func main():
+    return 42
+end

@@ -1,0 +1,23 @@
+func main():
+    rows := [
+        [1, 2],
+        [3, 4]
+    ]
+    repeated := [2 of [7, 8]
+    ]
+    rows[0][1] = 20
+    repeated[0][0] = 70
+    if rows[0][1] != 20 or rows[1][0] != 3:
+        return 1
+    end
+    if repeated[1][0] != 7:
+        return 2
+    end
+    label := "bound"
+    labels := [label, "literal"]
+    labels[1] = "changed"
+    if labels[0] != "bound" or labels[1] != "changed":
+        return 3
+    end
+    return 42
+end

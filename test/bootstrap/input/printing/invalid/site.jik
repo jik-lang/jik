@@ -1,0 +1,7 @@
+func invalid(value: Site):
+    print(value)
+end
+
+func main():
+    return 0
+end

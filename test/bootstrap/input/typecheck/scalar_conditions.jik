@@ -1,0 +1,36 @@
+func integer(value: int) -> int:
+    if value:
+        return 1
+    end
+    return 0
+end
+
+func floating(value: double) -> int:
+    if value:
+        return 1
+    end
+    return 0
+end
+
+func boolean(value: bool) -> int:
+    if value:
+        return 1
+    end
+    return 0
+end
+
+func character(value: char) -> int:
+    if value:
+        return 1
+    end
+    return 0
+end
+
+func main():
+    if integer(1):
+        if boolean(1 < 2):
+            return 42
+        end
+    end
+    return 0
+end

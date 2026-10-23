@@ -1,0 +1,4 @@
+func main():
+    value := value + 1
+    return value
+end

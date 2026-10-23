@@ -1,17 +1,25 @@
+//! Parse translation options and write C, optionally invoking its formatter.
+
 use "jik/argparse" as ap
-use "jik/path"
 use "jik/string"
+use "jik/process"
 
 use "../compiler"
+use "compiler_options"
 
 
 func make_parser(r: Region) -> ap::Parser:
     parser := ap::new("jik tran", r)
-    ap::set_description(parser, "Translate the bootstrap integer subset of Jik to C.")
+    ap::set_description(parser, "Translate a Jik source code file to C.")
     ap::add_positional(parser, "input", "Input file")
-    opt_out := ap::add_option(parser, "--out", "-o", "Output file")
+    opt_out := ap::add_option(parser, "--out", "-o", "Output file (default: beside the input, with a .c suffix)")
     ap::add_option_positional(opt_out, "file", "Output path.")
     ap::add_option(parser, "--dump-ast", "", "Print the parsed AST for each module.")
+    ap::add_option(parser, "--embed-core", "", "Embed the installed core.h support library into the generated C.")
+    ap::add_option(parser, "--emit-source-loc", "", "Emit source path:line:column comments before generated declarations.")
+    ap::add_option(parser, "--format-c", "", "Format the generated C file in place with clang-format. Fails if clang-format is not available.")
+    ap::add_option(parser, "--verbose", "", "Print translation and formatting stages to stderr.")
+    compiler_options::add_runtime(parser)
     return parser
 end
 
@@ -21,16 +29,41 @@ throws func run(args: Vec[String]):
     res := try ap::parse(p, args)
     input_file := res.positionals["input"]?
     output_file := res.options["--out"]?["file"]? if res.options["--out"] is Some else ""
-    if len(output_file) == 0:
-        basename := path::basename(input_file)
-        stem := must string::slice(basename, 0, len(basename) - 4) if string::ends_with(basename, ".jik") else basename
+    if not (res.options["--out"] is Some):
+        stem := must string::slice(input_file, 0, len(input_file) - 4) if string::ends_with(input_file, ".jik") else input_file
         output_file = concat(stem, ".c")
     end
     config := compiler::Config{
         input_path = input_file,
         output_path = output_file,
-        dump_ast = res.options["--dump-ast"] is Some
+        embed_core = res.options["--embed-core"] is Some,
+        emit_source_loc = res.options["--emit-source-loc"] is Some
     }
-    comp := compiler::new(config)
+    comp := try compiler::new(config)
+    compiler_options::configure(comp.config, res)
     try comp.run()
+    if res.options["--format-c"] is Some:
+        compiler::verbose(comp, concat("format output: ", output_file))
+        try format_c(output_file)
+    end
+end
+
+
+throws func format_c(output_file: String):
+    try available := process::capture("clang-format", ["--version"]):
+        if available.code != 0:
+            fail("clang-format not available")
+        end
+    except:
+        fail("clang-format not available")
+    end
+    status := 0
+    try completed := process::run("clang-format", ["-i", output_file]):
+        status = completed
+    except:
+        fail(concat("clang-format failed: ", error_msg()))
+    end
+    if status != 0:
+        fail(concat("clang-format failed (exit ", string::from_int(status), ")"))
+    end
 end

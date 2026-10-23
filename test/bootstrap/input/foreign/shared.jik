@@ -1,0 +1,30 @@
+struct Box:
+    count: int
+    text: String
+end
+
+func change(foreign box: Box, foreign values: Vec[int], foreign counts: Dict[int], result: String) -> String:
+    box.count += 1
+    values[0] += 2
+    push(values, 9)
+    counts["answer"] = 42
+    return result
+end
+
+func make(foreign text: String, r: Region) -> Vec[int]:
+    return [len(text)]@
+end
+
+func inferred(foreign text: String, result: String) -> String:
+    println(text)
+    return result
+end
+
+func inspect(foreign values: Vec[String], foreign dictionary: Dict[String]):
+    println(values[0], ":", values[1], ":", dictionary["first"]?)
+end
+
+func borrow(foreign values: Vec[String], foreign dictionary: Dict[String], r: Region) -> String:
+    println(values[0], ":", values[1], ":", dictionary["first"]?)
+    return "done"[r]
+end

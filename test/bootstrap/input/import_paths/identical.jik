@@ -1,0 +1,7 @@
+use "helper" as first
+use "helper" as second
+
+
+func main():
+    return 0
+end

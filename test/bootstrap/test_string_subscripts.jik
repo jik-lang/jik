@@ -1,0 +1,99 @@
+use "jik/testing" as test
+use "jik/string"
+
+use "support"
+use "test_strings"
+use "../../src/bootstrap/language/types"
+use "../../src/bootstrap/semantic/typing/typecheck"
+use "../../src/bootstrap/parser/ast"
+
+
+func test_types_and_regions(ts) -> void:
+    text := "func byte(value: String) -> char:\n    return value[0]\nend\nfunc part(value: String) -> String:\n    return value[1:]\nend\nfunc main():\n    value := \"bytes\"\n    result := value[:][1:4][0]\n    return 42\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    for node in mod.ast.nodes:
+        if node.kind is INDEX:
+            test::suite_assert(ts, node.inferred_type? == types::atom(mod.type_store, types::Atom.CHAR), site())
+        elif node.kind is SLICE:
+            test::suite_assert(ts, node.inferred_type? == types::atom(mod.type_store, types::Atom.STRING), site())
+            base := mod.ast.nodes[node.kind.SLICE.value]
+            test::suite_assert(ts, node.region_source.kind == base.region_source.kind, site())
+            test::suite_assert(ts, node.region_source.parameter_id == base.region_source.parameter_id, site())
+        end
+    end
+    root := mod.ast.get_root_module()
+    test::suite_assert(ts, mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL.is_region_safe, site())
+    test::suite_assert(ts, not mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL.needs_local_region, site())
+    test::suite_assert(ts, not mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL.is_region_safe, site())
+    test::suite_assert(ts, not mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL.needs_local_region, site())
+    local := test_strings::analyze("func first() -> char:\n    value := \"abc\"\n    return value[0]\nend\n")
+    test::suite_assert(ts, local.diagnostics.error_count == 0, site())
+end
+
+
+func test_emission(ts) -> void:
+    text := "func part(value: String) -> String:\n    return value[:]\nend\nfunc main():\n    value := \"abc\"\n    byte := value[0]\n    prefix := value[:2]\n    suffix := value[1:]\n    middle := value[1:2]\n    return 42\nend\n"
+    generated := must support::translate(text, "")
+    test::suite_assert(ts, string::find(generated, "jik_string_get(jik_v_value, 0,") >= 0, site())
+    test::suite_assert(ts, string::find(generated, "jik_string_slice(jik_v_value, 0, true, 0, true,") >= 0, site())
+    test::suite_assert(ts, string::find(generated, "jik_string_slice(jik_v_value, 0, true, 2, false,") >= 0, site())
+    test::suite_assert(ts, string::find(generated, "jik_string_slice(jik_v_value, 1, false, 0, true,") >= 0, site())
+    test::suite_assert(ts, string::find(generated, "jik_string_slice(jik_v_value, 1, false, 2, false,") >= 0, site())
+end
+
+
+func test_invalid(ts) -> void:
+    test_strings::check_error(ts, "func bad(value: String):\n    byte := value[false]\nend\n", "type inference conflict")
+    test_strings::check_error(ts, "func bad(value: String):\n    part := value[:false]\nend\n", "type inference conflict")
+    test_strings::check_error(ts, "func bad(value: String):\n    part := value[false:]\nend\n", "type inference conflict")
+    test_strings::check_error(ts, "func bad(value: String):\n    value[0] = value[1]\nend\n", "strings are immutable")
+    test_strings::check_error(ts, "func bad(value: String):\n    value[:] = value\nend\n", "invalid assignment target")
+    test_strings::check_error(ts, "func bad(r: Region) -> String:\n    local := \"abc\"\n    return local[1:]\nend\n", "cannot return local allocation")
+    test_strings::check_error(ts, "func bad(value: String):\n    local := \"abc\"\n    value = local[:]\nend\n", "region mismatch")
+    test_strings::check_error(ts, "func bad():\n    byte := (\"abc\")[0]\nend\n", "composite value must be bound")
+    test_strings::check_error(ts, "func bad():\n    part := (\"abc\")[:]\nend\n", "composite value must be bound")
+end
+
+
+func test_checked_metadata(ts) -> void:
+    comp := support::infer_source("func first(value: String) -> char:\n    return value[0]\nend\n", -1)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    for node in mod.ast.nodes:
+        if node.kind is INDEX:
+            node.inferred_type = Some{types::atom(mod.type_store, types::Atom.INT)}[.node]
+        end
+    end
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count > 0, site())
+    sliced := support::infer_source("func part(value: String) -> String:\n    return value[1:]\nend\n", -1)
+    test::suite_assert(ts, sliced.diagnostics.error_count == 0, site())
+    if sliced.diagnostics.error_count > 0:
+        return
+    end
+    slice_mod := sliced.modules[0]
+    for node in slice_mod.ast.nodes:
+        if node.kind is SLICE:
+            node.inferred_type = Some{types::atom(slice_mod.type_store, types::Atom.CHAR)}[.node]
+        end
+    end
+    typecheck::run(sliced)
+    test::suite_assert(ts, sliced.diagnostics.error_count > 0, site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_string_subscripts")
+    test_types_and_regions(ts)
+    test_emission(ts)
+    test_invalid(ts)
+    test_checked_metadata(ts)
+end

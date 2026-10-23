@@ -1,0 +1,62 @@
+@embed{Native}
+#include <ctype.h>
+/* These are payload, rather than closing delimiters:
+Native_suffix
+ Native
+*/
+static int32_t ffi_add(int32_t a, int32_t b) { return a + b; }
+static double ffi_double(double x) { return x * 2.0; }
+static bool ffi_bool(bool x) { return !x; }
+static JikString *ffi_string(JikString *s, JikRegion *r) {
+    return jik_string_new(s->data, r);
+}
+static void *ffi_identity(void *p) { return p; }
+static void ffi_void(void) { }
+static bool ffi_site(JikSite s) { return s.lineno > 0 && s.filepath && s.codeline; }
+struct FfiHandle { int32_t number; JikRegion *jik_region; };
+static struct FfiHandle *ffi_handle(int32_t n, JikRegion *r) {
+    struct FfiHandle *h = jik_region_alloc(r, sizeof(*h));
+    h->number = n;
+    h->jik_region = r;
+    return h;
+}
+static int32_t ffi_read(struct FfiHandle *h) { return h->number; }
+static JikString *ffi_throw_string(int32_t code, JikRegion *r, JikError *err) {
+    if (code) { jik_error_set(err, code, "native failure"); return NULL; }
+    return jik_string_new("native result", r);
+}
+static int32_t ffi_throw_int(int32_t code, JikError *err) {
+    if (code) { jik_error_set(err, code, "native failure"); return 0; }
+    return 42;
+}
+static int32_t ffi_odd(int32_t a, int32_t b, JikError *err) { return a + b; }
+static int32_t ffi_ready(JikError *err) { return 42; }
+static void ffi_throw_void(int32_t code, JikError *err) {
+    if (code) jik_error_set(err, code, "native failure");
+}
+Native
+
+extern func ffi_add as add(a: int, b: int) -> int
+extern func ffi_double as twice(x: double) -> double
+extern func ffi_bool as invert(x: bool) -> bool
+extern func toupper as upper(ch: char) -> char
+extern func ffi_string as clone(foreign input: String, r: Region) -> String
+extern func ffi_identity as keep_vec(value: Vec[int]) -> Vec[int]
+extern func ffi_identity as keep_dict(value: Dict[int]) -> Dict[int]
+extern func ffi_identity as keep_option(value: Option[int]) -> Option[int]
+extern func ffi_identity as keep_box(value: Box) -> Box
+extern func ffi_void as action() -> void
+extern func ffi_site as inspect_site(value: Site) -> bool
+extern struct FfiHandle as Handle
+extern func ffi_handle as handle(value: int, r: Region) -> Handle
+extern func ffi_read as read(value: Handle) -> int
+throws extern func ffi_throw_string as string_result(code: int, r: Region) -> String
+extern throws func ffi_throw_int as int_result(code: int) -> int
+extern throws func ffi_throw_void as void_result(code: int) -> void
+extern throws func ffi_odd as odd(JikName: int, JikName: int) -> int
+extern func ffi_add as macro_names(NULL: int, EOF: int) -> int
+extern throws func ffi_ready as ready() -> int
+
+struct Box:
+    value: String
+end

@@ -1,0 +1,10 @@
+func inspect(value: Site) -> int:
+    if value:
+        return 1
+    end
+    return 0
+end
+
+func main():
+    return 0
+end

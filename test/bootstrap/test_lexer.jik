@@ -139,7 +139,7 @@ end
 
 
 func test_newline_and_error(ts):
-    tokens := lex_source("\n=@", 7, _)
+    tokens := lex_source("\n=$", 7, _)
     test::suite_assert(ts, len(tokens) == 4, site())
     test::suite_assert(ts, tokens[0].type == token::TokenType.NEWLINE, site())
     test::suite_assert(ts, tokens[0].span.source_id == 7, site())
@@ -161,6 +161,7 @@ end
 
 
 func run_tests(ts):
+    println("[test] test_lexer")
     test_empty_input(ts)
     test_integers_and_offsets(ts)
     test_identifiers_and_keywords(ts)

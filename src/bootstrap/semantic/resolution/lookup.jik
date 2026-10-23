@@ -1,0 +1,29 @@
+//! Resolve import qualifiers to modules and report missing aliases.
+
+use "../../modules/module"
+use "../../diag"
+use "../../source"
+
+
+func qualified_module(modules: Vec[module::Module], mod: module::Module, qualifier: Option[String], diagnostics: diag::Diagnostics, span: source::Span) -> Option[int]:
+    target_id := mod.source_id
+    if qualifier is Some:
+        imported: Option[int]
+        for edge in mod.imports:
+            if edge.alias == qualifier?:
+                imported = Some{edge.target_id}
+                break
+            end
+        end
+        if imported is None:
+            diag::error(diagnostics, "unknown import alias", qualifier?, Some{span})
+            return None
+        end
+        target_id = imported?
+    end
+    if target_id < 0 or target_id >= len(modules):
+        diag::error(diagnostics, "unresolved module", "import target was not loaded", Some{span})
+        return None
+    end
+    return Some{target_id}
+end

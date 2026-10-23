@@ -1,0 +1,35 @@
+func noop(r: Region):
+end
+
+
+func leave(flag: bool):
+    noop(_)
+    if flag:
+        return
+    end
+end
+
+
+func choose(value: int) -> int:
+    noop(_)
+    for index = 0, 3:
+        if index == value:
+            return 21
+        end
+    end
+    while value < 0:
+        return 42
+    end
+    return value
+end
+
+
+func main():
+    leave(true)
+    leave(false)
+    value := choose(0) + choose(21)
+    if choose(-1) != 42:
+        return 1
+    end
+    return value
+end

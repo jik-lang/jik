@@ -1,0 +1,6 @@
+use "pkg/demo/nested/offset"
+
+
+func main():
+    return 40 + offset::value()
+end

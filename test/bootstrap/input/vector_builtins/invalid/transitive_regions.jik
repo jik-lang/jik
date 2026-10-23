@@ -1,0 +1,16 @@
+func append(values: Vec[String], value: String):
+    push(values, value)
+end
+
+func wrapper(values: Vec[String], value: String):
+    append(values, value)
+end
+
+func invalid(values: Vec[String]):
+    local := "local"
+    wrapper(values, local)
+end
+
+func main():
+    return 0
+end

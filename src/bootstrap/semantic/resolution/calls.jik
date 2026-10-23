@@ -1,0 +1,157 @@
+//! Add omitted region arguments and resolve calls using the receiver type.
+
+use "../../language/builtin"
+use "../../language/types"
+use "../../language/symbol"
+use "../../modules/module"
+use "../../parser/ast"
+use "../../source"
+use "../../diag"
+
+
+/// Add a missing final Region argument to the AST and this call's argument list.
+/// Resolution visits it next. If receiver lookup waited for type inference,
+/// collect its type constraints immediately.
+func add_missing_region_argument(foreign modules: Vec[module::Module], mod: module::Module, foreign call: ast::CallExpr, foreign span: source::Span) -> void:
+    omitted := false
+    if call.builtin is Some:
+        kind := call.builtin?
+        if kind == builtin::Kind.ERROR_MSG:
+            omitted = len(call.arguments) == 0
+        else:
+            omitted = (kind == builtin::Kind.COPY or builtin::is_site_text(kind)) and len(call.arguments) == 1
+        end
+    elif call.target is Some:
+        target := call.target?
+        callee_mod := modules[target.source_id]
+        function := callee_mod.ast.nodes[target.origin].kind.FUNCTION_DECL
+        if len(call.arguments) + 1 == len(function.parameters):
+            last := callee_mod.ast.nodes[function.parameters[len(function.parameters) - 1]].kind.PARAMETER
+            if last.annotation is Some:
+                resolved := callee_mod.ast.nodes[last.annotation?].kind.TYPE_NAME.resolved_type
+                omitted = resolved is Some and resolved? == types::atom(mod.type_store, types::Atom.REGION)
+            end
+        end
+    end
+    if omitted:
+        destination := -1
+        if call.global_initializer:
+            destination = mod.ast.add(copy(span, .mod), ast::NodeKind.GLOBAL_REGION{}[.mod])
+        else:
+            destination = mod.ast.add(copy(span, .mod), ast::NodeKind.LOCAL_REGION{}[.mod])
+        end
+        call.arguments.push(destination)
+        call.auto_region = true
+    end
+end
+
+
+func receiver_builtin(name: String) -> Option[builtin::Kind]:
+    kind := builtin::find(name)
+    if kind is Some:
+        value := kind?
+        if value == builtin::Kind.PUSH or value == builtin::Kind.POP or value == builtin::Kind.LEN or value == builtin::Kind.CLEAR or value == builtin::Kind.COPY:
+            return Some{value}
+        end
+    end
+    return None
+end
+
+
+// Receiver declarations are looked up in the type's module, independently of
+// caller imports, local bindings, field names and caller-module functions.
+// Must on a builtin-name fallback instead requires a matching caller function.
+func resolve_receiver(foreign modules: Vec[module::Module], foreign mod: module::Module, node: ast::Node, receiver_type: int, foreign diagnostics: diag::Diagnostics) -> void:
+    call := node.kind.CALL
+    name := mod.ast.nodes[call.callee].kind.IDENTIFIER_EXPR.name
+    fallback := receiver_builtin(name)
+    if not types::is_record(mod.type_store, receiver_type) and not types::is_extern_struct(mod.type_store, receiver_type):
+        if fallback is None:
+            receiver_error(diagnostics, node.span, "invalid receiver type", "uniform function call requires a struct or variant receiver")
+            return
+        end
+        if not resolve_receiver_fallback(mod, node, fallback?, receiver_type, diagnostics):
+            return
+        end
+    else:
+        definition := mod.type_store.types[receiver_type].kind.NAMED
+        target_mod := modules[definition.source_id]
+        entry := target_mod.global_scope.symbols[name]
+        if entry is None:
+            if fallback is None:
+                receiver_error(diagnostics, node.span, "unknown receiver function", name)
+                return
+            end
+            if not resolve_receiver_fallback(mod, node, fallback?, receiver_type, diagnostics):
+                return
+            end
+        else:
+            if entry?.kind != symbol::SymbolKind.FUNCTION:
+                receiver_error(diagnostics, node.span, "invalid receiver function", "uniform function call target must be a function")
+                return
+            end
+            if not bind_receiver(target_mod, node, entry?.origin, receiver_type, diagnostics):
+                return
+            end
+        end
+    end
+    add_missing_region_argument(modules, mod, call, node.span)
+end
+
+
+// A must wrapper invokes a function, so its fallback must satisfy the same
+// receiver contract as a declaration found in the receiver type's own module.
+func resolve_receiver_fallback(foreign mod: module::Module, node: ast::Node, fallback: builtin::Kind, receiver_type: int, foreign diagnostics: diag::Diagnostics) -> bool:
+    if not node.kind.CALL.requires_success:
+        resolve_builtin_receiver(mod, node, fallback)
+        return true
+    end
+    name := mod.ast.nodes[node.kind.CALL.callee].kind.IDENTIFIER_EXPR.name
+    entry := mod.global_scope.symbols[name]
+    if entry is None or entry?.kind != symbol::SymbolKind.FUNCTION:
+        receiver_error(diagnostics, node.span, "unknown receiver function", "must and ! require a caller-defined throwing function for this receiver")
+        return false
+    end
+    return bind_receiver(mod, node, entry?.origin, receiver_type, diagnostics)
+end
+
+
+func bind_receiver(foreign target_mod: module::Module, node: ast::Node, origin: int, receiver_type: int, foreign diagnostics: diag::Diagnostics) -> bool:
+    function := target_mod.ast.nodes[origin].kind.FUNCTION_DECL
+    if len(function.parameters) == 0:
+        receiver_error(diagnostics, node.span, "missing receiver parameter", "uniform function call target function must have a receiver parameter")
+        return false
+    end
+    first := target_mod.ast.nodes[function.parameters[0]].kind.PARAMETER
+    if first.annotation is None:
+        receiver_error(diagnostics, node.span, "unannotated receiver parameter", "uniform function call receiver parameter must have a type annotation")
+        return false
+    end
+    expected := target_mod.ast.nodes[first.annotation?].kind.TYPE_NAME.resolved_type
+    if expected is None or expected? != receiver_type:
+        receiver_error(diagnostics, node.span, "receiver type mismatch", "uniform function call receiver does not match the first parameter")
+        return false
+    end
+    node.kind.CALL.builtin = None[.node]
+    node.kind.CALL.target = Some{ast::DeclarationRef{source_id = target_mod.source_id, origin}}[.node]
+    return true
+end
+
+
+// Preserve seed fallback: a caller function supplies signature constraints,
+// while the operation still uses builtin dispatch.
+func resolve_builtin_receiver(foreign mod: module::Module, node: ast::Node, fallback: builtin::Kind) -> void:
+    call := node.kind.CALL
+    name := mod.ast.nodes[call.callee].kind.IDENTIFIER_EXPR.name
+    entry := mod.global_scope.symbols[name]
+    call.builtin = Some{fallback}[.call]
+    if entry is Some and entry?.kind == symbol::SymbolKind.FUNCTION:
+        call.target = Some{ast::DeclarationRef{source_id = mod.source_id, origin = entry?.origin}}[.call]
+    end
+end
+
+
+func receiver_error(diagnostics: diag::Diagnostics, foreign span: source::Span, foreign summary: String, foreign detail: String) -> void:
+    location := Some{copy(span, .diagnostics)}[.diagnostics]
+    diag::error(diagnostics, summary, detail, location)
+end

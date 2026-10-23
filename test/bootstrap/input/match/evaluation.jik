@@ -1,0 +1,36 @@
+enum E:
+    A
+    B
+    C
+end
+
+variant V:
+    INT: int
+    EOF
+end
+
+func enum_receiver(count: Vec[int]) -> E:
+    count[0] = count[0] + 1
+    return E.C
+end
+
+func variant_receiver(value: V, count: Vec[int]) -> V:
+    count[0] = count[0] + 1
+    return value
+end
+
+func main():
+    count := [0]
+    match enum_receiver(count):
+        case A:
+        case B:
+        case C:
+            println("enum:", count[0])
+    end
+    value := V.INT{42}
+    match variant_receiver(value, count):
+        case EOF:
+        case INT{payload}:
+            println(payload, ":", count[0])
+    end
+end

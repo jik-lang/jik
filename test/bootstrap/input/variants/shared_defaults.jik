@@ -1,0 +1,21 @@
+variant Child:
+    TEXT: String
+end
+
+variant Parent:
+    CHILD: Child
+end
+
+struct Holder:
+    value: Parent
+end
+
+func make(r: Region) -> Holder:
+    return Holder{}
+end
+
+func main():
+    value: Parent
+    result := make()
+    println(value, ":", result.value)
+end

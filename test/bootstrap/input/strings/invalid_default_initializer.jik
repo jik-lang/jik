@@ -1,0 +1,8 @@
+func bad(r: Region):
+    value: String[r] = "invalid"
+end
+
+
+func main():
+    return 0
+end

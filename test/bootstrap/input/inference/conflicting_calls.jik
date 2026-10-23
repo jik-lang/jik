@@ -1,0 +1,9 @@
+func accept(value):
+    return 0
+end
+
+func main():
+    first := accept(1)
+    second := accept(1 < 2)
+    return 0
+end

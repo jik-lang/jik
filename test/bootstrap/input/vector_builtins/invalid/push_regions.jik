@@ -1,0 +1,8 @@
+func invalid(values: Vec[String]):
+    local := "local"
+    push(values, local)
+end
+
+func main():
+    return 0
+end

@@ -1,0 +1,6 @@
+func bad():
+    value: Option[Region]
+end
+func main():
+    return 42
+end

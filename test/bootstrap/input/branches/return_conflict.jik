@@ -1,0 +1,10 @@
+func choose(value: bool):
+    if value:
+        return 1
+    else:
+        return true
+    end
+end
+func main():
+    return 0
+end

@@ -1,0 +1,9 @@
+func bad(value: String, r: Region) -> String:
+    local := "local"
+    return local if true else value
+end
+
+
+func main():
+    return 0
+end

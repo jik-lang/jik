@@ -1,0 +1,8 @@
+func empty():
+end
+func accept(value: int):
+end
+func main():
+    accept(empty())
+    return 0
+end

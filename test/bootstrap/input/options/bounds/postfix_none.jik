@@ -1,0 +1,11 @@
+struct Holder:
+    value: Option[int]
+end
+struct Node:
+    next: Option[Node]
+end
+func main():
+    value: Option[int]
+    result := value?
+    return 42
+end

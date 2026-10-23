@@ -1,0 +1,8 @@
+use "shared" as base
+
+value := base::stamp(2)
+alias := base::state
+
+func update():
+    base::state.value = 9
+end

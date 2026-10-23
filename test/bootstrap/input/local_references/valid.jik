@@ -1,0 +1,30 @@
+func add(left, right):
+    return left + right
+end
+
+func nested(input):
+    outer := input + 1
+    if outer < 42:
+        inner := add(outer, input)
+        if inner < 42:
+            return inner + outer
+        end
+    end
+    return outer
+end
+
+func main():
+    first := nested(10)
+    if first < 42:
+        value := 10
+        result := value + first
+        if result < 43:
+            return result
+        end
+    end
+    if 1:
+        value := 0
+        return value
+    end
+    return 1
+end

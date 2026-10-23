@@ -1,0 +1,7 @@
+struct Value:
+    number: int
+end
+
+func len(value: Value) -> int:
+    return value.number
+end

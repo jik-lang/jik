@@ -1,0 +1,5 @@
+func main():
+    value := 3.5
+    value %= 2
+    return 0
+end

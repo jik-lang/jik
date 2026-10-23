@@ -1,0 +1,42 @@
+use "jik/testing" as test
+
+use "support"
+use "test_regions"
+use "../../src/bootstrap/language/builtin"
+use "../../src/bootstrap/semantic/typing/typecheck"
+use "../../src/bootstrap/semantic/regions/regions"
+use "../../src/bootstrap/language/types"
+
+
+func test_assert_inference(ts) -> void:
+    comp := support::infer_source("func require(value):\n    assert(value)\nend\n", -1)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    function := mod.ast.nodes[mod.ast.get_root_module().declarations[0]].kind.FUNCTION_DECL
+    parameter := mod.ast.nodes[function.parameters[0]]
+    call := mod.ast.nodes[function.body.statements[0]]
+    test::suite_assert(ts, parameter.inferred_type? == types::atom(mod.type_store, types::Atom.BOOL), site())
+    test::suite_assert(ts, call.inferred_type? == types::atom(mod.type_store, types::Atom.VOID), site())
+    test::suite_assert(ts, call.kind.CALL.builtin? == builtin::Kind.ASSERT, site())
+    test::suite_assert(ts, function.is_region_safe and not function.needs_local_region, site())
+end
+
+
+func test_assert_restrictions(ts) -> void:
+    test_regions::check_error(ts, "func bad():\n    assert()\nend\n", "call arity mismatch")
+    test_regions::check_error(ts, "func bad():\n    assert(true, false)\nend\n", "call arity mismatch")
+    test_regions::check_error(ts, "func bad():\n    assert(1)\nend\n", "type inference conflict")
+    test_regions::check_error(ts, "func bad() -> bool:\n    return assert(true)\nend\n", "type inference conflict")
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_assert")
+    test_assert_inference(ts)
+    test_assert_restrictions(ts)
+end

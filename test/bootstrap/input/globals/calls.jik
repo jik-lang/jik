@@ -1,0 +1,25 @@
+struct Box:
+    text: String
+end
+
+first := make()
+second := wrap(make())
+third := wrap("literal")
+fourth := "explicit"[.first]
+count := len(make())
+choice := "yes" if count == 4 else "no"
+empty := Box{}
+literal := Box{text="literal"}
+
+func make(r: Region) -> String:
+    return "made"[r]
+end
+
+func wrap(text: String, r: Region) -> Box:
+    return Box{text}[r]
+end
+
+func main():
+    println(first, ":", second, ":", third, ":", fourth)
+    println(count, ":", choice, ":", empty, ":", literal)
+end

@@ -1,0 +1,26 @@
+func identity(values: Vec[Vec[String]], r: Region) -> Vec[Vec[String]]:
+    return values
+end
+
+func via_call(r: Region) -> Vec[Vec[String]]:
+    return identity([["nested"]], r)
+end
+
+func singleton(value: String) -> Vec[String]:
+    return [value]
+end
+
+func choose(values: Vec[String], flag: bool) -> Vec[String]:
+    return values if flag else ["fallback"]
+end
+
+func main():
+    nested := via_call()
+    label := "bound"
+    wrapped := singleton(label)
+    fallback := choose(wrapped, false)
+    if nested[0][0] != "nested" or wrapped[0] != "bound" or fallback[0] != "fallback":
+        return 1
+    end
+    return 42
+end

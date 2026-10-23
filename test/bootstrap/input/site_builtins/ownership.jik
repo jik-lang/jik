@@ -1,0 +1,15 @@
+func capture() -> Site:
+    return site()
+end
+
+func file(value: Site, r: Region) -> String:
+    return site_file(value, r)
+end
+
+func code(value: Site, r: Region) -> String:
+    return site_code(value, r)
+end
+
+func main():
+    println("ownership-ok")
+end

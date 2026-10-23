@@ -1,0 +1,5 @@
+use "library" as lib
+
+func read(value: lib::Handle) -> int:
+    return value.get()
+end

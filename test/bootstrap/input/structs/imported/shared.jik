@@ -1,0 +1,5 @@
+use "left"
+
+func read(item: left::Item) -> int:
+    return item.value
+end

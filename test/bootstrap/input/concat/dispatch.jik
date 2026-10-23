@@ -1,0 +1,11 @@
+use "shadow"
+
+func concat(value: int) -> int:
+    return value + 1
+end
+
+func main():
+    assert(concat(2) == 3)
+    assert(shadow::concat(2) == 4)
+    println("dispatch-ok")
+end

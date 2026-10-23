@@ -1,0 +1,35 @@
+func target(counter: Vec[int], values: Dict[int]) -> Dict[int]:
+    counter[0] = counter[0] + 1
+    return values
+end
+
+func key(counter: Vec[int]) -> String:
+    counter[0] = counter[0] + 1
+    return "a"[.counter]
+end
+
+func value(counter: Vec[int]) -> int:
+    counter[0] = counter[0] + 1
+    return counter[0]
+end
+
+func main():
+    counter := [0]
+    values: Dict[int][.counter]
+    target(counter, values)[key(counter)] = value(counter)
+    if counter[0] != 3:
+        return 1
+    end
+    counter[0] = 0
+    found := target(counter, values)[key(counter)]
+    if counter[0] != 2 or found is None:
+        return 2
+    end
+    counter[0] = 0
+    literal := {key(counter): value(counter)}
+    if counter[0] != 2 or len(literal) != 1:
+        return 3
+    end
+    println("evaluated once")
+    return 42
+end

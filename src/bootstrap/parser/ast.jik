@@ -1,120 +1,574 @@
+//! Stable module-local syntax nodes with type, name, and region data filled in during analysis.
+
+use "jik/path"
+
+use "../language/builtin"
 use "../source"
-use "../semantic/symbol"
+use "../language/symbol"
+use "../language/types"
+use "../language/region_source"
+use "../language/native"
 
 
+// AST node IDs index the containing module's Ast.nodes unless stated otherwise.
+// Type IDs index the compilation-wide types::Store, shared by analyzed modules.
+// Annotation nodes describe written type syntax; they are not semantic type IDs.
+
+// Syntax node with type, name, and region data filled in during analysis.
 struct Node:
     span: source::Span
     kind: NodeKind
+    // Destination expression or parameter node ID selected by region analysis.
+    // None uses region_source without an explicit destination expression.
+    allocation_target: Option[int]
+    // Compiled-program region class; NONE when no region source has been assigned.
+    region_source: region_source::Source
+    // Type ID in the shared Store: value type, or full signature for a function node.
+    // None until inference succeeds and stores the type.
+    inferred_type: Option[int]
+    // Index in inference Solver.slots during analysis; -1 outside the solver.
+    inference_slot: int
+    // Container expression node ID for a loop binding; None for other nodes.
+    iteration_source: Option[int]
+    // Fresh local Vec/Dict literal directly passed to a foreign parameter (possibly grouped).
+    // Its entries may reference other regions; final literal-region checks skip this container.
+    foreign_argument_literal: bool
 end
 
 
 variant NodeKind:
     MODULE: Module
     IMPORT: Import
+    EMBEDDED_C: String
     FUNCTION_DECL: FunctionDecl
     PARAMETER: Parameter
     TYPE_NAME: TypeName
+    TABLE_DECL: TableDecl
+    TABLE_LOOKUP: TableLookup
+    TYPE_DECL: TypeDecl
+    TYPE_MEMBER: TypeMember
+    GLOBAL_DECL: GlobalDecl
     LOCAL_DECL: LocalDecl
+    ASSIGN: AssignStmt
+    TRY: TryStmt
+    MATCH: MatchStmt
+    MATCH_BINDING: MatchBinding
     IF: IfStmt
+    WHILE: WhileStmt
+    FOR: ForStmt
+    FOREACH: ForeachStmt
+    LOOP_VARIABLE: String
+    BREAK
+    CONTINUE
     RETURN: ReturnStmt
     INTEGER_LITERAL
+    DOUBLE_LITERAL
+    BOOL_LITERAL
+    CHAR_LITERAL: char
+    STRING_LITERAL: StringLiteral
+    VECTOR_LITERAL: VectorLiteral
+    DICT_LITERAL: DictLiteral
+    STRUCT_LITERAL: StructLiteral
+    VARIANT_LITERAL: VariantLiteral
+    VARIANT_CHECK: VariantCheck
+    OPTION_LITERAL: OptionLiteral
+    OPTION_CHECK: OptionCheck
+    UNWRAP: int    // Operand expression node ID in this module.
+    DEFAULT_VALUE: int    // Type ID in the shared Store for a synthesized default.
+    ENUM_VALUE: EnumValue
+    FIELD: FieldExpr
+    INDEX: IndexExpr
+    SLICE: SliceExpr
+    LOCAL_REGION
+    GLOBAL_REGION    // Only an omitted final Region argument in a global initializer.
+    REGION_OF: int    // Owner expression node ID in this module.
+    GROUP: int    // Parenthesized expression node ID in this module.
+    UNARY: UnaryExpr
     IDENTIFIER_EXPR: IdentifierExpr
     CALL: CallExpr
+    MUST: MustExpr
     BINARY: BinaryExpr
+    CONDITIONAL: ConditionalExpr
 end
 
 
+// Decoded string value with an optional allocation suffix.
+struct StringLiteral:
+    value: String
+    // Region expression node ID from an explicit suffix; None when omitted.
+    destination: Option[int]
+    implicit: bool    // An @ suffix requests the inferred caller result region.
+end
+
+
+// Vector elements and optional repeat count, type annotation, and allocation suffix.
+// Empty elements occur only for a typed default. A repeat has one element and
+// a count; an ordinary literal has its elements in source evaluation order.
+struct VectorLiteral:
+    elements: Vec[int]    // Element expression node IDs in evaluation order.
+    count: Option[int]    // Repeat-count expression node ID; None for an ordinary literal.
+    annotation: Option[int]    // Type annotation node ID for a typed default; None without one.
+    // Region expression node ID from an explicit suffix; None when omitted.
+    destination: Option[int]
+    implicit: bool    // An @ suffix requests the inferred caller result region.
+end
+
+
+// Indexed container access, used for reading or assignment.
+struct IndexExpr:
+    value: int    // Container expression node ID.
+    index: int    // Subscript expression node ID, not a numeric element position.
+    is_store: bool    // Access is used as an assignment destination.
+end
+
+
+// Dictionary entries with an optional type annotation and allocation suffix.
+struct DictLiteral:
+    entries: Vec[DictEntry]
+    annotation: Option[int]    // Type annotation node ID for a typed default; None without one.
+    // Region expression node ID from an explicit suffix; None when omitted.
+    destination: Option[int]
+    implicit: bool    // An @ suffix requests the inferred caller result region.
+end
+
+
+// One dictionary initializer pair.
+struct DictEntry:
+    key: int    // Key expression node ID.
+    value: int    // Value expression node ID.
+end
+
+
+// Named-type construction, including typed defaults before type resolution.
+struct StructLiteral:
+    annotation: int    // Type annotation node ID.
+    is_default: bool    // Typed local without an initializer; enum defaults resolve later.
+    fields: Vec[FieldInit]
+    // Region expression node ID from an explicit suffix; None when omitted.
+    destination: Option[int]
+    implicit: bool    // An @ suffix requests the inferred caller result region.
+end
+
+
+// Variant tag construction with an optional payload and allocation suffix.
+// The declaration and member index are resolved before inference. Missing
+// payload initializers are expanded to DEFAULT_VALUE for payload-bearing tags.
+struct VariantLiteral:
+    annotation: int    // Type annotation node ID.
+    tag: String
+    member: int    // Zero-based tag index in NamedType.member_names; -1 until resolution.
+    // Payload expression node ID; None when omitted in syntax or for a payloadless tag.
+    // Resolution supplies a default value for an omitted required payload.
+    value: Option[int]
+    // Region expression node ID from an explicit suffix; None when omitted.
+    destination: Option[int]
+    implicit: bool    // An @ suffix requests the inferred caller result region.
+end
+
+
+// Test whether a value has the named variant tag.
+struct VariantCheck:
+    value: int    // Tested expression node ID.
+    tag: String
+    member: int    // Zero-based tag index in NamedType.member_names, resolved during inference.
+end
+
+
+// Some payload or None value with an optional allocation suffix.
+struct OptionLiteral:
+    // Payload expression node ID; None represents the None constructor,
+    // whose payload type must come from context.
+    value: Option[int]
+    annotation: Option[int]    // Type annotation node ID for a typed default; None without one.
+    // Region expression node ID from an explicit suffix; None when omitted.
+    destination: Option[int]
+    implicit: bool    // An @ suffix requests the inferred caller result region.
+end
+
+
+// Test whether an option value is Some or None.
+struct OptionCheck:
+    value: int    // Tested expression node ID.
+    is_some: bool    // True tests Some; false tests None.
+end
+
+
+// One named field in a struct initializer.
+struct FieldInit:
+    name: String
+    value: int    // Initializer expression node ID.
+    member: int    // Zero-based declaration field index, resolved before inference.
+end
+
+
+// Access to a named struct field.
+struct FieldExpr:
+    value: int    // Receiver expression node ID.
+    name: String
+    member: int    // Zero-based declaration field index, resolved during inference.
+end
+
+
+// Resolved enum member expression.
+struct EnumValue:
+    type_id: int    // Enum type ID in the shared Store.
+    member: int    // Zero-based member index in that NamedType.member_names.
+end
+
+
+// Container slice with optional bounds.
+struct SliceExpr:
+    value: int    // Container expression node ID.
+    start: Option[int]    // Inclusive bound expression node ID; None starts at zero.
+    stop: Option[int]    // Exclusive bound expression node ID; None ends at container length.
+end
+
+
+// Module-level variable and its initialization expression.
+struct GlobalDecl:
+    name: String
+    initializer: int    // Initializer expression node ID.
+    initializer_nodes: Vec[int]    // Resolved initializer expression node IDs in postorder.
+end
+
+
+// Local binding with an initializer or type annotation.
 struct LocalDecl:
     name: String
-    initializer: int
+    // Initializer expression node ID; None uses the annotated type's default.
+    initializer: Option[int]
+    annotation: Option[int]    // Type annotation node ID; None when the type is inferred.
 end
 
 
+// Assignment, retaining compound syntax so its destination is evaluated once.
+struct AssignStmt:
+    target: int    // Assignment destination expression node ID.
+    value: int    // Right-hand expression node ID, including expanded compound arithmetic.
+    compound: bool    // The binary value shares its left operand with target.
+end
+
+
+// Statement sequence and the lexical scope populated by name resolution.
 struct Block:
-    statements: Vec[int]
+    statements: Vec[int]    // Statement node IDs in execution order.
     scope: symbol::Scope
 end
 
 
-struct IfStmt:
-    condition: int
+// Throwing call with separate success and error bodies.
+struct TryStmt:
+    call: int    // Throwing call expression node ID.
+    // Local declaration node ID visible only in body; None without a result binding.
+    binding: Option[int]
+    body: Block
+    except_body: Block
+end
+
+
+// Enum/variant dispatch with optional fallback.
+struct MatchStmt:
+    value: int    // Matched expression node ID.
+    arms: Vec[MatchArm]
+    other_body: Option[Block]    // Fallback block; None when no other branch is written.
+end
+
+
+// One named enum member or variant tag branch.
+struct MatchArm:
+    span: source::Span
+    tag: String
+    has_braces: bool    // Payload braces were written, including empty braces without a binding.
+    binding: Option[int]    // MATCH_BINDING node ID for the payload name; None without a name.
+    member: int    // Zero-based member index in the matched NamedType, resolved during inference.
     body: Block
 end
 
 
-struct ReturnStmt:
-    value: Option[int]
-end
-
-
-struct IdentifierExpr:
-    qualifier: Option[String]
+// Payload binding introduced by a variant match arm.
+struct MatchBinding:
     name: String
+    value: int    // Matched expression node ID; supplies the payload allocation source.
 end
 
 
+// Ordered conditional branches with an optional unconditional fallback.
+struct IfStmt:
+    branches: Vec[ConditionalBranch]
+    else_body: Option[Block]
+end
+
+
+// Condition and body for an if or elif branch.
+struct ConditionalBranch:
+    condition: int    // Boolean condition expression node ID.
+    body: Block
+end
+
+
+// Function exit with an optional result expression.
+struct ReturnStmt:
+    value: Option[int]    // Result expression node ID; None for a return without a value.
+end
+
+
+// Loop whose condition is evaluated before each iteration.
+struct WhileStmt:
+    condition: int    // Boolean condition expression node ID.
+    body: Block
+end
+
+
+// Integer range loop with an exclusive upper bound.
+struct ForStmt:
+    variable: int    // LOOP_VARIABLE node ID for the counter binding.
+    start: int    // Inclusive lower-bound expression node ID.
+    stop: int    // Exclusive upper-bound expression node ID.
+    body: Block
+end
+
+
+// Container iteration with one or two loop bindings.
+struct ForeachStmt:
+    first: int    // LOOP_VARIABLE node ID; value alone, or index/key with two bindings.
+    second: Option[int]    // Value LOOP_VARIABLE node ID with two bindings; None with one.
+    container: int    // Iterated container expression node ID.
+    body: Block
+end
+
+
+// Name reference with binding metadata supplied by resolution.
+struct IdentifierExpr:
+    qualifier: Option[String]    // Import alias; None for an unqualified name.
+    name: String
+    local_origin: Option[int]    // Parameter/local binding node ID; None for callees and globals.
+    // Cross-module declaration reference for a global value; None otherwise.
+    global_origin: Option[DeclarationRef]
+end
+
+
+// Call syntax and dispatch metadata resolved by semantic analysis.
 struct CallExpr:
-    callee: int
+    // Resolved builtin operation; None for ordinary function dispatch.
+    builtin: Option[builtin::Kind]
+    callee: int    // Callee expression node ID.
+    // Argument expression node IDs in call order, including inserted arguments.
     arguments: Vec[int]
+    // Builtin fallback may retain a caller signature, matching seed checking.
+    target: Option[DeclarationRef]
+    auto_region: bool    // Final Region argument inserted by semantic analysis.
+    is_receiver: bool    // First argument is the receiver; lookup waits for its type.
+    global_initializer: bool    // Omitted destinations require global lifetime here.
+    propagate: bool    // Statement-level call; failure exits through function cleanup.
+    requires_success: bool    // A MUST wrapper requires function dispatch for receiver fallback.
+    // TRY node ID for error-inspection builtins; None without a resolved handler.
+    error_handler: Option[int]
+end
+
+
+// Aborting error-handling wrapper around a throwing call.
+struct MustExpr:
+    call: int    // Wrapped call expression node ID.
+    operator_span: source::Span    // The must keyword or postfix bang, for runtime diagnostics.
+end
+
+
+// Reference to a declaration across module boundaries.
+struct DeclarationRef:
+    source_id: int    // Stable index in SourceManager.sources and the module collection.
+    origin: int    // Declaration node ID in that module Ast.nodes.
 end
 
 
 enum BinaryOp:
     PLUS
     MINUS
+    TIMES
+    DIV
+    MOD
     LT
+    GT
+    LE
+    GE
+    EQ
+    NE
+    AND
+    OR
 end
 
 
+table BinaryOpText[BinaryOp] -> String:
+    PLUS: "+"
+    MINUS: "-"
+    TIMES: "*"
+    DIV: "/"
+    MOD: "%"
+    LT: "<"
+    GT: ">"
+    LE: "<="
+    GE: ">="
+    EQ: "=="
+    NE: "!="
+    AND: "&&"
+    OR: "||"
+end
+
+
+enum UnaryOp:
+    NEGATE
+    NOT
+end
+
+
+// Unary operation on one expression.
+struct UnaryExpr:
+    operand: int    // Operand expression node ID.
+    op: UnaryOp
+end
+
+
+func is_comparison(op: BinaryOp) -> bool:
+    return op == BinaryOp.LT or op == BinaryOp.GT or op == BinaryOp.LE or op == BinaryOp.GE or op == BinaryOp.EQ or op == BinaryOp.NE
+end
+
+
+// Binary operation with left-to-right operands.
 struct BinaryExpr:
-    left: int
-    right: int
+    left: int    // Left operand expression node ID.
+    right: int    // Right operand expression node ID.
     op: BinaryOp
 end
 
 
+// Expression selecting one of two values from a condition.
+struct ConditionalExpr:
+    condition: int    // Boolean condition expression node ID.
+    when_true: int    // Expression node ID evaluated when the condition is true.
+    when_false: int    // Expression node ID evaluated when the condition is false.
+end
+
+
+// Root syntax payload for one source file, before imports are resolved to module edges.
 struct Module:
-    imports: Vec[int]
-    declarations: Vec[int]
+    imports: Vec[int]    // IMPORT node IDs in source order.
+    declarations: Vec[int]    // Top-level declaration node IDs in source order.
+    requirements: Vec[native::Requirement]
 end
 
 
+// Written use declaration before filesystem path resolution.
 struct Import:
-    path: String
-    alias: Option[String]
+    path: String    // Module path as written; resolution appends the .jik extension.
+    alias: Option[String]    // Explicit as name; None uses the module basename.
 end
 
 
-func as_import(nd: Node) -> Import:
-    return nd.kind.IMPORT
+func effective_alias(foreign import: Import, r: Region) -> String:
+    if import.alias is Some:
+        return copy(import.alias?, r)
+    end
+    return path::basename(path::normalize(import.path), r)
 end
 
 
+// Function declaration with syntax flags and region-analysis results.
 struct FunctionDecl:
+    // C symbol name for an extern declaration; None for a Jik function.
+    external_name: Option[String]
+    is_initializer: bool    // Extern function was declared init for a returned external type.
+    is_throwing: bool
+    // Region-safety analysis permits calls without a shared argument region.
+    is_region_safe: bool
+    // Region analysis found allocations requiring a function-local region.
+    needs_local_region: bool
     name: String
-    parameters: Vec[int]
+    parameters: Vec[int]    // PARAMETER node IDs in declaration order.
     body: Block
+    return_annotation: Option[int]    // Return type annotation node ID; None when inferred.
 end
 
 
 
+// Function parameter syntax; its node receives the inferred parameter type.
 struct Parameter:
     name: String
-    annotation: Option[int]
+    annotation: Option[int]    // Type annotation node ID; None when inferred.
+    is_foreign: bool
+    is_external: bool    // External parameter names do not introduce Jik locals.
 end
 
 
 
+// Written type expression with its semantic type supplied by resolution.
 struct TypeName:
-    qualifier: Option[String]
+    qualifier: Option[String]    // Import alias; None for an unqualified type name.
     name: String
+    resolved_type: Option[int]    // Type ID in the shared Store; None before successful resolution.
+    arguments: Vec[int]    // Type argument annotation node IDs in source order.
+    applied: bool    // Type argument brackets were written, even if empty.
 end
 
 
-// Represents entire module ast
+// Compile-time checked enum/variant table and its startup initialization metadata.
+struct TableDecl:
+    name: String
+    key_annotation: int    // Key type annotation node ID.
+    value_annotation: int    // Value type annotation node ID.
+    key_type: Option[int]    // Resolved key type ID in the shared Store; None before resolution.
+    // Resolved value type ID in the shared Store; None before resolution.
+    value_type: Option[int]
+    entries: Vec[TableEntry]
+    // Value expression node IDs indexed by enum member / variant tag position.
+    ordered_values: Vec[int]
+    // Checked value expression node IDs in this source, in postorder.
+    initializer_nodes: Vec[int]
+    // Compilation-wide table ordinal: dependency-first module order, then source order.
+    initialization_order: int
+end
+
+
+// One named table value before reordering into key declaration order.
+struct TableEntry:
+    name: String
+    span: source::Span
+    value: int    // Value expression node ID.
+    // Zero-based key member index in NamedType.member_names, assigned during resolution.
+    member: int
+end
+
+
+// Resolved table access, possibly across module boundaries.
+struct TableLookup:
+    target: DeclarationRef    // Reference to the TABLE_DECL node.
+    key: int    // Key expression node ID in the module containing this lookup.
+end
+
+
+// Named type declaration and its resolved type ID.
+struct TypeDecl:
+    name: String
+    kind: types::NamedKind
+    members: Vec[int]    // TYPE_MEMBER node IDs in declaration order.
+    resolved_type: Option[int]    // Type ID in the shared Store; None before registration.
+    // C type spelling for an extern struct; None for Jik-defined types.
+    external_name: Option[String]
+end
+
+
+// Field, enum member, or variant tag in a named type declaration.
+struct TypeMember:
+    name: String
+    // Field/payload type annotation node ID; None without a payload type.
+    annotation: Option[int]
+    // Type ID in the shared Store; None before resolution or without a payload type.
+    resolved_type: Option[int]
+end
+
+
+// Syntax and semantic node storage for one source module; node IDs remain stable.
 struct Ast:    
-    root: int
-    nodes: Vec[Node]
+    root: int    // MODULE node ID in nodes.
+    nodes: Vec[Node]    // Append-only node collection; a node ID is its zero-based index here.
 end
 
 func get_root_module(ast: Ast):
@@ -124,7 +578,7 @@ end
 
 func add(ast: Ast, span: source::Span, kind: NodeKind) -> int:
     id := len(ast.nodes)
-    ast.nodes.push(Node{span, kind})
+    ast.nodes.push(Node{span, kind, inference_slot = -1})
     return id
 end
 
@@ -144,12 +598,6 @@ end
 
 func add_function_decl(ast: Ast, span: source::Span, function: FunctionDecl) -> int:
     return ast.add(span, NodeKind.FUNCTION_DECL{function})
-end
-
-
-
-func add_local_decl(ast: Ast, span: source::Span, name: String, initializer: int) -> int:
-    return ast.add(span, NodeKind.LOCAL_DECL{LocalDecl{name, initializer}})
 end
 
 
@@ -195,6 +643,26 @@ func add_call(ast: Ast, callee: int, arguments: Vec[int], close: source::Span) -
     callee_span := ast.nodes[callee].span
     span := source::Span{source_id = callee_span.source_id, start = callee_span.start, stop = close.stop}@
     return ast.add(span, NodeKind.CALL{CallExpr{callee, arguments}})
+end
+
+
+// Propagation is only parsed as a call statement or a declaration/assignment RHS.
+func propagating_call(ast: Ast, id: int) -> Option[int]:
+    node := ast.nodes[id]
+    call_id := id
+    if node.kind is LOCAL_DECL:
+        if node.kind.LOCAL_DECL.initializer is None:
+            return None
+        end
+        call_id = node.kind.LOCAL_DECL.initializer?
+    elif node.kind is ASSIGN:
+        call_id = node.kind.ASSIGN.value
+    end
+    value := ast.nodes[call_id]
+    if value.kind is CALL and value.kind.CALL.propagate:
+        return Some{call_id}
+    end
+    return None
 end
 
 

@@ -1,0 +1,6 @@
+func bad():
+    value := None
+end
+func main():
+    return 42
+end

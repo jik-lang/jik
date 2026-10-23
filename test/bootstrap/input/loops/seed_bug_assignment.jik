@@ -1,0 +1,14 @@
+// Regression for the documented late registration of seed loop variables.
+func main():
+    count := 0
+    for index = 0, 5:
+        if index == 0:
+            index = 2
+        end
+        count = count + 1
+    end
+    if count != 3:
+        return 1
+    end
+    return 42
+end

@@ -1,0 +1,3 @@
+func values(r: Region) -> Vec[int]:
+    return [10, 20]@
+end

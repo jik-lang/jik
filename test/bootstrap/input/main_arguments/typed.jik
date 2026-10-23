@@ -1,0 +1,3 @@
+func main(args: Vec[String]) -> int:
+    return len(args)
+end

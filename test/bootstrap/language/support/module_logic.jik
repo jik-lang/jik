@@ -1,0 +1,29 @@
+use "./parts/../module_shapes" as defs
+
+
+func nickname_or_fallback(p: defs::Person, r: Region) -> String:
+    if p.nickname is Some:
+        return p.nickname?
+    end
+    return defs::fallback_name(r)
+end
+
+func message_name(msg: defs::Message, r: Region) -> String:
+    match msg:
+        case PERSON{p}:
+            return p.name
+        case TEXT{text}:
+            return text
+        case NONE{}:
+            return defs::fallback_name(r)
+    end
+end
+
+func has_tag(p: defs::Person, expect: String) -> bool:
+    for tag in p.tags:
+        if tag == expect:
+            return true
+        end
+    end
+    return false
+end

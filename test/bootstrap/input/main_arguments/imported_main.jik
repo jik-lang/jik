@@ -1,0 +1,5 @@
+use "helper"
+
+func main(args):
+    return helper::main(len(args), 4)
+end

@@ -1,0 +1,584 @@
+//! Composite literals and expression precedence; consumes shared parser state.
+
+use "state"
+use "ast"
+use "../diag"
+use "../source"
+use "../lexer/token"
+
+
+throws func parse_allocation_destination(p: state::Parser, id: int) -> void:
+    node := p.ast.nodes[id]
+    if p.container_depth > 0 and (p.current_type() == token::TokenType.AT or p.current_type() == token::TokenType.LBRACKET):
+        diag::error(p.diagnostics, "illegal nested region specifier", "nested literals use the containing value's region", Some{p.current().span})
+        fail("parse error")
+    end
+    if p.current_type() == token::TokenType.AT:
+        suffix := p.advance()
+        if node.kind is STRING_LITERAL:
+            node.kind.STRING_LITERAL.implicit = true
+        elif node.kind is VARIANT_LITERAL:
+            node.kind.VARIANT_LITERAL.implicit = true
+        elif node.kind is STRUCT_LITERAL:
+            node.kind.STRUCT_LITERAL.implicit = true
+        elif node.kind is OPTION_LITERAL:
+            node.kind.OPTION_LITERAL.implicit = true
+        elif node.kind is DICT_LITERAL:
+            node.kind.DICT_LITERAL.implicit = true
+        else:
+            node.kind.VECTOR_LITERAL.implicit = true
+        end
+        node.span.stop = suffix.span.stop
+    elif p.current_type() == token::TokenType.LBRACKET:
+        p.advance()
+        owner := p.current_type() == token::TokenType.DOT
+        if owner:
+            p.advance()
+        end
+        if p.current_type() == token::TokenType.UNDERSCORE:
+            name := p.advance()
+            diag::error(p.diagnostics, "invalid allocation suffix", "use a default allocation instead of [_]", Some{name.span})
+            fail("parse error")
+        end
+        name := try p.expect(token::TokenType.IDENTIFIER)
+        target := p.ast.add_identifier(name.span, name.span, None[.p], p.text(name.span))
+        if owner:
+            target = p.ast.add(name.span, ast::NodeKind.REGION_OF{target}[.p])
+        end
+        if node.kind is STRING_LITERAL:
+            node.kind.STRING_LITERAL.destination = Some{target}[.p]
+        elif node.kind is VARIANT_LITERAL:
+            node.kind.VARIANT_LITERAL.destination = Some{target}[.p]
+        elif node.kind is STRUCT_LITERAL:
+            node.kind.STRUCT_LITERAL.destination = Some{target}[.p]
+        elif node.kind is OPTION_LITERAL:
+            node.kind.OPTION_LITERAL.destination = Some{target}[.p]
+        elif node.kind is DICT_LITERAL:
+            node.kind.DICT_LITERAL.destination = Some{target}[.p]
+        else:
+            node.kind.VECTOR_LITERAL.destination = Some{target}[.p]
+        end
+        close := try p.expect(token::TokenType.RBRACKET)
+        node.span.stop = close.span.stop
+    end
+end
+
+
+throws func parse_vector_body(p: state::Parser, opening: token::Token) -> int:
+    literal := ast::VectorLiteral{}[.p]
+    p.skip_newlines()
+    if p.current_type() == token::TokenType.RBRACKET:
+        diag::error(p.diagnostics, "empty vector literal", "declare an empty vector by type, for example: value: Vec[int]", Some{p.current().span})
+        fail("parse error")
+    end
+    first := try parse_expression(p)
+    if p.current_type() == token::TokenType.KWD_OF:
+        p.advance()
+        literal.count = Some{first}[.p]
+        element := try parse_expression(p)
+        literal.elements.push(element)
+        p.skip_newlines()
+    else:
+        literal.elements.push(first)
+        p.skip_newlines()
+        while p.current_type() != token::TokenType.RBRACKET:
+            try p.expect(token::TokenType.COMMA)
+            p.skip_newlines()
+            element := try parse_expression(p)
+            literal.elements.push(element)
+            p.skip_newlines()
+        end
+    end
+    closing := try p.expect(token::TokenType.RBRACKET)
+    span := source::Span{source_id = p.file.id, start = opening.span.start, stop = closing.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.VECTOR_LITERAL{literal}[.p])
+end
+
+
+throws func parse_vector(p: state::Parser) -> int:
+    opening := try p.expect(token::TokenType.LBRACKET)
+    saved_depth := p.container_depth
+    p.container_depth += 1
+    try id := parse_vector_body(p, opening):
+        p.container_depth = saved_depth
+        try parse_allocation_destination(p, id)
+        return id
+    except:
+        p.container_depth = saved_depth
+        fail("parse error")
+    end
+end
+
+
+throws func parse_struct_body(p: state::Parser, annotation: int) -> int:
+    literal := ast::StructLiteral{annotation}[.p]
+    p.skip_newlines()
+    while p.current_type() != token::TokenType.RBRACE:
+        name := try p.expect(token::TokenType.IDENTIFIER)
+        value := -1
+        if p.current_type() == token::TokenType.ASSIGN:
+            p.advance()
+            value = try parse_expression(p)
+        else:
+            value = p.ast.add_identifier(name.span, name.span, None[.p], p.text(name.span))
+        end
+        literal.fields.push(ast::FieldInit{name = p.text(name.span), value, member = -1}[.p])
+        p.skip_newlines()
+        if p.current_type() != token::TokenType.COMMA:
+            break
+        end
+        p.advance()
+        p.skip_newlines()
+    end
+    closing := try p.expect(token::TokenType.RBRACE)
+    span := source::Span{source_id = p.file.id, start = p.ast.nodes[annotation].span.start, stop = closing.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.STRUCT_LITERAL{literal}[.p])
+end
+
+
+throws func parse_struct_literal(p: state::Parser, annotation: int) -> int:
+    try p.expect(token::TokenType.LBRACE)
+    saved_depth := p.container_depth
+    p.container_depth += 1
+    try id := parse_struct_body(p, annotation):
+        p.container_depth = saved_depth
+        try parse_allocation_destination(p, id)
+        return id
+    except:
+        p.container_depth = saved_depth
+        fail("parse error")
+    end
+end
+
+
+throws func parse_variant_body(p: state::Parser, base: int, tag: token::Token) -> int:
+    identifier := p.ast.nodes[base].kind.IDENTIFIER_EXPR
+    annotation := p.ast.add_type_name(p.ast.nodes[base].span, p.ast.nodes[base].span, identifier.qualifier, identifier.name)
+    literal := ast::VariantLiteral{annotation, tag = p.text(tag.span), member = -1}[.p]
+    p.skip_newlines()
+    if p.current_type() != token::TokenType.RBRACE:
+        value := try parse_expression(p)
+        literal.value = Some{value}[.p]
+        p.skip_newlines()
+    end
+    closing := try p.expect(token::TokenType.RBRACE)
+    span := source::Span{source_id = p.file.id, start = p.ast.nodes[base].span.start, stop = closing.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.VARIANT_LITERAL{literal}[.p])
+end
+
+
+throws func parse_variant(p: state::Parser, base: int, tag: token::Token) -> int:
+    try p.expect(token::TokenType.LBRACE)
+    saved_depth := p.container_depth
+    p.container_depth += 1
+    try id := parse_variant_body(p, base, tag):
+        p.container_depth = saved_depth
+        try parse_allocation_destination(p, id)
+        return id
+    except:
+        p.container_depth = saved_depth
+        fail("parse error")
+    end
+end
+
+
+throws func parse_some_body(p: state::Parser, opening: token::Token) -> int:
+    p.skip_newlines()
+    value := try parse_expression(p)
+    p.skip_newlines()
+    closing := try p.expect(token::TokenType.RBRACE)
+    span := source::Span{source_id = p.file.id, start = opening.span.start, stop = closing.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.OPTION_LITERAL{ast::OptionLiteral{value = Some{value}}}[.p])
+end
+
+
+throws func parse_option(p: state::Parser) -> int:
+    opening := p.advance()
+    if opening.type == token::TokenType.KWD_SOME:
+        try p.expect(token::TokenType.LBRACE)
+        saved_depth := p.container_depth
+        p.container_depth += 1
+        try id := parse_some_body(p, opening):
+            p.container_depth = saved_depth
+            try parse_allocation_destination(p, id)
+            return id
+        except:
+            p.container_depth = saved_depth
+            fail("parse error")
+        end
+    end
+    id := p.ast.add(copy(opening.span, .p), ast::NodeKind.OPTION_LITERAL{ast::OptionLiteral{}}[.p])
+    try parse_allocation_destination(p, id)
+    return id
+end
+
+
+throws func parse_dict_body(p: state::Parser, opening: token::Token) -> int:
+    literal := ast::DictLiteral{}[.p]
+    p.skip_newlines()
+    if p.current_type() == token::TokenType.RBRACE:
+        diag::error(p.diagnostics, "empty dictionary literal", "declare an empty dictionary by type, for example: value: Dict[int]", Some{p.current().span})
+        fail("parse error")
+    end
+    while true:
+        key := try parse_expression(p)
+        try p.expect(token::TokenType.COLON)
+        value := try parse_expression(p)
+        literal.entries.push(ast::DictEntry{key, value}[.p])
+        p.skip_newlines()
+        if p.current_type() != token::TokenType.COMMA:
+            break
+        end
+        p.advance()
+        p.skip_newlines()
+        if p.current_type() == token::TokenType.RBRACE:
+            break
+        end
+    end
+    closing := try p.expect(token::TokenType.RBRACE)
+    span := source::Span{source_id = p.file.id, start = opening.span.start, stop = closing.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.DICT_LITERAL{literal}[.p])
+end
+
+
+throws func parse_dict(p: state::Parser) -> int:
+    opening := try p.expect(token::TokenType.LBRACE)
+    saved_depth := p.container_depth
+    p.container_depth += 1
+    try id := parse_dict_body(p, opening):
+        p.container_depth = saved_depth
+        try parse_allocation_destination(p, id)
+        return id
+    except:
+        p.container_depth = saved_depth
+        fail("parse error")
+    end
+end
+
+
+throws func parse_call(p: state::Parser, callee: int) -> int:
+    try p.expect(token::TokenType.LPAREN)
+    p.skip_newlines()
+    arguments: Vec[int][.p]
+    if p.current_type() != token::TokenType.RPAREN:
+        first := try parse_expression(p)
+        arguments.push(first)
+        while p.current_type() == token::TokenType.COMMA:
+            p.advance()
+            p.skip_newlines()
+            argument := try parse_expression(p)
+            arguments.push(argument)
+        end
+    end
+    p.skip_newlines()
+    close := try p.expect(token::TokenType.RPAREN)
+    return p.ast.add_call(callee, arguments, close.span)
+end
+
+
+throws func parse_primary(p: state::Parser) -> int:
+    tok := p.current()
+    if tok.type == token::TokenType.LBRACE:
+        result := try parse_dict(p)
+        return result
+    elif tok.type == token::TokenType.KWD_SOME or tok.type == token::TokenType.KWD_NONE:
+        result := try parse_option(p)
+        return result
+    elif tok.type == token::TokenType.LBRACKET:
+        vector := try parse_vector(p)
+        return vector
+    elif tok.type == token::TokenType.INTEGER:
+        p.advance()
+        return p.ast.add_integer(tok.span)
+    elif tok.type == token::TokenType.DOUBLE:
+        p.advance()
+        return p.ast.add(tok.span, ast::NodeKind.DOUBLE_LITERAL{}[.p])
+    elif tok.type == token::TokenType.CHAR:
+        p.advance()
+        return p.ast.add(tok.span, ast::NodeKind.CHAR_LITERAL{tok.character}[.p])
+    elif tok.type == token::TokenType.KWD_TRUE or tok.type == token::TokenType.KWD_FALSE:
+        p.advance()
+        return p.ast.add(tok.span, ast::NodeKind.BOOL_LITERAL{}[.p])
+    elif tok.type == token::TokenType.STRING or tok.type == token::TokenType.STRING_MULTILINE:
+        p.advance()
+        literal := ast::StringLiteral{value = copy(tok.text?, .p)}[.p]
+        literal_span := copy(tok.span, .p)
+        id := p.ast.add(literal_span, ast::NodeKind.STRING_LITERAL{literal}[.p])
+        try parse_allocation_destination(p, id)
+        return id
+    elif tok.type == token::TokenType.DOT:
+        p.advance()
+        name := try p.expect(token::TokenType.IDENTIFIER)
+        value := p.ast.add_identifier(name.span, name.span, None[.p], p.text(name.span))
+        span := source::Span{source_id = p.file.id, start = tok.span.start, stop = name.span.stop}[.p]
+        return p.ast.add(span, ast::NodeKind.REGION_OF{value}[.p])
+    elif tok.type == token::TokenType.LPAREN:
+        p.advance()
+        value := try parse_expression(p)
+        close := try p.expect(token::TokenType.RPAREN)
+        span := source::Span{source_id = p.file.id, start = tok.span.start, stop = close.span.stop}[.p]
+        return p.ast.add(span, ast::NodeKind.GROUP{value}[.p])
+    elif tok.type == token::TokenType.UNDERSCORE:
+        p.advance()
+        return p.ast.add(tok.span, ast::NodeKind.LOCAL_REGION{}[.p])
+    elif tok.type == token::TokenType.IDENTIFIER:
+        p.advance()
+        qualifier: Option[String] = None@
+        name := p.text(tok.span)
+        last_span := tok.span
+        if p.current_type() == token::TokenType.DOUBLE_COLON:
+            p.advance()
+            qualifier = Some{name}@
+            member := try p.expect(token::TokenType.IDENTIFIER)
+            name = p.text(member.span)
+            last_span = member.span
+        end
+        identifier_id := p.ast.add_identifier(tok.span, last_span, qualifier, name)
+        if p.current_type() == token::TokenType.LBRACE:
+            annotation := p.ast.add_type_name(tok.span, last_span, qualifier, name)
+            literal := try parse_struct_literal(p, annotation)
+            return literal
+        end
+        if p.current_type() == token::TokenType.LPAREN:
+            call := try parse_call(p, identifier_id)
+            return call
+        end
+        return identifier_id
+    end
+    if tok.type == token::TokenType.ERROR:
+        p.advance()
+    else:
+        diag::error(p.diagnostics, "expected expression", "expected literal, identifier or grouped expression", Some{tok.span})
+    end
+    fail("parse error")
+end
+
+
+throws func parse_postfix(p: state::Parser) -> int:
+    value := try parse_primary(p)
+    while p.current_type() == token::TokenType.LBRACKET or p.current_type() == token::TokenType.DOT or p.current_type() == token::TokenType.QUESTION or p.current_type() == token::TokenType.BANG:
+        if p.current_type() == token::TokenType.BANG:
+            mark := p.advance()
+            value = try parse_must_operand(p, value, mark, false)
+            continue
+        end
+        if p.current_type() == token::TokenType.QUESTION:
+            mark := p.advance()
+            span := source::Span{source_id = p.file.id, start = p.ast.nodes[value].span.start, stop = mark.span.stop}[.p]
+            value = p.ast.add(span, ast::NodeKind.UNWRAP{value}[.p])
+            continue
+        end
+        if p.current_type() == token::TokenType.DOT:
+            p.advance()
+            name := try p.expect(token::TokenType.IDENTIFIER)
+            if p.current_type() == token::TokenType.LPAREN:
+                callee := p.ast.add_identifier(name.span, name.span, None[.p], p.text(name.span))
+                call_id := try parse_call(p, callee)
+                call_node := p.ast.nodes[call_id]
+                call := call_node.kind.CALL
+                arguments := [value][.p]
+                for argument in call.arguments:
+                    arguments.push(argument)
+                end
+                call.arguments = arguments
+                call.is_receiver = true
+                call_node.span.start = p.ast.nodes[value].span.start
+                value = call_id
+                continue
+            end
+            if p.current_type() == token::TokenType.LBRACE and p.ast.nodes[value].kind is IDENTIFIER_EXPR:
+                value = try parse_variant(p, value, name)
+                continue
+            end
+            span := source::Span{source_id = p.file.id, start = p.ast.nodes[value].span.start, stop = name.span.stop}[.p]
+            value = p.ast.add(span, ast::NodeKind.FIELD{ast::FieldExpr{value, name = p.text(name.span), member = -1}}[.p])
+            continue
+        end
+        p.advance()
+        first: Option[int][.p]
+        if p.current_type() != token::TokenType.COLON:
+            expression := try parse_expression(p)
+            first = Some{expression}[.p]
+        end
+        sliced := p.current_type() == token::TokenType.COLON
+        last: Option[int][.p]
+        if sliced:
+            p.advance()
+            if p.current_type() != token::TokenType.RBRACKET:
+                expression := try parse_expression(p)
+                last = Some{expression}[.p]
+            end
+        end
+        closing := try p.expect(token::TokenType.RBRACKET)
+        span := source::Span{source_id = p.file.id, start = p.ast.nodes[value].span.start, stop = closing.span.stop}[.p]
+        if sliced:
+            value = p.ast.add(span, ast::NodeKind.SLICE{ast::SliceExpr{value, start = first, stop = last}}[.p])
+        else:
+            value = p.ast.add(span, ast::NodeKind.INDEX{ast::IndexExpr{value, index = first?}}[.p])
+        end
+    end
+    if p.current_type() == token::TokenType.AT:
+        diag::error(p.diagnostics, "invalid implicit allocation suffix", "implicit region allocation suffix is only valid on a composite literal", Some{p.current().span})
+        fail("parse error")
+    end
+    return value
+end
+
+
+throws func parse_must_operand(p: state::Parser, call: int, mark: token::Token, prefix: bool) -> int:
+    if not (p.ast.nodes[call].kind is CALL):
+        diag::error(p.diagnostics, "invalid must operand", "must and ! require a function call", Some{mark.span})
+        fail("parse error")
+    end
+    p.ast.nodes[call].kind.CALL.requires_success = true
+    span := copy(p.ast.nodes[call].span, .p)
+    if prefix:
+        span.start = mark.span.start
+    else:
+        span.stop = mark.span.stop
+    end
+    return p.ast.add(span, ast::NodeKind.MUST{ast::MustExpr{call, operator_span = copy(mark.span, .p)}}[.p])
+end
+
+
+throws func parse_unary(p: state::Parser) -> int:
+    tok := p.current()
+    if tok.type == token::TokenType.KWD_MUST:
+        p.advance()
+        operand := try parse_unary(p)
+        value := try parse_must_operand(p, operand, tok, true)
+        return value
+    end
+    if tok.type == token::TokenType.OP_MINUS or tok.type == token::TokenType.KWD_NOT:
+        p.advance()
+        operand := try parse_unary(p)
+        op := ast::UnaryOp.NEGATE
+        if tok.type == token::TokenType.KWD_NOT:
+            op = ast::UnaryOp.NOT
+        end
+        span := source::Span{source_id = p.file.id, start = tok.span.start, stop = p.ast.nodes[operand].span.stop}[.p]
+        return p.ast.add(span, ast::NodeKind.UNARY{ast::UnaryExpr{operand, op}}[.p])
+    end
+    value := try parse_postfix(p)
+    return value
+end
+
+
+throws func parse_multiplicative(p: state::Parser) -> int:
+    left := try parse_unary(p)
+    while p.current_type() == token::TokenType.OP_TIMES or p.current_type() == token::TokenType.OP_DIV or p.current_type() == token::TokenType.OP_MOD:
+        tok := p.advance()
+        right := try parse_unary(p)
+        op := ast::BinaryOp.TIMES
+        if tok.type == token::TokenType.OP_DIV:
+            op = ast::BinaryOp.DIV
+        elif tok.type == token::TokenType.OP_MOD:
+            op = ast::BinaryOp.MOD
+        end
+        left = p.ast.add_binary(left, right, op)
+    end
+    return left
+end
+
+
+throws func parse_additive(p: state::Parser) -> int:
+    left := try parse_multiplicative(p)
+    while p.current_type() == token::TokenType.OP_PLUS or p.current_type() == token::TokenType.OP_MINUS:
+        op_type := p.current_type()
+        p.advance()
+        right := try parse_multiplicative(p)
+        op := ast::BinaryOp.PLUS
+        if op_type == token::TokenType.OP_MINUS:
+            op = ast::BinaryOp.MINUS
+        end
+        left = p.ast.add_binary(left, right, op)
+    end
+    return left
+end
+
+
+throws func parse_comparison(p: state::Parser) -> int:
+    left := try parse_additive(p)
+    while p.current_type() == token::TokenType.OP_LT or p.current_type() == token::TokenType.OP_GT or p.current_type() == token::TokenType.OP_LE or p.current_type() == token::TokenType.OP_GE or p.current_type() == token::TokenType.OP_EQ or p.current_type() == token::TokenType.OP_NE:
+        tok := p.advance()
+        right := try parse_additive(p)
+        op := ast::BinaryOp.LT
+        if tok.type == token::TokenType.OP_GT:
+            op = ast::BinaryOp.GT
+        elif tok.type == token::TokenType.OP_LE:
+            op = ast::BinaryOp.LE
+        elif tok.type == token::TokenType.OP_GE:
+            op = ast::BinaryOp.GE
+        elif tok.type == token::TokenType.OP_EQ:
+            op = ast::BinaryOp.EQ
+        elif tok.type == token::TokenType.OP_NE:
+            op = ast::BinaryOp.NE
+        end
+        left = p.ast.add_binary(left, right, op)
+    end
+    return left
+end
+
+
+throws func parse_is(p: state::Parser) -> int:
+    left := try parse_comparison(p)
+    if p.current_type() != token::TokenType.KWD_IS:
+        return left
+    end
+    p.advance()
+    tag := p.current()
+    if tag.type == token::TokenType.IDENTIFIER:
+        p.advance()
+        span := source::Span{source_id = p.file.id, start = p.ast.nodes[left].span.start, stop = tag.span.stop}[.p]
+        return p.ast.add(span, ast::NodeKind.VARIANT_CHECK{ast::VariantCheck{value = left, tag = p.text(tag.span), member = -1}}[.p])
+    end
+    if tag.type != token::TokenType.KWD_SOME and tag.type != token::TokenType.KWD_NONE:
+        diag::error(p.diagnostics, "invalid option check", "expected Some, None or a variant tag after is", Some{tag.span})
+        fail("parse error")
+    end
+    p.advance()
+    span := source::Span{source_id = p.file.id, start = p.ast.nodes[left].span.start, stop = tag.span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.OPTION_CHECK{ast::OptionCheck{value = left, is_some = tag.type == token::TokenType.KWD_SOME}}[.p])
+end
+
+
+throws func parse_and(p: state::Parser) -> int:
+    left := try parse_is(p)
+    while p.current_type() == token::TokenType.KWD_AND:
+        p.advance()
+        right := try parse_is(p)
+        left = p.ast.add_binary(left, right, ast::BinaryOp.AND)
+    end
+    return left
+end
+
+
+throws func parse_or(p: state::Parser) -> int:
+    left := try parse_and(p)
+    while p.current_type() == token::TokenType.KWD_OR:
+        p.advance()
+        right := try parse_and(p)
+        left = p.ast.add_binary(left, right, ast::BinaryOp.OR)
+    end
+    return left
+end
+
+
+/// Append an expression using the complete precedence chain and return its ID.
+/// All syntax belongs to the parser region; malformed syntax records diagnostics
+/// and throws to the statement or module parser, which handles recovery.
+throws func parse_expression(p: state::Parser) -> int:
+    when_true := try parse_or(p)
+    if p.current_type() != token::TokenType.KWD_IF:
+        return when_true
+    end
+    p.advance()
+    condition := try parse_expression(p)
+    try p.expect(token::TokenType.KWD_ELSE)
+    when_false := try parse_expression(p)
+    span := source::Span{source_id = p.file.id, start = p.ast.nodes[when_true].span.start, stop = p.ast.nodes[when_false].span.stop}[.p]
+    return p.ast.add(span, ast::NodeKind.CONDITIONAL{ast::ConditionalExpr{condition, when_true, when_false}}[.p])
+end
+
+
+

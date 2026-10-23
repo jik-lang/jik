@@ -1,137 +1,150 @@
+//! Coordinate source loading, checked analysis, C translation, and output files.
+
+use "jik/io"
+use "jik/path"
+use "jik/sys"
+
+use "program"
 use "diag"
-use "source"
-use "module"
-use "lexer/lexer"
-use "parser/parser"
-use "parser/ast"
+use "modules/module_graph"
+use "modules/module_loader"
 use "parser/format"
 use "semantic/semantic"
 use "codegen/codegen"
-
-use "jik/io"
 
 
 ERROR_REPORTED := 10000
 
 
+// Options for one compilation, supplied by the command-line driver.
 struct Config:
     input_path: String
-    output_path: String
+    output_path: String    // Destination for generated C when run writes the translation.
     dump_ast: bool
+    embed_core: bool    // Embed support/include/core.h instead of emitting its include.
+    emit_source_loc: bool
+    unsafe_no_bounds_checks: bool
+    region_stats: bool
+    region_tree: bool
+    verbose: bool
 end
 
 
+// Command configuration and the program shared by loading, analysis, and C generation.
 struct Compiler:
     config: Config
-    diagnostics: diag::Diagnostics
-    src_mngr: source::SourceManager
-    modules: Vec[module::Module]
+    program: program::Program
 end
 
 
-func new(conf: Config, r: Region):
+/// Create compilation state in r using installation and package paths.
+/// Pass errors finding the running compiler to the caller.
+throws func new(conf: Config, r: Region) -> Compiler:
+    executable := try sys::executable_path()
     comp := Compiler{config = conf}[r]
+    comp.program.sources.stdlib_path = path::normalize(path::join([path::dirname(executable), "jiklib"]), r)
+    comp.program.sources.package_path = sys::getenv("JIK_PKG_PATH", r)
     return comp
 end
 
 
 func print_diagnostics(comp: Compiler) -> void:
-    diag::print_all(comp.diagnostics, comp.src_mngr)
+    diag::print_all(comp.program.diagnostics, comp.program.sources)
 end
 
 
-func resolve_imports(src_mngr: source::SourceManager, ast: ast::Ast, diag: diag::Diagnostics, src: source::SourceFile) -> Vec[source::SourceFile]:
-    sources: Vec[source::SourceFile]@
-    root_mod := ast.get_root_module()    
-    seen_aliases: Dict[bool]
-    seen_paths: Dict[bool]    
-    for id in root_mod.imports:
-        import_nd := ast.nodes[id]     
-        import := ast::as_import(import_nd)
-
-        if import.alias is Some:
-            if seen_aliases[import.alias?] is Some:
-                diag::error(diag, concat("duplicate import alias: ", import.alias?), "aliases should be unique across module", Some{import_nd.span})
-            else:
-                seen_aliases[import.alias?] = true
-            end
-        end        
-
-        full_path := src_mngr.construct_full_path(import.path, src)
-        if seen_paths[full_path] is Some:
-            diag::error(diag, concat("duplicate import path: ", import.path), "paths should be unique across module", Some{import_nd.span})
-            continue
-        else:
-            seen_paths[full_path] = true
-        end
-
-        try sid := src_mngr.add_source(full_path):
-            mod_src := src_mngr.sources[sid]
-            sources.push(mod_src)
-        except:
-            diag::error(diag, concat("file not found: ", full_path), "could not resolve import", Some{import_nd.span})
-        end
+func verbose(comp: Compiler, foreign message: String):
+    if comp.config.verbose:
+        io::write_stderr(concat("jik: ", message, "\n"))
     end
-    return sources
 end
 
 
-throws func run(comp: Compiler):
-    sid := try comp.src_mngr.add_source(comp.config.input_path)
-    main_src := comp.src_mngr.sources[sid]
-  
-    sources: Vec[source::SourceFile]@
-    sources.push(main_src)
-    seen_paths: Dict[bool]
-    while len(sources) > 0:
-        src := sources.pop()
-
-        if seen_paths[src.path] is Some:
-            continue
-        end
-        
-        seen_paths[src.path] = true       
-        tokens := lexer::tokenize(src, comp.diagnostics)
-        if comp.diagnostics.error_count > 0:
-            comp.print_diagnostics()
-            fail(ERROR_REPORTED)
-        end
-        ast := parser::parse(src, tokens, comp.diagnostics)
-        if comp.diagnostics.error_count > 0:
-            comp.print_diagnostics()
-            fail(ERROR_REPORTED)
-        end
-        mod := module::Module{source_id = src.id, tokens, ast}@
-        comp.modules.push(mod)
-
-        imports := resolve_imports(comp.src_mngr, ast, comp.diagnostics, src)
-        if comp.diagnostics.error_count > 0:
-            comp.print_diagnostics()
-            fail(ERROR_REPORTED)
-        end
-        for import in imports:
-            sources.push(import)
-        end
+/// Load and validate the program, returning its entry source ID.
+/// Record source/semantic errors in the program and fail before emission can begin.
+throws func analyze(comp: Compiler) -> int:
+    verbose(comp, concat("load sources: ", comp.config.input_path))
+    sid := try module_loader::load_modules(comp.program.sources, comp.program.modules, comp.program.diagnostics, comp.config.input_path)
+    comp.program.dependency_order = module_graph::dependency_order(comp.program.modules, comp.program.sources, comp.program.diagnostics, .comp)
+    if comp.program.diagnostics.error_count > 0:
+        fail("compilation failed")
     end
+
+    // Graph validation must succeed before choosing the observable startup schedule.
+    // C generation and native directives use this same saved order.
+    comp.program.initialization_order = module_graph::initialization_order(comp.program.modules, sid, .comp)
 
     if comp.config.dump_ast:
-        for mod in comp.modules:
-            println(concat("[AST: ", comp.src_mngr.sources[mod.source_id].path, "]"))
+        for source_id in comp.program.dependency_order:
+            mod := comp.program.modules[source_id]
+            println(concat("[AST: ", comp.program.sources.sources[mod.source_id].path, "]"))
             print(format::format(mod.ast))
         end
     end
 
-    semantic::analyze(comp.modules, comp.diagnostics)
+    verbose(comp, "analyze program")
+    semantic::analyze_program(comp.program, sid)
 
-    if comp.diagnostics.error_count > 0:
-        comp.print_diagnostics()
-        fail(ERROR_REPORTED)
+    if comp.program.diagnostics.error_count > 0:
+        fail("compilation failed")
     end
 
-    try translation := codegen::generate(comp.modules, comp.src_mngr, comp.diagnostics, sid, .comp):
-        try io::write_file(comp.config.output_path, translation)
+    return sid
+end
+
+
+/// Analyze without emitting C. Print recorded diagnostics once and report
+/// ERROR_REPORTED; propagate other failures without marking them as printed.
+throws func check(comp: Compiler) -> void:
+    try analyze(comp):
     except:
-        if comp.diagnostics.error_count > 0:
+        if comp.program.diagnostics.error_count > 0:
+            comp.print_diagnostics()
+            fail(ERROR_REPORTED)
+        end
+        fail(error_msg(), error_code())
+    end
+end
+
+
+/// Analyze and return generated C in the compilation region.
+/// Pass analysis, support-header I/O, and C generation errors to the caller.
+throws func translate(comp: Compiler) -> String:
+    sid := try analyze(comp)
+    options := codegen::Options{
+        emit_source_loc = comp.config.emit_source_loc,
+        unsafe_no_bounds_checks = comp.config.unsafe_no_bounds_checks,
+        region_stats = comp.config.region_stats,
+        region_tree = comp.config.region_tree
+    }
+    if comp.config.embed_core:
+        executable := try sys::executable_path()
+        core_path := path::join([path::dirname(executable), "support", "include", "core.h"])
+        try core := io::read_file(core_path, .options):
+            options.core_source = Some{core}[.options]
+        except:
+            fail(concat("could not read support header: ", core_path, ": ", error_msg()), error_code())
+        end
+    end
+    verbose(comp, "generate C")
+    translation := try codegen::generate(comp.program, sid, options, .comp)
+    return translation
+end
+
+
+/// Translate and write the configured C output path.
+/// Print recorded diagnostics once; propagate output I/O and other failures.
+throws func run(comp: Compiler):
+    try translation := translate(comp):
+        verbose(comp, concat("write output: ", comp.config.output_path))
+        try io::write_file(comp.config.output_path, translation):
+        except:
+            msg := error_msg()
+            code := error_code()
+            fail(concat("could not write output: ", comp.config.output_path, ": ", msg), code)
+        end
+    except:
+        if comp.program.diagnostics.error_count > 0:
             comp.print_diagnostics()
             fail(ERROR_REPORTED)
         end

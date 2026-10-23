@@ -1,0 +1,4 @@
+func main():
+    values := [true of 1]
+    return 0
+end

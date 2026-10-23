@@ -1,0 +1,6 @@
+func bad(values: Dict[int]):
+    values["key"] = 1.5
+end
+func main():
+    return 42
+end

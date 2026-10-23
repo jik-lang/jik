@@ -1,0 +1,3 @@
+func make(r: Region) -> String:
+    return "imported"[r]
+end

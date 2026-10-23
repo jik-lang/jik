@@ -1,0 +1,14 @@
+func delta(value):
+    return value * 2
+end
+
+
+func main():
+    value: int
+    value += 2 + 3 * 4
+    value += delta(value)
+    if value != 42:
+        return 1
+    end
+    return value
+end

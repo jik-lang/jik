@@ -1,0 +1,6 @@
+func main():
+    value := "abc"
+    empty: String
+    result := empty[0]
+    return 42
+end

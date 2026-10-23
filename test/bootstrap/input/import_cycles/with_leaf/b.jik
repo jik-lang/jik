@@ -1,0 +1,7 @@
+use "leaf"
+use "a"
+
+
+func value():
+    return 2
+end

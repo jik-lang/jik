@@ -1,0 +1,8 @@
+use "shared"
+
+func f(value: shared::Missing):
+end
+
+func main():
+    return 0
+end

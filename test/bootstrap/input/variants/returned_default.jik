@@ -1,0 +1,16 @@
+variant Child:
+    TEXT: String
+end
+
+variant Parent:
+    CHILD: Child
+end
+
+func make(r: Region) -> Parent:
+    return Parent.CHILD{}[r]
+end
+
+func main():
+    value := make()
+    println(value)
+end

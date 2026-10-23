@@ -1,0 +1,10 @@
+struct Holder:
+    values: Dict[String]
+end
+func bad(r: Region) -> Holder:
+    text := "local"
+    return Holder{values = {"key": text}}
+end
+func main():
+    return 42
+end

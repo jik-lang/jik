@@ -1,0 +1,15 @@
+func main():
+    values := [2, 4]
+    for value in values:
+        value = 100
+    end
+    for index, value in values:
+        index = 99
+        value = 100
+    end
+    word := "abc"
+    for byte in word:
+        byte = word[0]
+    end
+    println(values, ":", word)
+end

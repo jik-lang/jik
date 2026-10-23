@@ -1,0 +1,17 @@
+use "jik/bytes"
+use "jik/strbuf"
+
+func main():
+    empty: bytes::Bytes
+    another := bytes::Bytes{}
+    buffer: bytes::ByteBuf
+    text := strbuf::StrBuf{}
+    assert(bytes::len(empty) == 0 and bytes::len(another) == 0)
+    assert(bytes::buf_len(buffer) == 0 and strbuf::len(text) == 0)
+    bytes::buf_append_string(buffer, "abc")
+    strbuf::append(text, "hello")
+    strbuf::append_char(text, '!')
+    assert(bytes::buf_len(buffer) == 3)
+    assert(strbuf::to_string(text) == "hello!")
+    println("stdlib-defaults-ok")
+end

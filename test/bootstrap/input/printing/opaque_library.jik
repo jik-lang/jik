@@ -1,0 +1,18 @@
+@embed{C}
+struct PrintOpaque { JikRegion *jik_region; int32_t hidden; };
+static int32_t print_opaque_creations;
+static struct PrintOpaque *print_opaque_new(JikRegion *r) {
+    struct PrintOpaque *value = jik_region_alloc(r, sizeof(*value));
+    value->jik_region = r;
+    value->hidden = 42;
+    print_opaque_creations++;
+    return value;
+}
+static struct PrintOpaque *print_opaque_null(JikRegion *r) { (void)r; return NULL; }
+static int32_t print_opaque_count(void) { return print_opaque_creations; }
+C
+
+extern struct PrintOpaque as Handle
+extern init func print_opaque_new as make(r: Region) -> Handle
+extern func print_opaque_null as null_handle(r: Region) -> Handle
+extern func print_opaque_count as creations() -> int

@@ -1,0 +1,9 @@
+func empty():
+end
+func forward():
+    return empty()
+end
+func main():
+    forward()
+    return 0
+end

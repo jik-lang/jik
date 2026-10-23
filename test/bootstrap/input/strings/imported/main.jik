@@ -1,0 +1,11 @@
+use "helper"
+
+
+func main():
+    owner := "anchor"
+    value := helper::make(.owner)
+    if value != "imported":
+        return 1
+    end
+    return 42
+end

@@ -1,0 +1,5 @@
+func main():
+    values := {"parent": {"child": 1}}
+    value := values["parent"]?["missing"]?
+    return 42
+end

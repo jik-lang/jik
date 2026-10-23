@@ -1,0 +1,114 @@
+//! Resolve local, standard-library, and package imports within their roots.
+
+use "jik/path"
+use "jik/string"
+use "jik/sys"
+
+use "../source"
+
+
+FILE_EXTENSION_JIK := ".jik"
+
+
+// Resolved file path and the local, library, or package root it came from.
+struct ResolvedPath:
+    path: String    // Normalized filesystem path including the .jik extension.
+    origin: source::Origin
+end
+
+
+throws func validate(module_path: String) -> void:
+    if len(module_path) == 0:
+        fail("module import path must not be empty")
+    end
+    if len(module_path) >= 2 and module_path[1] == ':':
+        if len(module_path) == 2 or (module_path[2] != '/' and module_path[2] != '\\'):
+            fail("drive-relative module paths are not supported; use an absolute path")
+        end
+    end
+    if string::find(module_path, "\\") >= 0:
+        fail("module paths in use declarations must use '/' separators")
+    end
+
+    kind := ""
+    if string::starts_with(module_path, "jik/"):
+        kind = "stdlib"
+    elif string::starts_with(module_path, "pkg/"):
+        kind = "package"
+    else:
+        return
+    end
+    tail := must string::slice(module_path, 4, len(module_path))
+    if len(tail) == 0:
+        if kind == "stdlib":
+            fail("stdlib import path must include a module name")
+        end
+        fail("package import path must include a package name")
+    end
+    segments := string::split(tail, "/")
+    for segment in segments:
+        if len(segment) == 0:
+            fail(concat(kind, " import path contains an empty path segment"))
+        end
+        if segment == "." or segment == "..":
+            fail(concat(kind, " import path cannot contain '.' or '..' path segments"))
+        end
+    end
+end
+
+
+throws func require_within(foreign resolved: String, foreign root: String, foreign kind: String) -> void:
+    separator := "\\" if sys::platform() == "windows" else "/"
+    prefix := concat(root, "" if string::ends_with(root, separator) else separator)
+    if resolved != root and not string::starts_with(resolved, prefix):
+        fail(concat("relative import cannot escape the ", kind, " root"))
+    end
+end
+
+
+throws func package_path(sm: source::SourceManager, foreign import_path: String) -> ResolvedPath:
+    if sm.package_path is None:
+        fail("jik package path not set; set JIK_PKG_PATH to the package repository root")
+    end
+    tail := must string::slice(import_path, 4, len(import_path))
+    slash := string::find(tail, "/")
+    package_name := tail
+    module_path := tail
+    if slash >= 0:
+        package_name = must string::slice(tail, 0, slash)
+        module_path = must string::slice(tail, slash + 1, len(tail))
+    end
+    root := path::normalize(path::join([sm.package_path?, "packages", package_name, "src"]), .sm)
+    full_path := path::normalize(path::join([root, concat(module_path, FILE_EXTENSION_JIK)]), .sm)
+    return ResolvedPath{path = full_path, origin = source::Origin.PACKAGE{root}}[.sm]
+end
+
+
+throws func resolve_path(sm: source::SourceManager, foreign path: String, foreign src: source::SourceFile) -> ResolvedPath:
+    try validate(path)
+    if string::starts_with(path, "pkg/"):
+        resolved := try package_path(sm, path)
+        return resolved
+    end
+    if string::starts_with(path, "jik/"):
+        // Compiler construction supplies the installation's library directory.
+        assert(len(sm.stdlib_path) > 0)
+        module_path := must string::slice(path, 4, len(path))
+        root := path::normalize(sm.stdlib_path, .sm)
+        full_path := path::normalize(path::join([root, concat(module_path, FILE_EXTENSION_JIK)]), .sm)
+        return ResolvedPath{path = full_path, origin = source::Origin.STDLIB{root}}[.sm]
+    end
+    if path::is_absolute(path):
+        return ResolvedPath{path = path::normalize(concat(path, FILE_EXTENSION_JIK), .sm)}[.sm]
+    end
+    base_dir := path::dirname(src.path, .sm)
+    full_path := path::join([base_dir, path], .sm)
+    normalized := path::normalize(concat(full_path, FILE_EXTENSION_JIK, .sm), .sm)
+    origin := copy(src.origin, .sm)
+    if origin is STDLIB:
+        try require_within(normalized, origin.STDLIB, "stdlib")
+    elif origin is PACKAGE:
+        try require_within(normalized, origin.PACKAGE, "package")
+    end
+    return ResolvedPath{path = normalized, origin}[.sm]
+end

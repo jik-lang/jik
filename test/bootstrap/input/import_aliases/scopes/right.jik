@@ -1,0 +1,6 @@
+use "../second/helper"
+
+
+func value():
+    return helper::value()
+end

@@ -1,0 +1,38 @@
+enum Mode:
+    OFF
+    ON
+end
+
+struct Point:
+    label: String
+    count: int
+    weight: double
+    enabled: bool
+    letter: char
+    mode: Mode
+end
+
+variant Result:
+    EMPTY
+    TEXT: String
+    NUMBER: int
+    MODE: Mode
+end
+
+func make_point(r: Region) -> Point:
+    original := Point{label = "origin", count = 3, weight = 4.5, enabled = true, letter = 'x', mode = Mode.ON}
+    return copy(original, r)
+end
+
+func make_result(r: Region) -> Result:
+    original := Result.TEXT{"message"}
+    return copy(original, r)
+end
+
+func retain(foreign point: Point, saved: Vec[Point]):
+    push(saved, copy(point, .saved))
+end
+
+func set_label(point: Point, text: String):
+    point.label = copy(text, .point)
+end

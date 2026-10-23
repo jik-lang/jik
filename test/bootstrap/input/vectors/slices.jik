@@ -1,0 +1,29 @@
+func tail(value: Vec[int]) -> Vec[int]:
+    return value[1:]
+end
+
+func main():
+    values := [10, 20, 30, 40]
+    middle := values[1:3]
+    prefix := values[:2]
+    suffix := tail(values)
+    entire := values[:]
+    empty := values[2:2]
+    values[1] = 99
+    if len(middle) != 2 or middle[0] != 20 or middle[1] != 30:
+        return 1
+    end
+    if len(prefix) != 2 or prefix[1] != 20 or len(suffix) != 3 or suffix[0] != 20:
+        return 2
+    end
+    if len(entire) != 4 or len(empty) != 0:
+        return 3
+    end
+    rows := [[1], [2]]
+    copied := rows[:]
+    copied[0][0] = 7
+    if rows[0][0] != 7:
+        return 4
+    end
+    return 42
+end

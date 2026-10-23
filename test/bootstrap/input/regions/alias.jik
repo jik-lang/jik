@@ -1,0 +1,9 @@
+func wrong(r: Region):
+    alias := r
+end
+
+
+func main():
+    wrong(_)
+    return 0
+end

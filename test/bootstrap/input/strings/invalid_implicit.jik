@@ -1,0 +1,9 @@
+func bad(left: Region, right: Region) -> int:
+    value := "invalid"@
+    return 0
+end
+
+
+func main():
+    return 0
+end

@@ -1,0 +1,8 @@
+func invalid(value: String) -> int:
+    values := [value]
+    return len(values)
+end
+
+func main():
+    return 0
+end

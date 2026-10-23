@@ -1,0 +1,19 @@
+func choose(flag: bool, r: Region) -> String:
+    return "yes"[r] if flag else "no"
+end
+
+
+func alias(value: String) -> String:
+    copied := value
+    return copied
+end
+
+
+func main():
+    local: String
+    local = "replacement"
+    if alias(local) != "replacement" or choose(false) != "no" or choose(true) != "yes":
+        return 1
+    end
+    return 42
+end

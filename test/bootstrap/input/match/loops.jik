@@ -1,0 +1,42 @@
+enum Action:
+    SKIP
+    STOP
+    ADD
+end
+
+func main():
+    sum := 0
+    action := Action.ADD
+    for index = 0, 6:
+        if index == 1:
+            action = Action.SKIP
+        elif index == 4:
+            action = Action.STOP
+        else:
+            action = Action.ADD
+        end
+        match action:
+            case SKIP:
+                continue
+            case STOP:
+                break
+            case ADD:
+                sum = sum + index
+        end
+        sum = sum + 10
+    end
+    println(sum)
+    count := 0
+    while true:
+        count += 1
+        match Action.ADD:
+            case ADD:
+                if count < 3:
+                    continue
+                end
+                break
+            other:
+        end
+    end
+    println(count)
+end

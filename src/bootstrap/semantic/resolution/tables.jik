@@ -1,0 +1,81 @@
+//! Resolve table names, key enums, and declared value types.
+
+use "../../language/symbol"
+use "../../language/types"
+use "lookup"
+use "type_resolution"
+use "../../modules/module"
+use "../../parser/ast"
+use "../../diag"
+
+
+// Resolve a table name only in lookup position; ordinary container receivers
+// keep their existing local/parameter resolution path.
+func find(modules: Vec[module::Module], mod: module::Module, node: ast::Node, scope: symbol::Scope, diagnostics: diag::Diagnostics) -> Option[ast::DeclarationRef]:
+    if not (node.kind is IDENTIFIER_EXPR):
+        return None
+    end
+    identifier := node.kind.IDENTIFIER_EXPR
+    target_id := lookup::qualified_module(modules, mod, identifier.qualifier, diagnostics, node.span)
+    if target_id is None:
+        return None
+    end
+    origin: Option[int]
+    if identifier.qualifier is None:
+        origin = copy(symbol::find_origin(scope, identifier.name), _)
+    else:
+        entry := modules[target_id?].global_scope.symbols[identifier.name]
+        if entry is Some:
+            origin = Some{entry?.origin}
+        end
+    end
+    if origin is None or not (modules[target_id?].ast.nodes[origin?].kind is TABLE_DECL):
+        return None
+    end
+    return Some{ast::DeclarationRef{source_id = target_id?, origin = origin?}}
+end
+
+
+func resolve_header(modules: Vec[module::Module], mod: module::Module, node: ast::Node, diagnostics: diag::Diagnostics) -> void:
+    declaration := node.kind.TABLE_DECL
+    declaration.key_type = type_resolution::resolve(modules, mod, declaration.key_annotation, diagnostics)
+    declaration.value_type = type_resolution::resolve(modules, mod, declaration.value_annotation, diagnostics)
+    if declaration.key_type is None or declaration.value_type is None:
+        return
+    end
+    if not types::is_enum(mod.type_store, declaration.key_type?) and not types::is_variant(mod.type_store, declaration.key_type?):
+        diag::error(diagnostics, "invalid table key type", "table keys must be enums or variants", Some{mod.ast.nodes[declaration.key_annotation].span})
+        return
+    end
+    value := mod.type_store.types[declaration.value_type?].kind
+    if value is FUNCTION or (value is ATOM and (value.ATOM == types::Atom.VOID or value.ATOM == types::Atom.REGION or value.ATOM == types::Atom.SITE)):
+        diag::error(diagnostics, "invalid table value type", "table values must be ordinary data types", Some{mod.ast.nodes[declaration.value_annotation].span})
+        return
+    end
+    definition := mod.type_store.types[declaration.key_type?].kind.NAMED
+    declaration.ordered_values.clear()
+    for name in definition.member_names:
+        declaration.ordered_values.push(-1)
+    end
+    for entry in declaration.entries:
+        entry.member = -1
+        for member, name in definition.member_names:
+            if name == entry.name:
+                entry.member = member
+                break
+            end
+        end
+        if entry.member < 0:
+            diag::error(diagnostics, "unknown table key", entry.name, Some{entry.span})
+        elif declaration.ordered_values[entry.member] >= 0:
+            diag::error(diagnostics, "duplicate table entry", entry.name, Some{entry.span})
+        else:
+            declaration.ordered_values[entry.member] = entry.value
+        end
+    end
+    for member, value_id in declaration.ordered_values:
+        if value_id < 0:
+            diag::error(diagnostics, "missing table entry", concat(declaration.name, " requires ", definition.name, ".", definition.member_names[member]), Some{node.span})
+        end
+    end
+end

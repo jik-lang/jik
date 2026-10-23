@@ -1,0 +1,86 @@
+func partial_int(flag: bool) -> int:
+    if flag:
+        return 42
+    end
+end
+
+func partial_double(flag: bool) -> double:
+    if flag:
+        return 2.5
+    end
+end
+
+func partial_bool(flag: bool) -> bool:
+    if flag:
+        return true
+    end
+end
+
+func partial_char(flag: bool, value: char) -> char:
+    if flag:
+        return value
+    end
+end
+
+func fallthrough_void() -> void:
+    local := 1
+end
+
+func bare_void():
+    return
+    local := 1
+end
+
+func after_return():
+    return 42
+    local := 1
+    local = local + 1
+    return 0
+end
+
+func after_chain(flag: bool):
+    if flag:
+        return 42
+    else:
+        return 42
+    end
+    local := 1
+    return local
+end
+
+func main():
+    if partial_int(false) != 0:
+        return 1
+    end
+    if partial_int(true) != 42:
+        return 2
+    end
+    if partial_double(false) != 0.0:
+        return 3
+    end
+    if partial_double(true) != 2.5:
+        return 4
+    end
+    if partial_bool(false) != false:
+        return 5
+    end
+    if partial_bool(true) != true:
+        return 6
+    end
+    zero: char
+    if partial_char(false, zero):
+        return 7
+    end
+    if partial_char(true, zero) != zero:
+        return 8
+    end
+    fallthrough_void()
+    bare_void()
+    if after_chain(true) != 42:
+        return 9
+    end
+    if after_chain(false) != 42:
+        return 10
+    end
+    return after_return()
+end

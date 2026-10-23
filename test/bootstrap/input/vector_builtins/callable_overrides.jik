@@ -1,0 +1,19 @@
+func len(value: int) -> int:
+    return value
+end
+
+func push(value: int) -> int:
+    return value
+end
+
+func pop(value: int) -> int:
+    return value
+end
+
+func clear(value: int) -> int:
+    return value
+end
+
+func main():
+    return len(10) + push(11) + pop(12) + clear(9)
+end

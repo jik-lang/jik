@@ -1,0 +1,4 @@
+func main():
+    println(_)
+    return 0
+end

@@ -1,0 +1,133 @@
+use "jik/testing" as test
+use "jik/bytes"
+use "jik/fs"
+use "jik/io"
+use "jik/path"
+use "jik/process"
+use "jik/string"
+use "jik/sys"
+
+use "../../src/bootstrap/cli/command_line"
+use "../../src/bootstrap/cli/cc_flags"
+use "../../src/bootstrap/cli/run" as run_command
+use "language/utils"
+
+
+func argument_index(foreign args: Vec[String], foreign value: String) -> int:
+    for index, argument in args:
+        if argument == value:
+            return index
+        end
+    end
+    return -1
+end
+
+
+func test_formatting(ts: test::TestSuite):
+    arguments := ["-DNAME=\"hello world\"", "C:\\end\\", "", "it's here"]
+    platforms := [false, true]
+    for windows in platforms:
+        text := command_line::format("tool dir/cc", arguments, windows)
+        parsed := must cc_flags::parse(text, windows)
+        test::suite_assert(ts, len(parsed) == 5, site())
+        if len(parsed) == 5:
+            test::suite_assert(ts, parsed[0] == "tool dir/cc", site())
+            for index, value in arguments:
+                test::suite_assert(ts, parsed[index + 1] == value, site())
+            end
+        end
+    end
+    single := ["a b"]
+    test::suite_assert(ts, command_line::format("cc", single, true) == "\"cc\" \"a b\"", site())
+    test::suite_assert(ts, command_line::format("cc", single, false) == "'cc' 'a b'", site())
+end
+
+
+func check_failure(ts: test::TestSuite, foreign tool: String, foreign args: Vec[String], foreign expected: String):
+    result := must process::capture(tool, args)
+    diagnostic := must bytes::to_string_ascii(result.err)
+    test::suite_assert(ts, result.code != 0, site())
+    test::suite_assert(ts, string::find(diagnostic, expected) >= 0, site())
+    test::suite_assert(ts, bytes::len(result.out) == 0, site())
+end
+
+
+func test_commands(ts: test::TestSuite):
+    tool := utils::compiler_command(_)
+    workspace := must run_command::make_workspace()
+    output := path::join([workspace, "preview output.exe"])
+    cc := path::join([workspace, "missing compiler.exe"])
+    input := "test/bootstrap/input/preview/main.jik"
+    flags := "-O0 -DNAME=\"hello world\""
+    result := must process::capture(tool, ["build", input, "--out", output, "--cc", cc, "--ccflags", flags, "--release", "--preview"])
+    if result.code != 0:
+        println(must bytes::to_string_ascii(result.err))
+    end
+    test::suite_assert(ts, result.code == 0, site())
+    text := must bytes::to_string_ascii(result.out)
+    args := must cc_flags::parse(text, sys::platform() == "windows")
+    test::suite_assert(ts, len(args) > 0 and args[0] == cc, site())
+    test::suite_assert(ts, argument_index(args, "-std=c11") < 0, site())
+    test::suite_assert(ts, argument_index(args, "-DNAME=hello world") >= 0, site())
+    release_index := argument_index(args, "-O3")
+    test::suite_assert(ts, release_index >= 0 and argument_index(args, "-O0") > release_index, site())
+    dependency_include := argument_index(args, path::normalize(path::join(["test/bootstrap/input/preview", "dependency include dir"])))
+    main_include := argument_index(args, path::normalize(path::join(["test/bootstrap/input/preview", "include dir"])))
+    test::suite_assert(ts, dependency_include >= 0 and main_include > dependency_include, site())
+    test::suite_assert(ts, argument_index(args, path::normalize(path::join(["test/bootstrap/input/preview", "lib dir"]))) >= 0, site())
+    dependency_link := argument_index(args, "-lpreview_dependency")
+    test::suite_assert(ts, dependency_link >= 0 and argument_index(args, "-lpreview_main") > dependency_link, site())
+    output_index := argument_index(args, "-o")
+    test::suite_assert(ts, output_index >= 0 and output_index + 1 < len(args), site())
+    if output_index >= 1 and output_index + 1 < len(args):
+        test::suite_assert(ts, args[output_index + 1] == output, site())
+        temporary_source := args[output_index - 1]
+        test::suite_assert(ts, string::ends_with(temporary_source, "program.c"), site())
+        test::suite_assert(ts, not fs::exists(path::dirname(temporary_source)), site())
+    end
+    test::suite_assert(ts, not fs::exists(output), site())
+    payload := path::join([workspace, "payload.txt"])
+    test::suite_assert(ts, not fs::exists(payload), site())
+    default_preview := must process::capture(tool, ["build", input, "--cc", cc, "--preview"])
+    test::suite_assert(ts, default_preview.code == 0, site())
+    default_args := must cc_flags::parse(must bytes::to_string_ascii(default_preview.out), sys::platform() == "windows")
+    default_output := "test/bootstrap/input/preview/main.exe" if sys::platform() == "windows" else "test/bootstrap/input/preview/main"
+    default_index := argument_index(default_args, "-o")
+    test::suite_assert(ts, default_index >= 0 and default_index + 1 < len(default_args), site())
+    if default_index >= 0 and default_index + 1 < len(default_args):
+        test::suite_assert(ts, default_args[default_index + 1] == default_output and not fs::exists(default_output), site())
+    end
+    // Preview must also leave existing executable/copy destinations untouched.
+    must io::write_file(output, "keep executable")
+    must io::write_file(payload, "keep payload")
+    again := must process::capture(tool, ["build", input, "--out", output, "--cc", cc, "--preview", "--verbose"])
+    test::suite_assert(ts, again.code == 0, site())
+    test::suite_assert(ts, must io::read_file(output) == "keep executable", site())
+    test::suite_assert(ts, must io::read_file(payload) == "keep payload", site())
+    help := must process::capture(tool, ["help", "build"])
+    test::suite_assert(ts, help.code == 0 and string::find(must bytes::to_string_ascii(help.out), "--preview") >= 0, site())
+    check_failure(ts, tool, ["build", "test/bootstrap/input/preview/invalid.jik", "--cc", cc, "--preview"], "missing")
+    check_failure(ts, tool, ["build", "test/bootstrap/input/preview/missing.jik", "--cc", cc, "--preview"], "could not")
+    check_failure(ts, tool, ["build", input, "--preview", "--ccflags", "\"unfinished"], "unterminated quote")
+    check_failure(ts, tool, ["build", input, "--preview", "--preview"], "duplicate option")
+    check_failure(ts, tool, ["run", input, "--preview"], "unknown option")
+    // As in the seed, an active native profile still requires a target query.
+    probe := path::join([workspace, "probe compiler.exe"])
+    built := must process::capture(tool, ["build", "test/bootstrap/input/cc_flags/probe.jik", "--out", probe])
+    test::suite_assert(ts, built.code == 0, site())
+    if built.code == 0:
+        profiled := must process::capture(tool, ["build", "test/bootstrap/input/preview/profiled.jik", "--out", output, "--cc", probe, "--ccflags", "--target=flag-selected", "--preview"])
+        test::suite_assert(ts, profiled.code == 0, site())
+        test::suite_assert(ts, string::find(must bytes::to_string_ascii(profiled.out), "-lpreview_target") >= 0, site())
+        check_failure(ts, tool, ["build", "test/bootstrap/input/preview/profiled.jik", "--cc", probe, "--preview"], "unsupported by the selected toolchain")
+        test::suite_assert(ts, must io::read_file(output) == "keep executable", site())
+    end
+    must run_command::cleanup(workspace)
+end
+
+
+func run_tests(ts: test::TestSuite):
+    println("[test] test_preview")
+    test_formatting(ts)
+    test_commands(ts)
+end

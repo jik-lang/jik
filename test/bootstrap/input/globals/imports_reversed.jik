@@ -1,0 +1,9 @@
+use "right"
+use "left"
+use "shared" as base
+
+value := base::stamp(4)
+
+func main():
+    println(base::trace)
+end

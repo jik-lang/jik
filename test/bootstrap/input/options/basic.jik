@@ -1,0 +1,30 @@
+func main():
+    integer := Some{7}
+    decimal := Some{1.5}
+    boolean := Some{true}
+    text := Some{"Ž"}
+    bytes := "A"
+    character := Some{bytes[0]}
+    missing: Option[int]
+    missing = None
+    if integer is None or not (integer is Some) or integer? != 7 or unwrap(integer) != 7:
+        return 1
+    end
+    if missing is Some or not (missing is None) or decimal? != 1.5 or not boolean? or text? != "Ž" or character? != bytes[0]:
+        return 2
+    end
+    nested: Option[Option[int]]
+    if nested is Some:
+        return 3
+    end
+    nested = Some{Some{9}}
+    if nested?? != 9:
+        return 4
+    end
+    direct := Some{3}?
+    if direct != 3:
+        return 5
+    end
+    println(integer, ":", decimal, ":", boolean, ":", text, ":", character, ":", missing, ":", nested)
+    return 42
+end

@@ -1,0 +1,143 @@
+use "jik/testing" as test
+
+use "support"
+use "test_strings"
+use "test_types"
+use "../../src/bootstrap/language/types"
+use "../../src/bootstrap/language/region_source"
+
+
+func declaration(foreign kind: String, foreign name: String, foreign payload: String, r: Region) -> String:
+    if kind == "struct":
+        return concat("struct ", name, ":\n    edge: ", payload, "\nend\n", r)
+    end
+    return concat("variant ", name, ":\n    LINK: ", payload, "\n    END\nend\n", r)
+end
+
+
+func check_cycle(ts, foreign text: String, legal: bool) -> void:
+    comp := support::resolve_source(text)
+    if (comp.diagnostics.error_count == 0) != legal:
+        println("Unexpected recursive-type result for:\n", text)
+    end
+    test::suite_assert(ts, (comp.diagnostics.error_count == 0) == legal, site())
+    if not legal and comp.diagnostics.error_count > 0:
+        for message in comp.diagnostics.messages:
+            test::suite_assert(ts, message.summary == "illegal recursive type", site())
+            test::suite_assert(ts, message.span is Some, site())
+        end
+    end
+end
+
+
+func check_self(ts, foreign kind: String, foreign annotation: String, legal: bool) -> void:
+    text := declaration(kind, "Node", annotation)
+    check_cycle(ts, text, legal)
+    if not legal:
+        return
+    end
+    comp := support::resolve_source(text)
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    store := comp.modules[0].type_store
+    id := test_types::declaration_type(comp.modules[0], "Node")
+    test::suite_assert(ts, id >= 0, site())
+    if id < 0:
+        return
+    end
+    member := store.types[id].kind.NAMED.member_types[0]
+    while store.types[member].kind is CONTAINER:
+        member = store.types[member].kind.CONTAINER.element_type
+    end
+    // Recursive container descriptions refer back to the same declaration ID.
+    test::suite_assert(ts, member == id, site())
+end
+
+
+func check_wrappers(ts, foreign kind: String, foreign annotation: String, has_option: bool, remaining: int) -> void:
+    if remaining == 0:
+        return
+    end
+    containers := ["Option", "Vec", "Dict"]
+    for container in containers:
+        wrapped := concat(container, "[", annotation, "]")
+        legal := has_option or container == "Option"
+        check_self(ts, kind, wrapped, legal)
+        check_wrappers(ts, kind, wrapped, legal, remaining - 1)
+    end
+end
+
+
+func test_self_cycle_matrix(ts) -> void:
+    kinds := ["struct", "variant"]
+    for kind in kinds:
+        check_self(ts, kind, "Node", false)
+        check_wrappers(ts, kind, "Node", false, 3)
+    end
+end
+
+
+func wrapped(foreign container: String, foreign name: String, r: Region) -> String:
+    return copy(name, r) if container == "" else concat(container, "[", name, "]", r)
+end
+
+
+func test_mutual_cycle_matrix(ts) -> void:
+    kinds := ["struct", "variant"]
+    containers := ["", "Option", "Vec", "Dict"]
+    for left_kind in kinds:
+        for right_kind in kinds:
+            for left_container in containers:
+                for right_container in containers:
+                    left := declaration(left_kind, "Left", wrapped(left_container, "Right"))
+                    right := declaration(right_kind, "Right", wrapped(right_container, "Left"))
+                    legal := left_container == "Option" or right_container == "Option"
+                    check_cycle(ts, concat(left, right), legal)
+                end
+            end
+        end
+    end
+end
+
+
+func test_branching_cycles(ts) -> void:
+    check_cycle(ts, "struct Node:\n    safe: Option[Node]\n    unsafe: Vec[Node]\nend\n", false)
+    check_cycle(ts, "variant Node:\n    SAFE: Option[Node]\n    UNSAFE: Dict[Node]\nend\n", false)
+    check_cycle(ts, "variant Node:\n    END\n    NEXT: Node\nend\n", false)
+    check_cycle(ts, "struct Left:\n    safe: Option[Right]\n    unsafe: Right\nend\nvariant Right:\n    SAFE: Option[Left]\n    UNSAFE: Dict[Left]\nend\n", false)
+    check_cycle(ts, "struct Root:\n    left: Child\n    right: Child\nend\nstruct Child:\n    parent: Option[Root]\nend\n", true)
+    check_cycle(ts, "struct Root:\n    next: Option[Root]\n    hidden: Option[Bad]\nend\nstruct Bad:\n    next: Bad\nend\n", false)
+end
+
+
+func test_nested_regions(ts) -> void:
+    prefix := "struct Node:\n    next: Option[Dict[Vec[Node]]]\nend\n"
+    test_strings::check_error(ts, concat(prefix, "func bad(r: Region) -> Node:\n    child := Node{}\n    return Node{next=Some{{\"key\": [child]}}}[r]\nend\n"), "region mismatch")
+    test_strings::check_error(ts, concat(prefix, "func bad(value: Node):\n    child := Node{}\n    value.next = Some{{\"key\": [child]}}\nend\n"), "region mismatch")
+    valid := test_strings::analyze(concat(prefix, "func make(r: Region) -> Node:\n    return Node{next=Some{{\"key\": [Node{}]}}}\nend\n"))
+    test::suite_assert(ts, valid.diagnostics.error_count == 0, site())
+    if valid.diagnostics.error_count > 0:
+        return
+    end
+    count := 0
+    for node in valid.modules[0].ast.nodes:
+        if node.kind is STRUCT_LITERAL or node.kind is OPTION_LITERAL or node.kind is DICT_LITERAL or node.kind is VECTOR_LITERAL or node.kind is DEFAULT_VALUE or node.kind is STRING_LITERAL:
+            if types::is_allocated(valid.modules[0].type_store, node.inferred_type?):
+                test::suite_assert(ts, node.region_source.kind == region_source::Kind.CALLER, site())
+                test::suite_assert(ts, node.allocation_target is Some, site())
+                count += 1
+            end
+        end
+    end
+    test::suite_assert(ts, count >= 6, site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_recursive_types")
+    test_self_cycle_matrix(ts)
+    test_mutual_cycle_matrix(ts)
+    test_branching_cycles(ts)
+    test_nested_regions(ts)
+end

@@ -1,0 +1,4 @@
+//! Release version shared by CLI reporting and generated C.
+
+// Keep aligned with src/jik/version.h while both compilers share a release.
+VERSION := "0.1.0-beta.0"

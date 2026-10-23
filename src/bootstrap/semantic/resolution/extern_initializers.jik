@@ -1,0 +1,65 @@
+//! Register external struct initializers and validate native member requirements.
+
+use "../../language/types"
+use "../../modules/module"
+use "../../diag"
+
+
+// All annotations must resolve before registration: initializers can precede
+// their type declaration or be declared in another reachable module.
+func register(mod: module::Module, diagnostics: diag::Diagnostics) -> void:
+    for id in mod.ast.get_root_module().declarations:
+        node := mod.ast.nodes[id]
+        if not (node.kind is FUNCTION_DECL) or not node.kind.FUNCTION_DECL.is_initializer:
+            continue
+        end
+        function := node.kind.FUNCTION_DECL
+        if function.external_name is None or function.is_throwing:
+            diag::error(diagnostics, "invalid init declaration", "init requires a nonthrowing extern function", Some{node.span})
+            continue
+        end
+        result := mod.ast.nodes[function.return_annotation?].kind.TYPE_NAME.resolved_type?
+        if not types::is_extern_struct(mod.type_store, result):
+            diag::error(diagnostics, "invalid init result", "extern init function must return an extern struct", Some{node.span})
+            continue
+        end
+        if len(function.parameters) != 1:
+            diag::error(diagnostics, "invalid init parameter", "extern init function must take one Region parameter", Some{node.span})
+            continue
+        end
+        parameter := mod.ast.nodes[function.parameters[0]].kind.PARAMETER
+        parameter_type := mod.ast.nodes[parameter.annotation?].kind.TYPE_NAME.resolved_type?
+        if parameter_type != types::atom(mod.type_store, types::Atom.REGION):
+            diag::error(diagnostics, "invalid init parameter", "extern init function must take one Region parameter", Some{node.span})
+            continue
+        end
+        definition := mod.type_store.types[result].kind.NAMED
+        if definition.initializer is Some:
+            diag::error(diagnostics, "duplicate extern initializer", "extern struct type already has an init function", Some{node.span})
+            continue
+        end
+        definition.initializer = Some{types::ExternInitializer{source_id = mod.source_id, declaration_id = id}}[.definition]
+    end
+end
+
+
+// Struct fields and every typed variant payload have default templates, even
+// when no constructor is used. Option stops default expansion at None.
+func validate_members(mod: module::Module, diagnostics: diag::Diagnostics) -> void:
+    for id in mod.ast.get_root_module().declarations:
+        node := mod.ast.nodes[id]
+        if not (node.kind is TYPE_DECL):
+            continue
+        end
+        for member_id in node.kind.TYPE_DECL.members:
+            member := mod.ast.nodes[member_id]
+            if member.kind.TYPE_MEMBER.resolved_type is None:
+                continue
+            end
+            missing := types::missing_extern_initializer(mod.type_store, member.kind.TYPE_MEMBER.resolved_type?)
+            if missing is Some:
+                diag::error(diagnostics, "external struct type has no init function", mod.type_store.types[missing?].kind.NAMED.name, Some{member.span})
+            end
+        end
+    end
+end

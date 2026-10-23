@@ -1,0 +1,18 @@
+enum Key:
+    A
+end
+
+struct Box:
+    value: int
+end
+
+box := Box{value=10}
+values := [20]
+
+table Boxes[Key] -> Box:
+    A: Box{value=30}
+end
+
+table Vectors[Key] -> Vec[int]:
+    A: [40]
+end

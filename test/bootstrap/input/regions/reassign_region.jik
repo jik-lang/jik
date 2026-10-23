@@ -1,0 +1,8 @@
+func wrong(r: Region, destination: Region):
+    r = destination
+end
+
+
+func main():
+    return 0
+end

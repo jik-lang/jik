@@ -1,0 +1,485 @@
+//! Solve type constraints, check results, save inferred types, and clear temporary slots.
+
+use "jik/string"
+
+use "solver"
+use "constraints"
+use "../../program"
+use "../../language/builtin"
+use "../resolution/calls"
+use "../../language/types"
+use "rules"
+use "../../parser/ast"
+use "../../modules/module"
+use "../../diag"
+
+
+func solve_binary_expression(solver: solver::Solver, foreign mod: module::Module, foreign node: ast::Node, foreign diagnostics: diag::Diagnostics) -> void:
+    binary := node.kind.BINARY
+    left_node := mod.ast.nodes[binary.left]
+    right_node := mod.ast.nodes[binary.right]
+    left_slot := left_node.inference_slot
+    right_slot := right_node.inference_slot
+    result_slot := node.inference_slot
+    int_type := types::atom(mod.type_store, types::Atom.INT)
+    result_type := solver::bound_type(solver, result_slot)
+    // An int arithmetic result requires int operands. A double result does not
+    // choose unknown operands: int/double mixing makes that choice ambiguous.
+    if not ast::is_comparison(binary.op) and result_type is Some and result_type? == int_type:
+        solver::bind_type(solver, left_slot, int_type, mod.type_store, diagnostics, left_node)
+        solver::bind_type(solver, right_slot, int_type, mod.type_store, diagnostics, right_node)
+    end
+    left_type := solver::bound_type(solver, left_slot)
+    right_type := solver::bound_type(solver, right_slot)
+    if left_type is None or right_type is None:
+        return
+    end
+    type_id := rules::binary_result(mod.type_store, binary.op, left_type?, right_type?)
+    if type_id is None:
+        solver::report(solver, diagnostics, node, "invalid numeric operands", "operator does not support these operand types")
+        return
+    end
+    solver::bind_type(solver, result_slot, type_id?, mod.type_store, diagnostics, node)
+end
+
+
+func solve_conditional_expression(solver: solver::Solver, foreign mod: module::Module, foreign node: ast::Node, foreign diagnostics: diag::Diagnostics) -> void:
+    selection := node.kind.CONDITIONAL
+    first := mod.ast.nodes[selection.when_true]
+    second := mod.ast.nodes[selection.when_false]
+    result_slot := node.inference_slot
+    result := solver::bound_type(solver, result_slot)
+    int_type := types::atom(mod.type_store, types::Atom.INT)
+    double_type := types::atom(mod.type_store, types::Atom.DOUBLE)
+    // A known double result cannot choose an unknown int/double branch.
+    // Other result types require both branches to have that same type.
+    if result is Some and result? != double_type:
+        solver::unify_slots(solver, result_slot, first.inference_slot, mod.type_store, diagnostics, first)
+        solver::unify_slots(solver, result_slot, second.inference_slot, mod.type_store, diagnostics, second)
+    end
+    left := solver::bound_type(solver, first.inference_slot)
+    right := solver::bound_type(solver, second.inference_slot)
+    // A nonnumeric branch determines the exact type of its counterpart.
+    if left is Some and left? != int_type and left? != double_type:
+        solver::unify_slots(solver, result_slot, first.inference_slot, mod.type_store, diagnostics, first)
+        solver::unify_slots(solver, result_slot, second.inference_slot, mod.type_store, diagnostics, second)
+    elif right is Some and right? != int_type and right? != double_type:
+        solver::unify_slots(solver, result_slot, second.inference_slot, mod.type_store, diagnostics, second)
+        solver::unify_slots(solver, result_slot, first.inference_slot, mod.type_store, diagnostics, first)
+    end
+    left = solver::bound_type(solver, first.inference_slot)
+    right = solver::bound_type(solver, second.inference_slot)
+    if left is None or right is None:
+        return
+    end
+    inferred := rules::conditional_result(mod.type_store, left?, right?)
+    if inferred is None:
+        solver::report(solver, diagnostics, node, "incompatible conditional branches", "expected matching nonvoid types or int/double branches")
+        return
+    end
+    solver::bind_type(solver, result_slot, inferred?, mod.type_store, diagnostics, node)
+end
+
+
+/// Scan node storage in ID order on each fixed-point sweep. The vector iteration
+/// reads its live length: deferred receiver resolution may append Region operands.
+/// Their constraints are collected immediately, and appended nodes remain visible
+/// while solving, checking results, and saving inferred types.
+func solve(solver: solver::Solver, foreign program: program::Program) -> void:
+    modules := program.modules
+    dependency_order := program.dependency_order
+    diagnostics := program.diagnostics
+    solver.changed = true
+    while solver.changed and not solver.failed:
+        solver.changed = false
+        for source_id in dependency_order:
+            mod := modules[source_id]
+            for id, node in mod.ast.nodes:
+                // Match/foreach statements have no value slot but still need binding types.
+                if node.inference_slot < 0 and not (node.kind is MATCH or node.kind is FOREACH):
+                    continue
+                end
+                match node.kind:
+                case BINARY:
+                    solve_binary_expression(solver, mod, node, diagnostics)
+                case CONDITIONAL:
+                    solve_conditional_expression(solver, mod, node, diagnostics)
+                case UNARY{unary}:
+                    operand := solver::bound_type(solver, mod.ast.nodes[unary.operand].inference_slot)
+                    if operand is Some and rules::unary_result(mod.type_store, unary.op, operand?) is None:
+                        solver::report(solver, diagnostics, node, "invalid unary operand", "unary minus requires int/double; not requires bool")
+                    end
+                case VECTOR_LITERAL:
+                    solve_vector(solver, mod, node, diagnostics)
+                case DICT_LITERAL:
+                    solve_dict(solver, mod, node, diagnostics)
+                case MATCH:
+                    solve_match(solver, mod, node, diagnostics)
+                case FOREACH:
+                    solve_foreach(solver, mod, node, diagnostics)
+                case INDEX:
+                    solve_index(solver, mod, node, diagnostics)
+                case FIELD:
+                    solve_field(solver, mod, node, diagnostics)
+                case OPTION_LITERAL:
+                    solve_option(solver, mod, node, diagnostics)
+                case UNWRAP{value}:
+                    solve_unwrap(solver, mod, node, value, diagnostics)
+                case CALL{call}:
+                    if call.is_receiver and call.target is None and call.builtin is None:
+                        receiver_type := solver::bound_type(solver, mod.ast.nodes[call.arguments[0]].inference_slot)
+                        if receiver_type is Some:
+                            calls::resolve_receiver(modules, mod, node, receiver_type?, diagnostics)
+                            if diagnostics.error_count > 0:
+                                solver.failed = true
+                                return
+                            end
+                            constraints::collect_expression_constraints(solver, modules, mod, id, diagnostics)
+                            solver.changed = true
+                        end
+                    end
+                    if call.builtin is Some and not solver.failed:
+                        solve_builtin(solver, mod, node, diagnostics)
+                    end
+                other:
+                end
+            end
+        end
+    end
+end
+
+
+func solve_builtin(solver: solver::Solver, foreign mod: module::Module, foreign node: ast::Node, foreign diagnostics: diag::Diagnostics) -> void:
+    call := node.kind.CALL
+    kind := call.builtin?
+    if kind == builtin::Kind.UNWRAP:
+        solve_unwrap(solver, mod, node, call.arguments[0], diagnostics)
+        return
+    end
+    if kind != builtin::Kind.PUSH and kind != builtin::Kind.POP:
+        return
+    end
+    container := solver::bound_type(solver, mod.ast.nodes[call.arguments[0]].inference_slot)
+    if container is None:
+        return
+    end
+    element := types::vector_element(mod.type_store, container?)
+    if element is None:
+        solver::report(solver, diagnostics, node, "invalid vector argument", concat(builtin::Names[kind], " requires Vec[T]"))
+        return
+    end
+    if kind == builtin::Kind.POP:
+        solver::bind_type(solver, node.inference_slot, element?, mod.type_store, diagnostics, node)
+    else:
+        value := mod.ast.nodes[call.arguments[1]]
+        solver::bind_type(solver, value.inference_slot, element?, mod.type_store, diagnostics, value)
+    end
+end
+
+
+// Container constraints flow both ways: a known element determines Vec[T],
+// while a typed binding/call/result can constrain an otherwise unknown element.
+func solve_vector(solver: solver::Solver, foreign mod: module::Module, foreign node: ast::Node, foreign diagnostics: diag::Diagnostics) -> void:
+    literal := node.kind.VECTOR_LITERAL
+    known := solver::bound_type(solver, node.inference_slot)
+    if known is Some:
+        element_type := types::vector_element(mod.type_store, known?)
+        if element_type is None:
+            solver::report(solver, diagnostics, node, "invalid vector type", "a vector literal requires Vec[T]")
+            return
+        end
+        for element in literal.elements:
+            solver::bind_type(solver, mod.ast.nodes[element].inference_slot, element_type?, mod.type_store, diagnostics, mod.ast.nodes[element])
+        end
+    end
+    if len(literal.elements) > 0:
+        element_type := solver::bound_type(solver, mod.ast.nodes[literal.elements[0]].inference_slot)
+        if element_type is Some:
+            inferred := must types::container(mod.type_store, types::Container.VECTOR, element_type?)
+            solver::bind_type(solver, node.inference_slot, inferred, mod.type_store, diagnostics, node)
+        end
+    end
+end
+
+
+func solve_option(solver: solver::Solver, foreign mod: module::Module, foreign node: ast::Node, foreign diagnostics: diag::Diagnostics) -> void:
+    literal := node.kind.OPTION_LITERAL
+    known := solver::bound_type(solver, node.inference_slot)
+    if known is Some:
+        element := types::option_element(mod.type_store, known?)
+        if element is None:
+            solver::report(solver, diagnostics, node, "invalid option type", "Some and None require Option[T]")
+            return
+        end
+        if literal.value is Some:
+            value := mod.ast.nodes[literal.value?]
+            solver::bind_type(solver, value.inference_slot, element?, mod.type_store, diagnostics, value)
+        end
+    end
+    if literal.value is Some:
+        payload := solver::bound_type(solver, mod.ast.nodes[literal.value?].inference_slot)
+        if payload is Some:
+            option := must types::container(mod.type_store, types::Container.OPTION, payload?)
+            solver::bind_type(solver, node.inference_slot, option, mod.type_store, diagnostics, node)
+        end
+    end
+end
+
+
+func solve_unwrap(solver: solver::Solver, foreign mod: module::Module, foreign node: ast::Node, value_id: int, foreign diagnostics: diag::Diagnostics) -> void:
+    value := mod.ast.nodes[value_id]
+    known := solver::bound_type(solver, value.inference_slot)
+    if known is Some:
+        element := types::option_element(mod.type_store, known?)
+        if element is None:
+            solver::report(solver, diagnostics, node, "invalid unwrap", "unwrap requires Option[T]")
+            return
+        end
+        solver::bind_type(solver, node.inference_slot, element?, mod.type_store, diagnostics, node)
+    else:
+        payload := solver::bound_type(solver, node.inference_slot)
+        if payload is Some:
+            option := must types::container(mod.type_store, types::Container.OPTION, payload?)
+            solver::bind_type(solver, value.inference_slot, option, mod.type_store, diagnostics, value)
+        end
+    end
+end
+
+
+func solve_field(solver: solver::Solver, foreign mod: module::Module, foreign node: ast::Node, foreign diagnostics: diag::Diagnostics) -> void:
+    field := node.kind.FIELD
+    known := solver::bound_type(solver, mod.ast.nodes[field.value].inference_slot)
+    if known is None:
+        return
+    end
+    if not types::is_record(mod.type_store, known?):
+        solver::report(solver, diagnostics, node, "invalid field access", "field access requires a struct or variant")
+        return
+    end
+    member := types::record_member(mod.type_store, known?, field.name)
+    if member is None:
+        solver::report(solver, diagnostics, node, "unknown variant tag" if types::is_variant(mod.type_store, known?) else "unknown struct field", field.name)
+        return
+    end
+    if types::is_variant(mod.type_store, known?) and mod.type_store.types[known?].kind.NAMED.member_types[member?] == types::atom(mod.type_store, types::Atom.VOID):
+        solver::report(solver, diagnostics, node, "payloadless variant access", "this tag has no payload")
+        return
+    end
+    field.member = member?
+    solver::bind_type(solver, node.inference_slot, mod.type_store.types[known?].kind.NAMED.member_types[member?], mod.type_store, diagnostics, node)
+end
+
+
+func solve_dict(solver: solver::Solver, foreign mod: module::Module, foreign node: ast::Node, foreign diagnostics: diag::Diagnostics) -> void:
+    literal := node.kind.DICT_LITERAL
+    known := solver::bound_type(solver, node.inference_slot)
+    if known is Some:
+        element := types::dict_element(mod.type_store, known?)
+        if element is None:
+            solver::report(solver, diagnostics, node, "invalid dictionary type", "a dictionary literal requires Dict[T]")
+            return
+        end
+        for entry in literal.entries:
+            solver::bind_type(solver, mod.ast.nodes[entry.value].inference_slot, element?, mod.type_store, diagnostics, mod.ast.nodes[entry.value])
+        end
+    end
+    if len(literal.entries) > 0:
+        element := solver::bound_type(solver, mod.ast.nodes[literal.entries[0].value].inference_slot)
+        if element is Some:
+            inferred := must types::container(mod.type_store, types::Container.DICTIONARY, element?)
+            solver::bind_type(solver, node.inference_slot, inferred, mod.type_store, diagnostics, node)
+        end
+    end
+end
+
+
+// The receiver type determines contextual tags and payload binding types.
+// Do not infer a receiver from tag spelling: different declarations share tags.
+func solve_match(solver: solver::Solver, foreign mod: module::Module, foreign node: ast::Node, foreign diagnostics: diag::Diagnostics) -> void:
+    statement := node.kind.MATCH
+    known := solver::bound_type(solver, mod.ast.nodes[statement.value].inference_slot)
+    if known is None:
+        return
+    end
+    store := mod.type_store
+    if not types::is_enum(store, known?) and not types::is_variant(store, known?):
+        solver::report(solver, diagnostics, node, "invalid match type", "match requires an enum or variant value")
+        return
+    end
+    definition := store.types[known?].kind.NAMED
+    for arm in statement.arms:
+        arm.member = -1
+        for index, name in definition.member_names:
+            if name == arm.tag:
+                arm.member = index
+                break
+            end
+        end
+        if arm.member < 0:
+            solver::report_span(solver, diagnostics, arm.span, "unknown match case", arm.tag)
+            return
+        end
+        if types::is_enum(store, known?):
+            if arm.has_braces:
+                solver::report_span(solver, diagnostics, arm.span, "enum case cannot bind a payload", arm.tag)
+                return
+            end
+        else:
+            payload := definition.member_types[arm.member]
+            if arm.has_braces and payload == types::atom(store, types::Atom.VOID):
+                solver::report_span(solver, diagnostics, arm.span, "variant tag has no payload", arm.tag)
+                return
+            end
+            if arm.binding is Some:
+                binding := mod.ast.nodes[arm.binding?]
+                solver::bind_type(solver, binding.inference_slot, payload, store, diagnostics, binding)
+            end
+        end
+    end
+end
+
+
+func solve_foreach(solver: solver::Solver, foreign mod: module::Module, foreign node: ast::Node, foreign diagnostics: diag::Diagnostics) -> void:
+    loop := node.kind.FOREACH
+    known := solver::bound_type(solver, mod.ast.nodes[loop.container].inference_slot)
+    if known is None:
+        return
+    end
+    element := types::iteration_element(mod.type_store, known?)
+    if element is None:
+        solver::report(solver, diagnostics, node, "unsupported iteration", "iteration requires String, Vec[T] or Dict[T]")
+        return
+    end
+    first := mod.ast.nodes[loop.first]
+    if loop.second is Some:
+        solver::bind_type(solver, first.inference_slot, types::iteration_key(mod.type_store, known?), mod.type_store, diagnostics, first)
+        second := mod.ast.nodes[loop.second?]
+        solver::bind_type(solver, second.inference_slot, element?, mod.type_store, diagnostics, second)
+    else:
+        solver::bind_type(solver, first.inference_slot, element?, mod.type_store, diagnostics, first)
+    end
+end
+
+
+func solve_index(solver: solver::Solver, foreign mod: module::Module, foreign node: ast::Node, foreign diagnostics: diag::Diagnostics) -> void:
+    index := node.kind.INDEX
+    value := mod.ast.nodes[index.value]
+    known := solver::bound_type(solver, value.inference_slot)
+    if known is Some:
+        element := rules::index_result(mod.type_store, known?, index.is_store)
+        if element is None:
+            solver::report(solver, diagnostics, node, "unsupported subscript", "indexing requires Vec[T], String or Dict[T]")
+        else:
+            solver::bind_type(solver, node.inference_slot, element?, mod.type_store, diagnostics, node)
+            key_type := types::atom(mod.type_store, types::Atom.STRING) if types::dict_element(mod.type_store, known?) is Some else types::atom(mod.type_store, types::Atom.INT)
+            key := mod.ast.nodes[index.index]
+            solver::bind_type(solver, key.inference_slot, key_type, mod.type_store, diagnostics, key)
+        end
+    end
+end
+
+
+/// Reject unknown or invalid void types before saving any module results.
+func validate_results(foreign solver: solver::Solver, program: program::Program) -> void:
+    modules := program.modules
+    dependency_order := program.dependency_order
+    diagnostics := program.diagnostics
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        for node in mod.ast.nodes:
+            if node.inference_slot < 0:
+                continue
+            end
+            inferred := solver::bound_type(solver, node.inference_slot)
+            if inferred is None:
+                solver::report(solver, diagnostics, node, "unresolved type", "could not infer a type; add an annotation or a constraining call")
+                return
+            end
+            // Calls and must wrappers may return void as statements. The checker rejects
+            // void calls in value contexts, including nested call arguments.
+            if not (node.kind is FUNCTION_DECL or node.kind is CALL or node.kind is MUST) and inferred? == types::atom(mod.type_store, types::Atom.VOID):
+                solver::report(solver, diagnostics, node, "void value", "a void call cannot be used as a value")
+                return
+            end
+        end
+    end
+end
+
+
+/// Save checked value types and complete function signatures on AST nodes.
+/// Function slots hold only return types, so build the full signature before saving it.
+func store_inferred_types(foreign solver: solver::Solver, program: program::Program) -> void:
+    modules := program.modules
+    dependency_order := program.dependency_order
+    // Save value types only after every module passes validation.
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        for node in mod.ast.nodes:
+            if node.inference_slot >= 0 and not (node.kind is FUNCTION_DECL):
+                inferred := solver::bound_type(solver, node.inference_slot)
+                node.inferred_type = Some{inferred?}[.node]
+                if node.kind is CALL and node.kind.CALL.builtin is Some and node.kind.CALL.builtin? == builtin::Kind.CONCAT:
+                    call := node.kind.CALL
+                    last := mod.ast.nodes[call.arguments[len(call.arguments) - 1]]
+                    call.auto_region = solver::bound_type(solver, last.inference_slot)? != types::atom(mod.type_store, types::Atom.REGION)
+                end
+            end
+        end
+    end
+    // Save a function's complete signature, not just its return type.
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        root_module := mod.ast.get_root_module()
+        for id in root_module.declarations:
+            node := mod.ast.nodes[id]
+            if node.kind is FUNCTION_DECL:
+                function := node.kind.FUNCTION_DECL
+                parameters: Vec[int]
+                for parameter_id in function.parameters:
+                    parameters.push(mod.ast.nodes[parameter_id].inferred_type?)
+                end
+                return_type := solver::bound_type(solver, node.inference_slot)
+                signature_type_id := must types::function(mod.type_store, parameters, return_type?, function.is_throwing)
+                node.inferred_type = Some{signature_type_id}[.node]
+            end
+        end
+    end
+end
+
+
+/// Remove every temporary node-slot reference, including after failed inference.
+func clear_inference_slots(program: program::Program) -> void:
+    modules := program.modules
+    dependency_order := program.dependency_order
+    for source_id in dependency_order:
+        mod := modules[source_id]
+        // Clear every stored slot, including synthetic nodes and failure paths.
+        for node in mod.ast.nodes:
+            node.inference_slot = -1
+        end
+    end
+end
+
+
+/// Infer types for resolved modules and save them only after all modules pass validation.
+/// Always clear temporary slots after work begins; record errors in diagnostics.
+/// An entry_source_id of -1 omits entry-signature constraints for direct callers.
+func run(program: program::Program, entry_source_id: int) -> void:
+    diagnostics := program.diagnostics
+    if diagnostics.error_count > 0:
+        return
+    end
+    solver := solver::Solver{}
+    constraints::initialize(solver, program, entry_source_id)
+    if not solver.failed:
+        constraints::collect_constraints(solver, program)
+        solve(solver, program)
+    end
+    if not solver.failed:
+        validate_results(solver, program)
+    end
+    if not solver.failed:
+        store_inferred_types(solver, program)
+    end
+    clear_inference_slots(program)
+end

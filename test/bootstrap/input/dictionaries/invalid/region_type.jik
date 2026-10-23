@@ -1,0 +1,5 @@
+func bad(values: Dict[Region]):
+end
+func main():
+    return 42
+end

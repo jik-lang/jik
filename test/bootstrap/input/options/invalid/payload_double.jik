@@ -1,0 +1,6 @@
+func bad():
+    value: Option[int] = Some{1.5}
+end
+func main():
+    return 42
+end

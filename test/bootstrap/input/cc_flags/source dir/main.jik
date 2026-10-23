@@ -1,0 +1,23 @@
+@embed{C}
+#include <string.h>
+#if !defined(CC_FLAGS_VALUE) || CC_FLAGS_VALUE != 42
+#error --ccflags must supply CC_FLAGS_VALUE=42
+#endif
+#if !defined(CC_FLAGS_SECOND) || CC_FLAGS_SECOND != 7
+#error --ccflags must supply CC_FLAGS_SECOND=7
+#endif
+#ifdef __OPTIMIZE__
+#error the user -O0 flag must override --release
+#endif
+int cc_flags_valid(void) {
+    return strcmp(CC_FLAGS_TEXT, "hello space") == 0;
+}
+C
+
+extern func cc_flags_valid as
+    flags_valid() -> int
+
+func main():
+    assert(flags_valid() == 1)
+    println("ccflags passed")
+end

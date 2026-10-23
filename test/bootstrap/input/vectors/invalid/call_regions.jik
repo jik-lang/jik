@@ -1,0 +1,12 @@
+func store(values: Vec[String], value: String):
+    values[0] = value
+end
+
+func invalid(values: Vec[String]):
+    local := "local"
+    store(values, local)
+end
+
+func main():
+    return 0
+end

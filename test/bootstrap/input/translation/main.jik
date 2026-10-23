@@ -1,0 +1,6 @@
+use "dependency"
+
+func main():
+    value := must dependency::answer()
+    println(value)
+end

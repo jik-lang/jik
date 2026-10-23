@@ -1,0 +1,20 @@
+//! Describe which region owns a value in the compiled program.
+
+// These classes describe compiled-program lifetimes, not compiler AST storage
+// or runtime region IDs. Foreign inputs are excluded from shared-region calls.
+enum Kind:
+    NONE    // No region source assigned or needed.
+    LOCAL    // The current function's local region.
+    GLOBAL    // Program-lifetime storage.
+    CALLER    // A non-foreign composite or Region parameter supplies the region.
+    FOREIGN    // A foreign composite parameter; never a result's shared region.
+end
+
+
+// Region kind and supplying parameter, assigned by region analysis.
+struct Source:
+    kind: Kind
+    // Parameter node ID in the containing module for CALLER/FOREIGN; unused otherwise.
+    // Selects an allocation destination; different caller parameters can share a region.
+    parameter_id: int
+end

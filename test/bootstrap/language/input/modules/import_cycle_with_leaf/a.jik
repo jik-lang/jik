@@ -1,0 +1,5 @@
+use "b"
+
+func ping():
+    b::pong()
+end

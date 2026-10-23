@@ -1,0 +1,7 @@
+func bad(value: String):
+    local := "abc"
+    value = local[:]
+end
+func main():
+    return 42
+end

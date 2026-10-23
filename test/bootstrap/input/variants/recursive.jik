@@ -1,0 +1,16 @@
+variant Expr:
+    INTEGER: int
+    PAIR: Pair
+end
+
+struct Pair:
+    left: Option[Expr]
+    right: Option[Expr]
+end
+
+func main():
+    expr := Expr.PAIR{Pair{left=Some{Expr.INTEGER{2}}, right=Some{Expr.INTEGER{5}}}}
+    println(expr.PAIR.left?.INTEGER, ":", expr.PAIR.right?.INTEGER)
+    expr.PAIR.left = Some{Expr.INTEGER{8}}
+    println(expr)
+end

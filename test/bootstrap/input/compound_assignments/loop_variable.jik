@@ -1,0 +1,11 @@
+func main():
+    total := 0
+    for index = 0, 5:
+        index += 1
+        total += index
+    end
+    if total != 9:
+        return 1
+    end
+    return 42
+end

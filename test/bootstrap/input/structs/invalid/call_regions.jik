@@ -1,0 +1,15 @@
+struct Label:
+    text: String
+    count: int
+end
+func store(value: Label, text: String):
+    value.text = text
+end
+func bad(r: Region):
+    value := Label{}[r]
+    text := "local"
+    store(value, text)
+end
+func main():
+    return 42
+end

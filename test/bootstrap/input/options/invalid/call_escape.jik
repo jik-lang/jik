@@ -1,0 +1,7 @@
+func bad(r: Region) -> String:
+    value := Some{"local"}
+    return unwrap(value)
+end
+func main():
+    return 42
+end

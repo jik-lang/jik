@@ -1,0 +1,73 @@
+//! Parse build options and compile a Jik entry file to a native executable.
+
+use "jik/argparse" as ap
+use "jik/io"
+use "jik/path"
+use "jik/string"
+use "jik/sys"
+
+use "../compiler"
+use "native_build"
+use "cc_flags"
+use "compiler_options"
+use "run" as run_command
+
+
+func make_parser(r: Region) -> ap::Parser:
+    parser := ap::new("jik build", r)
+    ap::set_description(parser, "Translate a Jik source code file to C and build an executable with the selected C compiler.")
+    ap::add_positional(parser, "input", "Input file")
+    output := ap::add_option(parser, "--out", "-o", "Output executable (default: input path without .jik, plus .exe on Windows).")
+    ap::add_option_positional(output, "file", "Output path.")
+    cc := ap::add_option(parser, "--cc", "", "C compiler executable (overrides JIK_CC; otherwise discover clang, gcc or cc).")
+    ap::add_option_positional(cc, "compiler", "Executable name or path.")
+    flags := ap::add_option(parser, "--ccflags", "", "Extra C compiler arguments (quote arguments containing spaces).")
+    ap::add_option_positional(flags, "args", "C compiler arguments.")
+    ap::add_option(parser, "--release", "", "Optimize the generated program with -O3.")
+    ap::add_option(parser, "--preview", "", "Print the compiler command without compiling or copying files.")
+    ap::add_option(parser, "--dump-ast", "", "Print the parsed AST for each module.")
+    ap::add_option(parser, "--verbose", "", "Print compilation and copy stages to stderr.")
+    compiler_options::add_runtime(parser)
+    return parser
+end
+
+
+throws func compile(foreign input: String, foreign output: String, foreign workspace: String, foreign cc: String, foreign flags: Vec[String], foreign options: ap::ParseResult, release: bool, preview: bool, verbose: bool) -> void:
+    config := compiler::Config{
+        input_path = copy(input),
+        output_path = path::join([copy(workspace), "program.c"])
+    }
+    comp := try compiler::new(config)
+    compiler_options::configure(comp.config, options)
+    try native_build::compile(comp, cc, output, flags, release, preview, verbose)
+end
+
+
+throws func run(args: Vec[String]) -> void:
+    parser := make_parser()
+    result := try ap::parse(parser, args)
+    input := result.positionals["input"]?
+    output := result.options["--out"]?["file"]? if result.options["--out"] is Some else ""
+    if len(output) == 0:
+        stem := must string::slice(input, 0, len(input) - 4) if string::ends_with(input, ".jik") else input
+        output = concat(stem, ".exe" if sys::platform() == "windows" else "")
+    end
+    explicit := result.options["--cc"]?["compiler"]? if result.options["--cc"] is Some else ""
+    flag_text := result.options["--ccflags"]?["args"]? if result.options["--ccflags"] is Some else ""
+    flags := try cc_flags::parse(flag_text, sys::platform() == "windows")
+    cc := try run_command::select_compiler(explicit)
+    workspace := try run_command::make_workspace()
+    try compile(input, output, workspace, cc, flags, result,
+        result.options["--release"] is Some, result.options["--preview"] is Some,
+        result.options["--verbose"] is Some):
+    except:
+        msg := error_msg()
+        code := error_code()
+        try run_command::cleanup(workspace):
+        except:
+            io::write_stderr(concat("jik: temporary cleanup failed: ", error_msg(), "\n"))
+        end
+        fail(msg, code)
+    end
+    try run_command::cleanup(workspace)
+end

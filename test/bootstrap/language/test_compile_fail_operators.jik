@@ -1,0 +1,52 @@
+use "jik/testing" as test
+
+use "utils"
+
+
+func test_compile_fail_01(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    x := not 1
+end
+""",
+        "conflicting types: int and bool")
+end
+
+func test_compile_fail_02(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    x := 1 and true
+end
+""",
+        "conflicting types: int and bool")
+end
+
+func test_compile_fail_03(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    x := 1 + true
+end
+""",
+        "invalid numeric operands")
+end
+
+func test_compile_fail_04(ts):
+    utils::assert_compile_fail_source(ts,
+"""
+func main():
+    x := 1 if true else "hello"
+end
+""",
+        "conflicting types: String and int")
+end
+
+func run_tests(ts):
+    println("[test] language/test_compile_fail_operators")
+    test_compile_fail_01(ts)
+    test_compile_fail_02(ts)
+    test_compile_fail_03(ts)
+    test_compile_fail_04(ts)
+end

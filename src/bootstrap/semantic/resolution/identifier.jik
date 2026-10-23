@@ -1,0 +1,96 @@
+//! Validate source identifiers against language and generated-C restrictions.
+
+use "jik/string"
+
+use "../../parser/ast"
+use "../../source"
+use "../../diag"
+use "../../language/types"
+
+
+func reserved_prefix(name: String) -> bool:
+    return string::starts_with(name, "jik_") or string::starts_with(name, "Jik") or string::starts_with(name, "JIK")
+end
+
+
+func c_reserved(name: String) -> bool:
+    // Match the seed's explicit C11/header-name set. Do not broaden it to all
+    // platform macros, or apply it to names the backend qualifies itself.
+    if len(name) > 1 and name[0] == '_':
+        second := name[1]
+        letters := "ABCDEFGHIJKLMNOPQRSTUVWXYZ_"
+        for letter in letters:
+            if second == letter:
+                return true
+            end
+        end
+    end
+    reserved := [
+        "_Alignas", "_Alignof", "_Atomic", "_Bool", "_Complex", "_Generic",
+        "_Imaginary", "_Noreturn", "_Static_assert", "_Thread_local", "auto", "break",
+        "case", "char", "const", "continue", "default", "do", "double", "else", "enum",
+        "extern", "float", "for", "goto", "if", "inline", "int", "long", "register",
+        "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch",
+        "typedef", "union", "unsigned", "void", "volatile", "while",
+        "CLOCKS_PER_SEC", "EOF", "EXIT_FAILURE", "EXIT_SUCCESS", "FILE", "NULL", "RAND_MAX",
+        "alignof", "assert", "bool", "errno", "false", "int8_t", "int16_t", "int32_t",
+        "int64_t", "intptr_t", "max_align_t", "ptrdiff_t", "size_t", "stderr", "stdin",
+        "stdout", "true", "uint8_t", "uint16_t", "uint32_t", "uint64_t", "uintptr_t",
+        "va_list", "wchar_t"
+    ]
+    for existing in reserved:
+        if name == existing:
+            return true
+        end
+    end
+    return false
+end
+
+
+func check(foreign name: String, c_name: bool, span: source::Span, diagnostics: diag::Diagnostics) -> void:
+    if reserved_prefix(name):
+        diag::error(diagnostics, "reserved identifier prefix", concat(name, " uses a reserved prefix: jik_, Jik or JIK"), Some{span})
+    elif c_name and c_reserved(name):
+        diag::error(diagnostics, "reserved identifier", concat(name, " is reserved by the C backend"), Some{span})
+    end
+end
+
+
+func validate(tree: ast::Ast, diagnostics: diag::Diagnostics) -> void:
+    for node in tree.nodes:
+        match node.kind:
+        case FUNCTION_DECL{declaration}:
+            check(declaration.name, false, node.span, diagnostics)
+        case GLOBAL_DECL{declaration}:
+            check(declaration.name, false, node.span, diagnostics)
+        case TABLE_DECL{declaration}:
+            check(declaration.name, false, node.span, diagnostics)
+        case TYPE_DECL{declaration}:
+            if declaration.kind == types::NamedKind.EXTERN_STRUCT:
+                continue
+            end
+            check(declaration.name, false, node.span, diagnostics)
+            // The seed checks struct fields and payload-bearing variant tags.
+            // Enum members and payloadless tags keep their existing names.
+            if declaration.kind != types::NamedKind.ENUM:
+                for id in declaration.members:
+                    member := tree.nodes[id]
+                    if member.kind.TYPE_MEMBER.annotation is Some:
+                        check(member.kind.TYPE_MEMBER.name, true, member.span, diagnostics)
+                    end
+                end
+            end
+        case PARAMETER{parameter}:
+            if not parameter.is_external:
+                check(parameter.name, true, node.span, diagnostics)
+            end
+        case LOCAL_DECL{declaration}:
+            check(declaration.name, true, node.span, diagnostics)
+        case LOOP_VARIABLE{name}:
+            check(name, true, node.span, diagnostics)
+        case MATCH_BINDING{binding}:
+            check(binding.name, true, node.span, diagnostics)
+        other:
+        end
+    end
+end

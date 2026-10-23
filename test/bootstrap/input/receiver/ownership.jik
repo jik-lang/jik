@@ -1,0 +1,23 @@
+struct Item:
+    text: String
+end
+
+func duplicate(foreign item: Item, r: Region) -> String:
+    return item.text.copy(r)
+end
+
+func append(foreign item: Item, values: Vec[String]):
+    values.push(item.duplicate(.values))
+end
+
+func local_append(values: Vec[String]):
+    item := Item{text = "local"}
+    item.append(values)
+end
+
+func main():
+    values := ["first"]
+    local_append(values)
+    assert(values[1] == "local")
+    println("ownership-ok")
+end

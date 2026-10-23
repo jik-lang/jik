@@ -1,0 +1,18 @@
+//! Expose the shared release identity through the version command.
+
+use "jik/argparse" as ap
+
+use "../version"
+
+
+func make_parser(r: Region) -> ap::Parser:
+    parser := ap::new("jik version", r)
+    ap::set_description(parser, "Show the version of Jik.")
+    return parser
+end
+
+
+throws func run(args: Vec[String]):
+    try ap::parse(make_parser(), args)
+    println(concat("jik version: ", version::VERSION))
+end

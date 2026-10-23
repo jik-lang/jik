@@ -1,0 +1,32 @@
+func main():
+    values := {"a": [1], "b": [2], "c": [3]}
+    sum := 0
+    visits := 0
+    for key, value in values:
+        visits = visits + 1
+        if key == "b":
+            continue
+        end
+        sum = sum + value[0]
+        value[0] = value[0] + 10
+    end
+    if visits != 3 or sum != 4 or values["a"]?[0] != 11 or values["b"]?[0] != 2 or values["c"]?[0] != 13:
+        return 1
+    end
+    pairs := 0
+    for first_key, first_value in values:
+        for second_key, second_value in values:
+            pairs = pairs + 1
+            break
+        end
+    end
+    if pairs != 3:
+        return 2
+    end
+    empty: Dict[int]
+    for empty_key, empty_value in empty:
+        return 3
+    end
+    println(sum, ":", visits, ":", pairs)
+    return 42
+end

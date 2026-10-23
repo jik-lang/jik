@@ -1,0 +1,62 @@
+struct Box:
+    values: Vec[int]
+end
+
+enum Key:
+    A
+    B
+end
+
+variant Item:
+    VALUE: int
+end
+
+func main():
+    boxes := [Box{values = [1]}, Box{values = [2]}]
+    for index, box in boxes:
+        box.values[0] += 10 + index
+    end
+    nested := [[1], [2]]
+    for row in nested:
+        push(row, 9)
+    end
+    options: Vec[Option[int]] = [Some{3}, None]
+    sum := 0
+    for value in options:
+        if value is Some:
+            sum += value?
+        end
+    end
+    dictionaries := [{"key": 4}]
+    for values in dictionaries:
+        for key, value in values:
+            sum += value
+        end
+    end
+    items := [Item.VALUE{5}]
+    for item in items:
+        sum += item.VALUE
+    end
+    keys := [Key.A, Key.B]
+    for index, key in keys:
+        if key == Key.B:
+            sum += index
+        end
+    end
+    floats := [1.5, 2.5]
+    floating := 0.0
+    for value in floats:
+        floating += value
+    end
+    flags := [true, false]
+    for value in flags:
+        if value:
+            sum += 1
+        end
+    end
+    texts := ["a", "bc"]
+    for value in texts:
+        sum += len(value)
+    end
+    println(boxes[0].values, ":", boxes[1].values, ":", nested, ":", sum, ":", floating)
+end

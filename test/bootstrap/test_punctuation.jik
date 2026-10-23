@@ -1,0 +1,118 @@
+use "jik/testing" as test
+
+use "support"
+use "../../src/bootstrap/source"
+use "../../src/bootstrap/diag"
+use "../../src/bootstrap/lexer/lexer"
+use "../../src/bootstrap/lexer/token"
+
+
+struct Glyph:
+    text: String
+    kind: token::TokenType
+end
+
+
+func check(ts, foreign text: String, foreign expected: Vec[token::TokenType]) -> void:
+    file := source::SourceFile{id = 19, text = copy(text, _)}
+    diagnostics := diag::Diagnostics{}[.file]
+    scanned := lexer::tokenize(file, diagnostics)
+    test::suite_assert(ts, diagnostics.error_count == 0 and len(scanned) == len(expected) + 1, site())
+    if len(scanned) != len(expected) + 1:
+        return
+    end
+    start := 0
+    for index, kind in expected:
+        item := scanned[index]
+        stop := start + len(token::TokenTypeNames[kind])
+        test::suite_assert(ts, item.type == kind, site())
+        test::suite_assert(ts, item.span.source_id == 19 and item.span.start == start and item.span.stop == stop, site())
+        start = stop
+    end
+    last := scanned[len(expected)]
+    test::suite_assert(ts, last.type == token::TokenType.EOF and last.span.start == len(text) and last.span.stop == len(text), site())
+end
+
+
+func test_single_and_pair_tokens(ts) -> void:
+    glyphs := [
+        Glyph{text = "(", kind = token::TokenType.LPAREN}, Glyph{text = ")", kind = token::TokenType.RPAREN},
+        Glyph{text = "[", kind = token::TokenType.LBRACKET}, Glyph{text = "]", kind = token::TokenType.RBRACKET},
+        Glyph{text = "{", kind = token::TokenType.LBRACE}, Glyph{text = "}", kind = token::TokenType.RBRACE},
+        Glyph{text = "+", kind = token::TokenType.OP_PLUS}, Glyph{text = "-", kind = token::TokenType.OP_MINUS},
+        Glyph{text = "*", kind = token::TokenType.OP_TIMES}, Glyph{text = "/", kind = token::TokenType.OP_DIV},
+        Glyph{text = "%", kind = token::TokenType.OP_MOD}, Glyph{text = ":", kind = token::TokenType.COLON},
+        Glyph{text = ",", kind = token::TokenType.COMMA}, Glyph{text = "<", kind = token::TokenType.OP_LT},
+        Glyph{text = ">", kind = token::TokenType.OP_GT}, Glyph{text = "=", kind = token::TokenType.ASSIGN},
+        Glyph{text = ".", kind = token::TokenType.DOT}, Glyph{text = "?", kind = token::TokenType.QUESTION},
+        Glyph{text = "!", kind = token::TokenType.BANG}, Glyph{text = "@", kind = token::TokenType.AT}
+    ]
+    compound := {"::": token::TokenType.DOUBLE_COLON, ":=": token::TokenType.DECLARE,
+        "->": token::TokenType.ARROW, "==": token::TokenType.OP_EQ,
+        "!=": token::TokenType.OP_NE, ">=": token::TokenType.OP_GE,
+        "<=": token::TokenType.OP_LE, "+=": token::TokenType.OP_PLUS_EQ,
+        "-=": token::TokenType.OP_MINUS_EQ, "*=": token::TokenType.OP_TIMES_EQ,
+        "/=": token::TokenType.OP_DIV_EQ, "%=": token::TokenType.OP_MOD_EQ}
+    for left in glyphs:
+        check(ts, left.text, [left.kind])
+        for right in glyphs:
+            text := concat(left.text, right.text)
+            expected: Vec[token::TokenType]
+            paired := compound[text]
+            if text == "//":
+                // A comment consumes to EOF and produces no punctuation token.
+            elif paired is Some:
+                expected.push(paired?)
+            else:
+                expected.push(left.kind)
+                expected.push(right.kind)
+            end
+            check(ts, text, expected)
+        end
+    end
+end
+
+
+func test_overlapping_tokens(ts) -> void:
+    check(ts, "::=", [token::TokenType.DOUBLE_COLON, token::TokenType.ASSIGN])
+    check(ts, ":=:", [token::TokenType.DECLARE, token::TokenType.COLON])
+    check(ts, "===", [token::TokenType.OP_EQ, token::TokenType.ASSIGN])
+    check(ts, "!==", [token::TokenType.OP_NE, token::TokenType.ASSIGN])
+    check(ts, "!!=", [token::TokenType.BANG, token::TokenType.OP_NE])
+    check(ts, "-->", [token::TokenType.OP_MINUS, token::TokenType.ARROW])
+    check(ts, "++=", [token::TokenType.OP_PLUS, token::TokenType.OP_PLUS_EQ])
+    check(ts, ">>=", [token::TokenType.OP_GT, token::TokenType.OP_GE])
+    check(ts, "<=>", [token::TokenType.OP_LE, token::TokenType.OP_GT])
+    check(ts, "/=/", [token::TokenType.OP_DIV_EQ, token::TokenType.OP_DIV])
+    check(ts, "/**/", [token::TokenType.OP_DIV, token::TokenType.OP_TIMES, token::TokenType.OP_TIMES, token::TokenType.OP_DIV])
+    check(ts, concat("?", "?="), [token::TokenType.QUESTION, token::TokenType.QUESTION, token::TokenType.ASSIGN])
+    check(ts, "...", [token::TokenType.DOT, token::TokenType.DOT, token::TokenType.DOT])
+    check(ts, "@@", [token::TokenType.AT, token::TokenType.AT])
+end
+
+
+func test_unknown_punctuation_and_recovery(ts) -> void:
+    unknown := [";", "$", "\x60", "\\", "#", "&", "|", "^", "~"]
+    for spelling in unknown:
+        file := source::SourceFile{id = 29, text = concat(spelling, "+")}
+        diagnostics := diag::Diagnostics{}[.file]
+        scanned := lexer::tokenize(file, diagnostics)
+        test::suite_assert(ts, diagnostics.error_count == 1 and len(scanned) == 3, site())
+        test::suite_assert(ts, scanned[0].type == token::TokenType.ERROR and scanned[0].span.source_id == 29 and scanned[0].span.start == 0 and scanned[0].span.stop == 1, site())
+        test::suite_assert(ts, scanned[1].type == token::TokenType.OP_PLUS and scanned[1].span.start == 1, site())
+        test::suite_assert(ts, diagnostics.messages[0].summary == "unexpected character" and diagnostics.messages[0].span?.start == 0, site())
+        parsed := support::parse_source(concat("func broken():\n    ", spelling, "\n    return 1\nend\nfunc valid():\n    return 2\nend\n"))
+        test::suite_assert(ts, parsed.diagnostics.error_count == 1 and len(parsed.ast.get_root_module().declarations) == 2, site())
+    end
+    parsed := support::parse_source("func broken():\n    !\n    return 1\nend\nfunc valid():\n    return 2\nend\n")
+    test::suite_assert(ts, parsed.diagnostics.error_count == 1 and len(parsed.ast.get_root_module().declarations) == 2, site())
+    test::suite_assert(ts, parsed.diagnostics.messages[0].summary == "expected expression", site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_punctuation")
+    test_single_and_pair_tokens(ts)
+    test_overlapping_tokens(ts)
+    test_unknown_punctuation_and_recovery(ts)
+end

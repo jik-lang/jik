@@ -1,0 +1,4 @@
+func main():
+    value: int =
+    return 0
+end

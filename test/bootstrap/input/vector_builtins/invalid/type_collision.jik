@@ -1,0 +1,7 @@
+struct clear:
+    value: int
+end
+
+func main():
+    return 0
+end

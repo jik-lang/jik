@@ -1,0 +1,35 @@
+struct Counter:
+    value: int
+end
+
+func once(counter: Counter) -> bool:
+    counter.value += 1
+    return true
+end
+
+func compare(left: String, right: String):
+    assert(left == right)
+end
+
+func independent_regions(text: String):
+    local := "same"
+    compare(text, local)
+end
+
+func require(value):
+    assert(value)
+end
+
+func main():
+    counter := Counter{}
+    assert(once(counter))
+    assert(counter.value == 1)
+    empty: Vec[int]
+    assert(true or pop(empty) == 0)
+    values := [Some{42}]
+    assert(values[0] is Some)
+    assert(values[0]? == 42)
+    independent_regions("same")
+    require(true)
+    println("assert-ok")
+end

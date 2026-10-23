@@ -1,0 +1,10 @@
+func size(count: Vec[int]) -> int:
+    count[0] = count[0] + 1
+    return 3
+end
+
+func main():
+    count := [0]
+    values := [size(count) of 7]
+    println(count[0], ":", len(values))
+end

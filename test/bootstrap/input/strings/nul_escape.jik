@@ -1,0 +1,4 @@
+func main():
+    text := "invalid\x00"
+    return 0
+end

@@ -1,0 +1,36 @@
+struct Point:
+    x: int
+    name: String
+end
+
+struct Scene:
+    points: Vec[Point]
+    matrix: Vec[Vec[Point]]
+end
+
+func main():
+    points := [Point{x = 1, name = "one"}, Point{x = 2}]
+    points[0].x = 5
+    points[1] = Point{x = 6, name = "six"}
+    push(points, Point{x = 7, name = "seven"})
+    popped := pop(points)
+    scene := Scene{points, matrix = [[Point{x = 8}]]}
+    scene.matrix[0][0].name = "eight"
+    if points[0].x != 5 or scene.points[1].name != "six" or popped.x != 7 or scene.matrix[0][0].name != "eight":
+        return 1
+    end
+    repeated := [2 of Point{x = 9}]
+    repeated[0].name = "first"
+    if repeated[1].name != "":
+        return 2
+    end
+    sliced := points[:1]
+    sliced[0].x = 10
+    if points[0].x != 10:
+        return 3
+    end
+    empty: Vec[Point]
+    clear(points)
+    println(sliced[0].name, ":", popped.name, ":", scene.matrix[0][0].name, ":", len(empty), ":", len(points))
+    return 42
+end

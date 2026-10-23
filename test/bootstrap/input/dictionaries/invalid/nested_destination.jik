@@ -1,0 +1,6 @@
+func bad(r: Region):
+    value := {"key": "nested"[r]}
+end
+func main():
+    return 42
+end

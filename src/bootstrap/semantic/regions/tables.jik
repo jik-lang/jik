@@ -1,0 +1,23 @@
+//! Assign global allocation sources to validated table initializer trees.
+
+use "../../language/types"
+use "../../language/region_source"
+use "../../modules/module"
+
+
+func assign_global_regions(mod: module::Module) -> void:
+    root := mod.ast.get_root_module()
+    for id in root.declarations:
+        node := mod.ast.nodes[id]
+        if not (node.kind is TABLE_DECL):
+            continue
+        end
+        for value_id in node.kind.TABLE_DECL.initializer_nodes:
+            value := mod.ast.nodes[value_id]
+            value.allocation_target = None[.value]
+            if types::is_allocated(mod.type_store, value.inferred_type?):
+                value.region_source.kind = region_source::Kind.GLOBAL
+            end
+        end
+    end
+end

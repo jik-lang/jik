@@ -1,0 +1,61 @@
+use "shared"
+
+source := ["global"]
+duplicate := copy(source)
+replacement := "changed"
+
+func make_names(r: Region) -> Vec[String]:
+    return ["first", "second"][r]
+end
+
+func duplicate_names(foreign values: Vec[String], r: Region) -> Vec[String]:
+    return copy(values, r)
+end
+
+func duplicate_string(foreign value: String, r: Region) -> String:
+    return copy(value, r)
+end
+
+func duplicate_dictionary(foreign values: Dict[String], r: Region) -> Dict[String]:
+    return copy(values, r)
+end
+
+func duplicate_option(foreign value: Option[String], r: Region) -> Option[String]:
+    return copy(value, r)
+end
+
+func make_dictionary(r: Region) -> Dict[String]:
+    return {"key": "value"}[r]
+end
+
+func make_option(r: Region) -> Option[String]:
+    return Some{"payload"}[r]
+end
+
+func duplicate_point(foreign value: shared::Point, r: Region) -> shared::Point:
+    return copy(value, r)
+end
+
+func duplicate_result(foreign value: shared::Result, r: Region) -> shared::Result:
+    return copy(value, r)
+end
+
+func make_point(r: Region) -> shared::Point:
+    return shared::make_point(r)
+end
+
+func make_result(r: Region) -> shared::Result:
+    return shared::make_result(r)
+end
+
+func main():
+    source[0] = replacement
+    if duplicate[0] != "global":
+        return 1
+    end
+    local := copy(source)
+    if local[0] != "changed":
+        return 2
+    end
+    println("ownership-ok")
+end

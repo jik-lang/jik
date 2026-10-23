@@ -1,0 +1,35 @@
+struct Pair:
+    first: int
+    second: int
+end
+
+func next(counter: Vec[int]) -> int:
+    counter[0] = counter[0] + 1
+    return counter[0]
+end
+
+func target(counter: Vec[int], value: Pair) -> Pair:
+    counter[0] = counter[0] + 1
+    return value
+end
+
+func main():
+    counter := [0]
+    value := Pair{second = next(counter), first = next(counter)}
+    if counter[0] != 2 or value.first != 1 or value.second != 2:
+        return 1
+    end
+    value = Pair{}[.counter]
+    counter[0] = 0
+    target(counter, value).first = next(counter)
+    if counter[0] != 2:
+        return 2
+    end
+    counter[0] = 0
+    field := target(counter, value).first
+    if counter[0] != 1:
+        return 3
+    end
+    println("evaluated once")
+    return 42
+end

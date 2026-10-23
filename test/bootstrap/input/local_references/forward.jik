@@ -1,0 +1,5 @@
+func main():
+    result := value + 1
+    value := 41
+    return result
+end

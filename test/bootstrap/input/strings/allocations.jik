@@ -1,0 +1,36 @@
+func make(r: Region) -> String:
+    scratch := "temporary"
+    result := "caller"[r]
+    return result
+end
+
+
+func name_for(owner: String) -> String:
+    return "owner"[.owner]
+end
+
+
+func direct(r: Region) -> String:
+    return "direct"
+end
+
+
+func implicit(r: Region) -> String:
+    value := "implicit"@
+    return value
+end
+
+
+func main():
+    anchor := "anchor"
+    first := make(.anchor)
+    second := name_for(first)
+    empty: String[.anchor]
+    if first != "caller" or second != "owner" or empty != "":
+        return 1
+    end
+    if direct() != "direct" or implicit() != "implicit":
+        return 2
+    end
+    return 42
+end

@@ -1,0 +1,11 @@
+func print(value: int) -> int:
+    return value
+end
+
+func println(value: int) -> int:
+    return value
+end
+
+func main():
+    return print(20) + println(22)
+end

@@ -1,0 +1,70 @@
+use "jik/path"
+use "jik/sys"
+use "jik/string"
+use "jik/testing" as test
+
+use "../../src/bootstrap/modules/import_path"
+use "../../src/bootstrap/source"
+
+
+func test_relative_import_paths(ts) -> void:
+    sources := source::SourceManager{}
+    file := source::SourceFile{path = "test/bootstrap/input/local_imports/branches/left.jik"}
+    resolved_path := must import_path::resolve_path(sources, "../absent/../shared", file)
+    resolved := resolved_path.path
+    expected := path::normalize("test/bootstrap/input/local_imports/shared.jik")
+    test::suite_assert(ts, resolved == expected, site())
+
+    root_file := source::SourceFile{path = "main.jik"}
+    root_path := must import_path::resolve_path(sources, "./shared", root_file)
+    test::suite_assert(ts, root_path.path == "shared.jik", site())
+end
+
+
+func test_absolute_import_path(ts) -> void:
+    sources := source::SourceManager{}
+    file := source::SourceFile{path = "other/main.jik"}
+    import_path := string::replace(path::join([sys::cwd(), "test/bootstrap/input/local_imports/shared"]), "\\", "/")
+    expected := path::normalize(concat(import_path, ".jik"))
+    absolute_path := must import_path::resolve_path(sources, import_path, file)
+    test::suite_assert(ts, absolute_path.path == expected, site())
+end
+
+
+func test_source_identity(ts) -> void:
+    sources := source::SourceManager{}
+    // Normalize before reading: the removed directory does not need to exist.
+    first := must sources.add_source("test/bootstrap/input/local_imports/absent/../shared.jik")
+    second := must sources.add_source("./test/bootstrap/input/local_imports/shared.jik")
+    third := must sources.add_source("test/bootstrap/input/local_imports/branches/../shared.jik")
+    test::suite_assert(ts, first == second and second == third, site())
+    test::suite_assert(ts, len(sources.sources) == 1, site())
+    file := sources.sources[first]
+    test::suite_assert(ts, file.id == first, site())
+    test::suite_assert(ts, file.path == path::normalize("test/bootstrap/input/local_imports/shared.jik"), site())
+    test::suite_assert(ts, len(file.text) > 0, site())
+    test::suite_assert(ts, len(file.line_starts) > 1, site())
+end
+
+
+func test_missing_source(ts) -> void:
+    sources := source::SourceManager{}
+    missing := path::normalize("test/bootstrap/input/local_imports/missing.jik")
+    try sources.add_source(missing):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, len(sources.sources) == 0, site())
+        test::suite_assert(ts, sources.source_id_by_path[missing] is None, site())
+    end
+    id := must sources.add_source("test/bootstrap/input/local_imports/shared.jik")
+    test::suite_assert(ts, id == 0 and len(sources.sources) == 1, site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_source")
+    test_relative_import_paths(ts)
+    test_absolute_import_path(ts)
+    test_source_identity(ts)
+    test_missing_source(ts)
+end

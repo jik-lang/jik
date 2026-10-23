@@ -1,0 +1,5 @@
+@copy("payload.txt", "missing-payload.txt")
+
+func main():
+    println("must not run")
+end

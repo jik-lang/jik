@@ -1,0 +1,120 @@
+use "jik/testing" as test
+use "jik/string"
+
+use "support"
+use "test_strings"
+use "../../src/bootstrap/parser/ast"
+use "../../src/bootstrap/language/types"
+use "../../src/bootstrap/semantic/typing/typecheck"
+use "../../src/bootstrap/language/region_source"
+
+
+func test_construction_and_fields(ts) -> void:
+    text := "struct Config:\n    host: String\n    port: int\nend\nfunc port(value):\n    return value.port\nend\nfunc main():\n    host := \"local\"\n    value := Config{port = 42, host}\n    value.port = port(value)\n    defaults: Config\n    return value.port\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    literals := 0
+    fields := 0
+    for node in mod.ast.nodes:
+        if node.kind is STRUCT_LITERAL:
+            literals += 1
+            test::suite_assert(ts, types::is_struct(mod.type_store, node.inferred_type?), site())
+            test::suite_assert(ts, len(node.kind.STRUCT_LITERAL.fields) == 2, site())
+            for field in node.kind.STRUCT_LITERAL.fields:
+                test::suite_assert(ts, field.member == (0 if field.name == "host" else 1), site())
+            end
+        elif node.kind is FIELD:
+            fields += 1
+            test::suite_assert(ts, node.kind.FIELD.member == 1, site())
+            test::suite_assert(ts, node.inferred_type? == types::atom(mod.type_store, types::Atom.INT), site())
+        end
+    end
+    test::suite_assert(ts, literals == 2 and fields == 3, site())
+end
+
+
+func test_retargeting_and_safety(ts) -> void:
+    text := "struct Label:\n    text: String\nend\nstruct Holder:\n    label: Label\n    tags: Vec[String]\nend\nfunc make(r: Region) -> Holder:\n    return Holder{label = Label{text = \"caller\"}}\nend\nfunc read(left: Holder, right: Holder) -> bool:\n    return left.label.text == right.label.text\nend\nfunc store(value: Holder, text: String):\n    value.label.text = text\nend\nfunc main():\n    value := make()\n    return 42\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    make := mod.ast.nodes[root.declarations[2]].kind.FUNCTION_DECL
+    read := mod.ast.nodes[root.declarations[3]].kind.FUNCTION_DECL
+    store := mod.ast.nodes[root.declarations[4]].kind.FUNCTION_DECL
+    test::suite_assert(ts, not make.needs_local_region and not make.is_region_safe, site())
+    test::suite_assert(ts, read.is_region_safe and not read.needs_local_region, site())
+    test::suite_assert(ts, not store.is_region_safe and not store.needs_local_region, site())
+    for node in mod.ast.nodes:
+        if node.kind is STRUCT_LITERAL or node.kind is STRING_LITERAL or node.kind is DEFAULT_VALUE:
+            if types::is_allocated(mod.type_store, node.inferred_type?):
+                test::suite_assert(ts, node.region_source.kind == region_source::Kind.CALLER, site())
+                test::suite_assert(ts, node.allocation_target is Some, site())
+            end
+        end
+    end
+end
+
+
+func test_errors(ts) -> void:
+    prefix := "struct Label:\n    text: String\n    count: int\nend\n"
+    test_strings::check_error(ts, concat(prefix, "func bad():\n    value := Label{missing = 1}\nend\n"), "unknown struct field")
+    test_strings::check_error(ts, concat(prefix, "func bad():\n    count := 1\n    value := Label{count, count = 2}\nend\n"), "duplicate struct field")
+    test_strings::check_error(ts, concat(prefix, "func bad():\n    value := Label{count = true}\nend\n"), "type inference conflict")
+    test_strings::check_error(ts, concat(prefix, "func bad(value: Label):\n    value.count = false\nend\n"), "type inference conflict")
+    test_strings::check_error(ts, concat(prefix, "func bad(value: Label):\n    result := value.missing\nend\n"), "unknown struct field")
+    test_strings::check_error(ts, concat(prefix, "func bad(value: int):\n    result := value.count\nend\n"), "invalid field access")
+    test_strings::check_error(ts, concat(prefix, "func bad(r: Region) -> Label:\n    value := Label{}\n    return value\nend\n"), "cannot return local allocation")
+    test_strings::check_error(ts, concat(prefix, "func bad(value: Label):\n    text := \"local\"\n    value.text = text\nend\n"), "region mismatch")
+    test_strings::check_error(ts, concat(prefix, "func bad(value: Label):\n    local := Label{text = value.text}\nend\n"), "region mismatch")
+    test_strings::check_error(ts, concat(prefix, "func bad():\n    count := (Label{}).count\nend\n"), "composite value must be bound")
+    test_strings::check_error(ts, "struct Invalid:\n    value: void\nend\nfunc bad():\n    value := Invalid{}\nend\n", "void value")
+    test_strings::check_error(ts, "struct Invalid:\n    value: Region\nend\nfunc bad():\n    value := Invalid{}\nend\n", "unsupported field default")
+end
+
+
+func test_parser_recovery(ts) -> void:
+    text := "struct Label:\n    text: String\nend\nfunc main(r: Region):\n    bad := Label{text = \"nested\"[r]}\n    good := Label{}[r]\n    return 42\nend\n"
+    parsed := support::parse_source(text)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 1, site())
+    root := parsed.ast.get_root_module()
+    test::suite_assert(ts, len(root.declarations) == 2, site())
+    if len(root.declarations) == 2:
+        body := parsed.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL.body
+        test::suite_assert(ts, len(body.statements) == 2, site())
+    end
+end
+
+
+func test_checked_metadata(ts) -> void:
+    comp := support::infer_source("struct Label:\n    text: String\nend\nfunc read(value: Label) -> String:\n    return value.text\nend\n", -1)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    for node in mod.ast.nodes:
+        if node.kind is FIELD:
+            node.inferred_type = Some{types::atom(mod.type_store, types::Atom.INT)}[.node]
+        end
+    end
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count > 0, site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_structs")
+    test_construction_and_fields(ts)
+    test_retargeting_and_safety(ts)
+    test_errors(ts)
+    test_parser_recovery(ts)
+    test_checked_metadata(ts)
+end

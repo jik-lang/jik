@@ -1,0 +1,21 @@
+struct Point:
+    x: int
+    name: String
+end
+
+struct Scene:
+    title: String
+    points: Vec[Point]
+end
+
+struct Empty:
+end
+
+func main():
+    println(Point{x = 3, name = "three"})
+    value := Scene{title = "scene", points = [Point{x = 4, name = "four"}]}
+    println(value)
+    println(Empty{})
+    println([value])
+    return 42
+end

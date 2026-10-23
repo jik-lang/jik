@@ -1,0 +1,30 @@
+func noop(r: Region):
+end
+
+
+func decimal():
+    noop(_)
+    return 2.5
+end
+
+
+func boolean():
+    noop(_)
+    return true
+end
+
+
+func fallthrough() -> int:
+    noop(_)
+    if false:
+        return 0
+    end
+end
+
+
+func main():
+    if decimal() != 2.5 or not boolean() or fallthrough() != 0:
+        return 1
+    end
+    return 42
+end

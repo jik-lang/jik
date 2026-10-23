@@ -1,0 +1,17 @@
+enum Key:
+    A
+end
+
+table Letters[Key] -> char:
+    A: 'k'
+end
+
+initial := 'j'
+
+struct Box:
+    value: char
+end
+
+variant Item:
+    BYTE: char
+end

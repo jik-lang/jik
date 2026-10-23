@@ -1,0 +1,5 @@
+func main():
+    values := [1]
+    result := values[:true]
+    return 0
+end

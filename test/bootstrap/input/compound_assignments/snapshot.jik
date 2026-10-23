@@ -1,0 +1,10 @@
+func replace(values: Vec[int]) -> int:
+    values[0] = 100
+    return 2
+end
+
+func main():
+    values := [10]
+    values[0] += replace(values)
+    println(values[0])
+end

@@ -1,0 +1,4 @@
+func main():
+    values: Vec[void]
+    return 0
+end

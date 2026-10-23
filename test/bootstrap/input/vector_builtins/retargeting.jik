@@ -1,0 +1,18 @@
+func transfer(source: Vec[String], destination: Vec[String]):
+    push(destination, pop(source))
+end
+
+func temporary(value: String):
+    push(["first"], value)
+end
+
+func main():
+    source := ["borrowed"]
+    destination: Vec[String]
+    transfer(source, destination)
+    if len(source) != 0 or pop(destination) != "borrowed":
+        return 1
+    end
+    temporary("caller")
+    return 42
+end

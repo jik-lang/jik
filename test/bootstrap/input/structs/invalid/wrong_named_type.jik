@@ -1,0 +1,14 @@
+struct Label:
+    text: String
+    count: int
+end
+struct Other:
+    text: String
+    count: int
+end
+func bad():
+    value: Label = Other{}
+end
+func main():
+    return 42
+end

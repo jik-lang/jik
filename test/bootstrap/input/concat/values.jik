@@ -1,0 +1,68 @@
+use "helper"
+
+joined := concat("global", " value")
+struct Counter:
+    value: int
+end
+
+func mark(counter: Counter, text: String) -> String:
+    counter.value += 1
+    return text
+end
+
+func join(foreign left: String, foreign right: String, r: Region) -> String:
+    return concat(left, right, r)
+end
+
+func append(values: Vec[String], text: String):
+    push(values, concat(text, "!", .values))
+end
+
+func append_local(values: Vec[String]):
+    local := "second"
+    append(values, local)
+end
+
+func inspect(text: String):
+    local := "local"
+    assert(concat(text, local) == "callerlocal")
+end
+
+func inferred(value, r: Region) -> String:
+    return concat(value, "?", r)
+end
+
+func inferred_last(value) -> int:
+    return len(concat("prefix", value))
+end
+
+func inferred_destination(value: String, r) -> String:
+    return concat(value, "!", r)
+end
+
+func main():
+    assert(joined == "global value")
+    assert(concat("") == "")
+    assert(concat("one") == "one")
+    assert(concat("", "a", "", "b", "") == "ab")
+    assert(concat("hello", ", ", "world", "!", _) == "hello, world!")
+    assert(concat("č", "λ", "🙂") == "čλ🙂")
+    assert(concat("a\n", "\t\"\\") == "a\n\t\"\\")
+    assert(concat(concat("a", "b"), concat("c", "d")) == "abcd")
+    counter := Counter{}
+    assert(concat(mark(counter, "left"), mark(counter, "right")) == "leftright")
+    assert(counter.value == 2)
+    assert(concat("yes" if true else "no", "!") == "yes!")
+    parts := ["middle"]
+    assert(concat("[", parts[0], "]") == "[middle]")
+    assert(join("left", "right") == "leftright")
+    assert(helper::join("imported") == "imported!")
+    assert(inferred("infer") == "infer?")
+    assert(inferred_last("suffix") == 12)
+    assert(inferred_destination("destination", _) == "destination!")
+    inspect("caller")
+    values := ["first"]
+    append_local(values)
+    assert(values[1] == "second!")
+    println("concat-ok")
+end

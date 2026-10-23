@@ -1,0 +1,27 @@
+GLOBAL := [1]
+
+func early() -> int:
+    values := [20]
+    return values[0]
+end
+
+throws func faulty():
+    values := [0]
+    if values[0] == 0:
+        fail("expected")
+    end
+end
+
+func normal():
+    values := [21]
+    assert(values[0] == 21)
+end
+
+func main(args):
+    values := [early()]
+    try faulty():
+    except:
+        normal()
+    end
+    println(values[0] + 21 + GLOBAL[0])
+end

@@ -1,0 +1,141 @@
+//! Temporary inference slots, unification, and first-error reporting.
+
+use "jik/string"
+
+use "../../language/types"
+use "../../parser/ast"
+use "../../diag"
+use "../../source"
+
+
+// Union-find entry for a temporary type-inference variable.
+struct Slot:
+    parent: int    // Index in Solver.slots; a root points to itself.
+    rank: int    // Union-by-rank heuristic, not the current tree depth.
+    bound: Option[int]    // Type ID in the shared compilation Store; None when unbound.
+end
+
+
+// Temporary inference state shared across modules during one analysis run.
+// Collection creates union-find slots and records constraints across modules.
+// Propagation revisits binary/conditional expressions until no binding changes.
+// Check every module before saving final type IDs on AST nodes.
+// A function node's slot holds its return type; its final inferred_type is
+// the complete signature. Slots are temporary and cleared after every run.
+struct Solver:
+    slots: Vec[Slot]    // Indexed by Node.inference_slot; roots hold the unified type binding.
+    changed: bool    // A binding changed during the current propagation iteration.
+    failed: bool    // An error was reported; stop solving and do not save inferred types.
+end
+
+
+func ensure_inference_slot(solver: Solver, foreign node: ast::Node) -> int:
+    if node.inference_slot >= 0:
+        return node.inference_slot
+    end
+    slot_id := len(solver.slots)
+    solver.slots.push(Slot{parent = slot_id})
+    node.inference_slot = slot_id
+    return slot_id
+end
+
+
+func find_representative(solver: Solver, slot_id: int) -> int:
+    representative := slot_id
+    while solver.slots[representative].parent != representative:
+        representative = solver.slots[representative].parent
+    end
+    current := slot_id
+    while solver.slots[current].parent != current:
+        next := solver.slots[current].parent
+        solver.slots[current].parent = representative
+        current = next
+    end
+    return representative
+end
+
+
+func bound_type(solver: Solver, slot_id: int) -> Option[int]:
+    return solver.slots[find_representative(solver, slot_id)].bound
+end
+
+
+func report(foreign solver: Solver, diagnostics: diag::Diagnostics, foreign node: ast::Node, foreign summary: String, foreign detail: String) -> void:
+    report_span(solver, diagnostics, node.span, summary, detail)
+end
+
+
+/// Record only the first inference error, copying its span into diagnostics.
+/// The temporary solver retains no source or diagnostic references.
+func report_span(foreign solver: Solver, diagnostics: diag::Diagnostics, foreign source_span: source::Span, foreign summary: String, foreign detail: String) -> void:
+    if solver.failed:
+        return
+    end
+    // The diagnostics own their span; the solver retains no AST/diagnostic data.
+    span := source::Span{source_id = source_span.source_id, start = source_span.start, stop = source_span.stop}[.diagnostics]
+    location := Some{span}[.diagnostics]
+    diag::error(diagnostics, summary, detail, location)
+    solver.failed = true
+end
+
+
+func conflict(solver: Solver, foreign store: types::Store, left: int, right: int, foreign diagnostics: diag::Diagnostics, foreign node: ast::Node) -> void:
+    first := must types::format(store, left)
+    second := must types::format(store, right)
+    report(solver, diagnostics, node, "type inference conflict", concat("conflicting types: ", first, " and ", second))
+end
+
+
+/// Bind a slot root to a type ID or report the first conflict.
+/// A new binding marks the solver changed for another propagation sweep.
+func bind_type(solver: Solver, slot_id: int, type_id: int, foreign store: types::Store, foreign diagnostics: diag::Diagnostics, foreign node: ast::Node) -> void:
+    if solver.failed:
+        return
+    end
+    slot := solver.slots[find_representative(solver, slot_id)]
+    if slot.bound is Some:
+        if slot.bound? != type_id:
+            conflict(solver, store, slot.bound?, type_id, diagnostics, node)
+        end
+        return
+    end
+    slot.bound = Some{type_id}
+    solver.changed = true
+end
+
+
+/// Merge slot roots using rank, checking that their known types agree.
+/// Report a conflict before merging incompatible types; successful merges mark change.
+func unify_slots(solver: Solver, left: int, right: int, foreign store: types::Store, foreign diagnostics: diag::Diagnostics, foreign node: ast::Node) -> void:
+    if solver.failed:
+        return
+    end
+    left_root := find_representative(solver, left)
+    right_root := find_representative(solver, right)
+    if left_root == right_root:
+        return
+    end
+    first := solver.slots[left_root]
+    second := solver.slots[right_root]
+    if first.bound is Some and second.bound is Some and first.bound? != second.bound?:
+        conflict(solver, store, first.bound?, second.bound?, diagnostics, node)
+        return
+    end
+    if first.rank < second.rank:
+        first.parent = right_root
+        if second.bound is None:
+            second.bound = first.bound
+        end
+    else:
+        second.parent = left_root
+        if first.bound is None:
+            first.bound = second.bound
+        end
+        if first.rank == second.rank:
+            first.rank += 1
+        end
+    end
+    solver.changed = true
+end
+
+

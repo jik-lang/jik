@@ -1,0 +1,39 @@
+func suffix(value: String) -> String:
+    return value[1:]
+end
+
+func byte(value: String) -> char:
+    return value[0]
+end
+
+func same_byte(left: String, right: String) -> bool:
+    return left[0] == right[0]
+end
+
+func produce(r: Region) -> String:
+    scratch := "local scratch"
+    value := "caller"[r]
+    return suffix(value)
+end
+
+func main():
+    value := produce()
+    independent := "another region"
+    if value != "aller":
+        return 1
+    end
+    if not same_byte(value, independent):
+        return 4
+    end
+    nested := ["first", "second"]
+    if nested[1][1:4] != "eco" or nested[0][0] != byte(nested[0]):
+        return 2
+    end
+    parts: Vec[String][.value]
+    push(parts, value[:2])
+    if parts[0] != "al":
+        return 3
+    end
+    println(value, ":", nested[1][1:4], ":", parts[0])
+    return 42
+end

@@ -1,0 +1,3 @@
+func number() -> int:
+    return 28
+end

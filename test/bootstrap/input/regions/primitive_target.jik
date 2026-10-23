@@ -1,0 +1,9 @@
+func answer(r: Region) -> int:
+    return 42
+end
+
+
+func main():
+    value := 1
+    return answer(.value)
+end

@@ -1,0 +1,11 @@
+enum Key:
+    A
+end
+
+table Labels[Key] -> String:
+    A: "allocated even without lookups"
+end
+
+func main():
+    return 7
+end

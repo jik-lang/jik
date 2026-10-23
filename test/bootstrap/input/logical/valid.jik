@@ -1,0 +1,68 @@
+func divide(value: int):
+    return 1 / value
+end
+
+func pass(value: bool):
+    return value
+end
+
+func main():
+    if false and divide(0) == 0:
+        return 1
+    end
+    if not (true or divide(0) == 0):
+        return 2
+    end
+    if not (true and pass(true)):
+        return 3
+    end
+    if false or pass(false):
+        return 4
+    end
+    if not (false or pass(true)):
+        return 5
+    end
+    if true and pass(false):
+        return 6
+    end
+    if not false and true != true:
+        return 7
+    end
+    if not (true or false and false):
+        return 8
+    end
+    if not (1 + 2 == 3 and 2 * 3 == 6):
+        return 9
+    end
+    first := 11 if true else divide(0)
+    second := divide(0) if false else 22
+    if first != 11 or second != 22:
+        return 10
+    end
+    number := 1 if true else 2.5
+    if number / 2 != 0.5:
+        return 11
+    end
+    fraction := 1 if false else 2.5
+    if fraction != 2.5:
+        return 12
+    end
+    nested := 1 if false else 2 if true else 3
+    if nested != 2:
+        return 13
+    end
+    condition := 4 if true if false else false else 5
+    if condition != 5:
+        return 14
+    end
+    flag := true or false if false else false
+    if flag:
+        return 15
+    end
+    zero: char
+    selected: char = zero if true else zero
+    if selected != zero:
+        return 16
+    end
+    return 42
+end

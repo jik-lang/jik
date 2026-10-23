@@ -1,0 +1,35 @@
+use "shared" as base
+
+struct Box:
+    count: int
+end
+
+func main():
+    values := base::values()
+    optional := Some{Box{count = 3}}
+    optional?.count += 2
+    values[0] += 2
+    values[0] -= 1
+    values[0] *= 3
+    values[0] /= 3
+    values[0] %= 7
+    tail := values[1:]
+    if values[0] != 4 or tail[0] == 21 or optional?.count != 5:
+        return 1
+    end
+    if not (values[0] < tail[0] and tail[0] > 0 and values[0] <= 4 and tail[0] >= 20):
+        return 2
+    end
+    dictionary := {"a": 1, "b": 2}
+    value := dictionary["a"]?
+    // Comment openers here are text: "/* ! = :: //" and ignored.
+    text := "/**/ != :: @ !"
+    if len(text) != 14 or value != 1:
+        return 3
+    end
+    // Adjacent minus tokens mean subtraction of a negative value, not decrement.
+    if 1--2 != 3:
+        return 4
+    end
+    println(values[0], ":", tail[0], ":", optional?.count)
+end

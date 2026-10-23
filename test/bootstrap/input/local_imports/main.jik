@@ -1,0 +1,7 @@
+use "branches/left"
+use "branches/right"
+
+
+func main():
+    return left::value() + right::value()
+end

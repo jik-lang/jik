@@ -1,0 +1,5 @@
+use "shared"
+
+func read(value: shared::Key) -> int:
+    return shared::Values[value]
+end

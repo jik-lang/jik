@@ -1,0 +1,4 @@
+struct Box:
+    flag: bool
+    items: Dict[Option[int]]
+end

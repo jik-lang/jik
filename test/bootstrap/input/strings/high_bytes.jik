@@ -1,0 +1,8 @@
+func main():
+    text := "\xFF0\x0af"
+    expected := "\xff\x30\nf"
+    if text != expected:
+        return 1
+    end
+    return 42
+end

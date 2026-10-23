@@ -1,0 +1,3 @@
+func capture() -> Site:
+    return site()
+end

@@ -1,0 +1,17 @@
+func read(value: Key) -> int:
+    return Values[value]
+end
+
+table Values[Key] -> int:
+    B: 2
+    A: 1
+end
+
+enum Key:
+    A
+    B
+end
+
+func main():
+    println(read(Key.A), ":", read(Key.B))
+end

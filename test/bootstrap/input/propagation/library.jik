@@ -1,0 +1,28 @@
+struct Box:
+    value: int
+    calls: int
+    targets: int
+end
+
+
+throws func step(box: Box, code: int) -> int:
+    box.calls += 1
+    if code != 42:
+        fail(concat("propagated-", "message"), code)
+    end
+    return 42
+end
+
+
+func destination(box: Box) -> Box:
+    box.targets += 1
+    return box
+end
+
+
+throws func message(code: int, r: Region) -> String:
+    if code != 42:
+        fail(concat("returned-", "message"), code)
+    end
+    return concat("caller-", "owned", r)
+end

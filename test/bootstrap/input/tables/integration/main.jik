@@ -1,0 +1,27 @@
+use "left"
+use "right"
+use "shared" as base
+
+global := Aliases[base::Key.A]
+snapshot := Snapshots[base::Key.A]
+
+table Aliases[base::Key] -> base::State:
+    A: left::Aliases[base::Key.A]
+    B: right::Aliases[base::Key.B]
+end
+
+table Snapshots[base::Key] -> int:
+    A: left::Snapshots[base::Key.A] + right::Snapshots[base::Key.A]
+    B: left::Snapshots[base::Key.B] + right::Snapshots[base::Key.B]
+end
+
+func main() -> int:
+    println(snapshot, ":", Snapshots[base::Key.B], ":", base::initialized)
+    println(global.count, ":", global.values)
+    left::global.count = left::global.count + 4
+    push(right::global.values, 7)
+    base::alias.values[0] = 9
+    println(Aliases[base::Key.A].count, ":", base::States[base::Key.A].count)
+    println(global.values, ":", left::Aliases[base::Key.A].values)
+    return 7
+end

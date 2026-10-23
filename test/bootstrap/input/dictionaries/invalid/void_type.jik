@@ -1,0 +1,6 @@
+struct Invalid:
+    values: Dict[void]
+end
+func main():
+    return 42
+end

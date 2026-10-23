@@ -1,0 +1,6 @@
+use "pkg/plain"
+
+
+func main():
+    return plain::value()
+end

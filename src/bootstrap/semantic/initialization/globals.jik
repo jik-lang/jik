@@ -1,0 +1,49 @@
+//! Prepare global initializers and the region arguments inserted by the compiler.
+
+use "../../parser/ast"
+use "../../modules/module"
+use "../../diag"
+use "expressions"
+
+
+/// Only compiler-inserted final Region arguments may name global storage.
+/// Explicit local-region operands remain invalid outside a function.
+func prepare_initializer(mod: module::Module, declaration: ast::GlobalDecl, diagnostics: diag::Diagnostics) -> void:
+    declaration.initializer_nodes.clear()
+    expressions::collect_initializer_nodes(mod, declaration.initializer, declaration.initializer_nodes)
+    for id in declaration.initializer_nodes:
+        node := mod.ast.nodes[id]
+        if node.kind is CALL:
+            node.kind.CALL.global_initializer = true
+        end
+        if node.kind is CALL and node.kind.CALL.auto_region:
+            arguments := node.kind.CALL.arguments
+            mod.ast.nodes[arguments[len(arguments) - 1]].kind = ast::NodeKind.GLOBAL_REGION{}[.mod]
+        end
+    end
+    for id in declaration.initializer_nodes:
+        node := mod.ast.nodes[id]
+        if node.kind is LOCAL_REGION:
+            diag::error(diagnostics, "local region referenced outside function", "omit the final Region argument to allocate in global storage", Some{node.span})
+        end
+        implicit := false
+        match node.kind:
+        case STRING_LITERAL{literal}:
+            implicit = literal.implicit
+        case VECTOR_LITERAL{literal}:
+            implicit = literal.implicit
+        case DICT_LITERAL{literal}:
+            implicit = literal.implicit
+        case STRUCT_LITERAL{literal}:
+            implicit = literal.implicit
+        case VARIANT_LITERAL{literal}:
+            implicit = literal.implicit
+        case OPTION_LITERAL{literal}:
+            implicit = literal.implicit
+        other:
+        end
+        if implicit:
+            diag::error(diagnostics, "invalid implicit allocation", "@ requires a function result region", Some{node.span})
+        end
+    end
+end

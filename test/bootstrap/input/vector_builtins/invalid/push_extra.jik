@@ -1,0 +1,5 @@
+func main():
+    values: Vec[int]
+    push(values, 1, 2)
+    return 0
+end

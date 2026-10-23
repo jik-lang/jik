@@ -1,0 +1,5 @@
+use "helper"
+
+func main():
+    helper::check(false)
+end

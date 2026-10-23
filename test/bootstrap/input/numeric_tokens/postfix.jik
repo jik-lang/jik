@@ -1,0 +1,21 @@
+struct Box:
+    amount: double
+    values: Vec[int]
+end
+
+variant Choice:
+    NUMBER: double
+end
+
+func main():
+    box := Box{amount = 1e+2, values = [1_0, 2_0, 3_0]}
+    box.values[1] += 5
+    part := box.values[1:3]
+    choice := Choice.NUMBER{2.5e1}
+    lookup := {"key": Some{box}}
+    result := lookup["key"]??.amount + choice.NUMBER
+    if box.values[1] != 25 or part[1] != 30 or result != 125.0:
+        return 1
+    end
+    println(result, ":", part)
+end

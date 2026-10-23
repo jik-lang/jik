@@ -1,0 +1,12 @@
+throws func leaf():
+    values := ["void"]
+    fail(concat("failure-", values[0]), -7)
+end
+
+
+func main():
+    caller := [7]
+    println("before")
+    leaf()!
+    println("after ", caller[0])
+end

@@ -1,0 +1,56 @@
+use "helper"
+
+origin := site()
+global_file := site_file(origin)
+global_code := site_code(origin)
+
+struct Counter:
+    value: int
+end
+
+func once(counter: Counter) -> Site:
+    counter.value += 1
+    return site()
+end
+
+func capture() -> Site:
+    return site()
+end
+
+func file(value: Site, r: Region) -> String:
+    return site_file(value, r)
+end
+
+func code(value: Site, r: Region) -> String:
+    return site_code(value, r)
+end
+
+func infer(value):
+    return site_line(value)
+end
+
+func main():
+    assert(site_line(origin) == 3)
+    assert(global_code == "origin := site()")
+    assert(global_file == site_file(origin, _))
+    value := capture()
+    alias := value
+    assert(site_line(value) == site_line(alias))
+    assert(site_code(alias) == "    return site()")
+    assert(file(value) == global_file)
+    assert(code(value) == site_code(value))
+    imported := helper::capture()
+    assert(site_line(imported) == 2)
+    assert(site_code(imported) == "    return site()")
+    assert(site_file(imported) != global_file)
+    counter := Counter{}
+    assert(site_line(once(counter)) > 0)
+    local_file := site_file(once(counter))
+    local_code := site_code(once(counter))
+    assert(counter.value == 3)
+    assert(local_file == global_file and local_code == "    return site()")
+    value = imported
+    assert(site_line(value) == 2)
+    assert(infer(imported) == 2)
+    println("site-ok")
+end

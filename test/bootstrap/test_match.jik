@@ -1,0 +1,116 @@
+use "jik/string"
+use "jik/testing" as test
+
+use "support"
+use "test_strings"
+use "../../src/bootstrap/language/region_source"
+use "../../src/bootstrap/language/types"
+use "../../src/bootstrap/language/symbol"
+
+
+func test_arm_metadata(ts) -> void:
+    text := "variant V:\n    INT: int\n    TEXT: String\n    EOF\nend\nfunc inspect(value: V) -> String:\n    match value:\n        case INT{payload}:\n            count := payload\n            return \"int\"\n        case TEXT{payload}:\n            return payload\n        other:\n            return \"eof\"\n    end\nend\nfunc main():\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    function_id := root.declarations[1]
+    function := mod.ast.nodes[function_id].kind.FUNCTION_DECL
+    statement := mod.ast.nodes[function.body.statements[0]].kind.MATCH
+    test::suite_assert(ts, len(statement.arms) == 2 and statement.other_body is Some, site())
+    test::suite_assert(ts, statement.arms[0].member == 0 and statement.arms[1].member == 1, site())
+    first_id := statement.arms[0].binding?
+    second_id := statement.arms[1].binding?
+    test::suite_assert(ts, first_id != second_id, site())
+    test::suite_assert(ts, mod.ast.nodes[first_id].inferred_type? == types::atom(mod.type_store, types::Atom.INT), site())
+    test::suite_assert(ts, mod.ast.nodes[second_id].inferred_type? == types::atom(mod.type_store, types::Atom.STRING), site())
+    test::suite_assert(ts, mod.ast.nodes[second_id].region_source.kind == region_source::Kind.CALLER, site())
+    test::suite_assert(ts, mod.ast.nodes[second_id].region_source.parameter_id == function.parameters[0], site())
+    test::suite_assert(ts, statement.arms[0].body.scope.symbols["payload"]?.origin == first_id, site())
+    test::suite_assert(ts, statement.arms[1].body.scope.symbols["payload"]?.origin == second_id, site())
+    test::suite_assert(ts, function.body.scope.symbols["payload"] is None, site())
+    test::suite_assert(ts, statement.other_body?.scope.symbols["payload"] is None, site())
+end
+
+
+func test_enum_and_inferred_returns(ts) -> void:
+    comp := support::infer_source("enum E:\n    A\n    B\nend\nfunc choose(value: E):\n    match value:\n        case A:\n            return 1\n        case B:\n            return 2\n    end\nend\n", -1)
+    support::check_signature(ts, comp, "choose", "func(module[0]::E) -> int")
+    checked := test_strings::analyze("enum E:\n    A\n    B\nend\nfunc main():\n    match E.A:\n        case B:\n        case A:\n        other:\n    end\nend\n")
+    test::suite_assert(ts, checked.diagnostics.error_count == 0, site())
+    safe := test_strings::analyze("variant V:\n    TEXT: String\n    EOF\nend\nfunc size(value: V) -> int:\n    match value:\n        case TEXT{payload}:\n            return len(payload)\n        other:\n            return 0\n    end\nend\nfunc main():\nend\n")
+    test::suite_assert(ts, safe.diagnostics.error_count == 0, site())
+    if safe.diagnostics.error_count == 0:
+        root := safe.modules[0].ast.get_root_module()
+        test::suite_assert(ts, safe.modules[0].ast.nodes[root.declarations[1]].kind.FUNCTION_DECL.is_region_safe, site())
+    end
+end
+
+
+func test_spans_and_recovery(ts) -> void:
+    text := "func main():\n    match value:\n        case TEXT{payload}:\n            println(payload)\n        other:\n    end\nend\n"
+    parsed := support::parse_source(text, _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+    if parsed.diagnostics.error_count > 0:
+        return
+    end
+    root := parsed.ast.get_root_module()
+    node := parsed.ast.nodes[parsed.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL.body.statements[0]]
+    test::suite_assert(ts, must string::slice(text, node.span.start, node.span.stop) == "match value:\n        case TEXT{payload}:\n            println(payload)\n        other:\n    end", site())
+    arm := node.kind.MATCH.arms[0]
+    test::suite_assert(ts, must string::slice(text, arm.span.start, arm.span.stop) == "case TEXT{payload}:", site())
+    malformed := support::parse_source("func main():\n    match value:\n        case INT:\n            broken :=\n        case TEXT:\n            valid := 2\n        other:\n    end\n    after := 3\nend\n", _)
+    test::suite_assert(ts, malformed.diagnostics.error_count == 1, site())
+    bad_root := malformed.ast.get_root_module()
+    body := malformed.ast.nodes[bad_root.declarations[0]].kind.FUNCTION_DECL.body
+    test::suite_assert(ts, len(body.statements) == 2, site())
+    match_node := malformed.ast.nodes[body.statements[0]].kind.MATCH
+    test::suite_assert(ts, len(match_node.arms) == 2, site())
+    test::suite_assert(ts, len(match_node.arms[0].body.statements) == 0 and len(match_node.arms[1].body.statements) == 1, site())
+end
+
+
+func test_diagnostics(ts) -> void:
+    prefix := "enum E:\n    A\n    B\nend\n"
+    test_strings::check_error(ts, concat(prefix, "func main():\n    match E.A:\n        case A:\n    end\nend\n"), "non-exhaustive match")
+    test_strings::check_error(ts, concat(prefix, "func main():\n    match E.A:\n        case A:\n        case A:\n        other:\n    end\nend\n"), "duplicate match case")
+    test_strings::check_error(ts, concat(prefix, "func main():\n    match E.A:\n        case MISSING:\n        other:\n    end\nend\n"), "unknown match case")
+    test_strings::check_error(ts, concat(prefix, "func main():\n    match E.A:\n        case A{value}:\n        other:\n    end\nend\n"), "enum case cannot bind a payload")
+    test_strings::check_error(ts, concat(prefix, "func main():\n    match E.A:\n        case A:\n            break\n        other:\n    end\nend\n"), "break outside loop")
+    test_strings::check_error(ts, "variant V:\n    TEXT: String\nend\nfunc bad(r: Region) -> String:\n    value := V.TEXT{\"local\"}\n    match value:\n        case TEXT{payload}:\n            return payload\n    end\nend\n", "cannot return local allocation")
+end
+
+
+func test_module_name_reuse(ts) -> void:
+    text := "func atom() -> int:\n    return 99\nend\nvariant V:\n    INT: int\nend\nfunc read(value: V) -> int:\n    match value:\n        case INT{atom}:\n            return atom\n    end\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    function := mod.ast.nodes[mod.global_scope.symbols["read"]?.origin].kind.FUNCTION_DECL
+    arm := mod.ast.nodes[function.body.statements[0]].kind.MATCH.arms[0]
+    returned := mod.ast.nodes[arm.body.statements[0]].kind.RETURN.value?
+    test::suite_assert(ts, mod.ast.nodes[returned].kind.IDENTIFIER_EXPR.local_origin? == arm.binding?, site())
+    test::suite_assert(ts, arm.body.scope.symbols["atom"]?.kind == symbol::SymbolKind.MATCH_BINDING, site())
+    test::suite_assert(ts, mod.global_scope.symbols["atom"]?.kind == symbol::SymbolKind.FUNCTION, site())
+
+    prefix := "variant V:\n    INT: int\nend\n"
+    test_strings::check_error(ts, concat(prefix, "func main():\n    match V.INT{1}:\n        case INT{len}:\n    end\nend\n"), "match binding already declared")
+    test_strings::check_error(ts, concat(prefix, "func main():\n    for payload = 0, 1:\n        match V.INT{1}:\n            case INT{payload}:\n        end\n    end\nend\n"), "match binding already declared")
+    test_strings::check_error(ts, concat(prefix, "func main():\n    match V.INT{1}:\n        case INT{payload}:\n            match V.INT{2}:\n                case INT{payload}:\n            end\n    end\nend\n"), "match binding already declared")
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_match")
+    test_arm_metadata(ts)
+    test_enum_and_inferred_returns(ts)
+    test_spans_and_recovery(ts)
+    test_diagnostics(ts)
+    test_module_name_reuse(ts)
+end

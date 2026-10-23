@@ -1,8 +1,19 @@
+//! Render command help and locate installed language and library documentation.
+
 use "jik/argparse" as ap
 use "jik/strbuf"
+use "jik/io"
+use "jik/path"
+use "jik/string"
+use "jik/sys"
 
 use "command"
 use "tran"
+use "check" as check_command
+use "run" as run_command
+use "build" as build_command
+use "version"
+use "env"
 
 
 func format_help(r: Region) -> String:
@@ -42,7 +53,8 @@ end
 
 func make_parser(r: Region) -> ap::Parser:
     parser := ap::new("jik help", r)
-    ap::add_positional(parser, "topic", "Show help for a command or documentation topic.")
+    ap::set_description(parser, "Show help for a command or documentation topic.")
+    ap::add_positional(parser, "topic", "Name of command or documentation topic")
     return parser
 end
 
@@ -53,9 +65,68 @@ throws func run(args: Vec[String]):
     topic := res.positionals["topic"]?
     if topic == "help":
         println(ap::format_help(p))
+        println("Notes:\n    Use `jik help topics` to list all available help topics.")
+    elif topic == "check":
+        println(ap::format_help(check_command::make_parser()))
     elif topic == "tran":
         println(ap::format_help(tran::make_parser()))
+        println("Notes:\n    Generated C includes core.h; use core_include from `jik env` when compiling it manually.")
+    elif topic == "build":
+        println(ap::format_help(build_command::make_parser()))
+    elif topic == "run":
+        println(ap::format_help(run_command::make_parser()))
+        println("Notes:\n    The executable is built in a temporary directory, run, and then removed.\n    Temporary build files and copied files are also removed.")
+    elif topic == "version":
+        println(ap::format_help(version::make_parser()))
+    elif topic == "env":
+        println(ap::format_help(env::make_parser()))
     else:
-        fail(concat("unknown help topic: ", topic))
+        executable := try sys::executable_path()
+        docs := path::join([path::dirname(executable), "docs"])
+        text := try documentation(docs, topic)
+        print(text)
     end
+end
+
+
+// Resolve installed documentation through the same alias index as the seed.
+throws func documentation(foreign docs: String, foreign topic: String, r: Region) -> String:
+    index := ""
+    try loaded := io::read_file(path::join([copy(docs), "help-index.txt"])):
+        index = copy(loaded)
+    except:
+        fail(concat("unknown help topic: ", topic, "\n\nTry:\n  jik help topics"))
+    end
+    topics := strbuf::new("Documentation topics:\n\n")
+    for line in string::split(index, "\n"):
+        clean := string::trim(line)
+        if len(clean) == 0 or clean[0] == '#':
+            continue
+        end
+        equals := string::find(clean, "=")
+        if equals < 0:
+            continue
+        end
+        raw_keys := try string::slice(clean, 0, equals)
+        keys := string::trim(raw_keys)
+        if topic == "topics":
+            strbuf::append(topics, concat("    ", keys, "\n"))
+            continue
+        end
+        for key in string::split(keys, ","):
+            if string::trim(key) == topic:
+                raw_relative := try string::slice(clean, equals + 1, len(clean))
+                relative := string::trim(raw_relative)
+                try content := io::read_file(path::join([copy(docs), relative]), r):
+                    return content
+                except:
+                    fail(concat("unknown help topic: ", topic, "\n\nTry:\n  jik help topics"))
+                end
+            end
+        end
+    end
+    if topic == "topics":
+        return strbuf::to_string(topics, r)
+    end
+    fail(concat("unknown help topic: ", topic, "\n\nTry:\n  jik help topics"))
 end

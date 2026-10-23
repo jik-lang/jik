@@ -1,0 +1,7 @@
+struct Box:
+    value: int
+end
+
+func main():
+    return Box()
+end

@@ -1,0 +1,76 @@
+use "jik/fs"
+use "jik/path"
+use "jik/sys"
+use "jik/testing" as test
+
+use "../../src/bootstrap/modules/module_loader"
+use "../../src/bootstrap/compiler"
+
+
+func check_diamond_imports(ts, foreign input_path: String) -> void:
+    output_path := path::join([fs::temp_dir(), "jik-bootstrap-local-imports.c"])
+    config := compiler::Config{input_path = copy(input_path), output_path}
+    comp := must compiler::new(config)
+    must comp.run()
+    test::suite_assert(ts, fs::is_file(output_path), site())
+    must fs::remove_file(output_path)
+
+    test::suite_assert(ts, comp.program.diagnostics.error_count == 0, site())
+    test::suite_assert(ts, len(comp.program.sources.sources) == 4, site())
+    test::suite_assert(ts, len(comp.program.modules) == 4, site())
+    for source_id, mod in comp.program.modules:
+        test::suite_assert(ts, mod.source_id == source_id, site())
+        for node in mod.ast.nodes:
+            if node.kind is CALL:
+                resolved := node.kind.CALL.target
+                test::suite_assert(ts, resolved is Some, site())
+                if resolved is Some:
+                    target := resolved?
+                    test::suite_assert(ts, comp.program.modules[target.source_id].source_id == target.source_id, site())
+                    test::suite_assert(ts, comp.program.modules[target.source_id].ast.nodes[target.origin].kind is FUNCTION_DECL, site())
+                end
+            end
+        end
+    end
+    test::suite_assert(ts, comp.program.dependency_order[0] == 3 and comp.program.dependency_order[3] == 0, site())
+    for file in comp.program.sources.sources:
+        occurrences := 0
+        for mod in comp.program.modules:
+            if mod.source_id == file.id:
+                occurrences += 1
+            end
+        end
+        test::suite_assert(ts, occurrences == 1, site())
+    end
+
+    shared_path := path::normalize(path::join([path::dirname(input_path), "shared.jik"]))
+    shared_id := comp.program.sources.source_id_by_path[shared_path]
+    test::suite_assert(ts, shared_id is Some, site())
+    if shared_id is None:
+        return
+    end
+
+    users := 0
+    for mod in comp.program.modules:
+        if mod.source_id == 0 or mod.source_id == shared_id?:
+            continue
+        end
+        file := comp.program.sources.sources[mod.source_id]
+        imports := module_loader::resolve_imports(comp.program.sources, mod.ast, comp.program.diagnostics, file)
+        test::suite_assert(ts, len(imports) == 1, site())
+        if len(imports) == 1:
+            test::suite_assert(ts, imports[0].target_id == shared_id?, site())
+        end
+        users += 1
+    end
+    test::suite_assert(ts, users == 2, site())
+    test::suite_assert(ts, len(comp.program.sources.sources) == 4, site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_compiler")
+    check_diamond_imports(ts, "test/bootstrap/input/local_imports/main.jik")
+    absolute_entry := path::join([sys::cwd(), "test/bootstrap/input/local_imports/main.jik"])
+    check_diamond_imports(ts, absolute_entry)
+end

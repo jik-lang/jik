@@ -1,0 +1,17 @@
+func identity(value: char) -> char:
+    return value
+end
+
+func main():
+    // Bound values and call results have the unsigned char representation.
+    high := '\xFF'
+    middle := '\x80'
+    if high != identity('\xFF') or middle != identity('\x80'):
+        return 1
+    end
+    values := ['\x00', '\x7F', '\x80', '\xFF']
+    if values[0] != '\0' or values[2] != middle or values[3] != high:
+        return 2
+    end
+    println("unsigned bytes")
+end

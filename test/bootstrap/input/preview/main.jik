@@ -1,0 +1,13 @@
+use "dependency"
+
+@includedir("include dir")
+@libdir("lib dir")
+@link("preview_main")
+@copy("payload.txt", "missing-copy-source.txt")
+
+@embed{C}
+#error Preview must never compile this source.
+C
+
+func main():
+end

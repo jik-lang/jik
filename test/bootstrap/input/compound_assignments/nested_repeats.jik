@@ -1,0 +1,15 @@
+func size(counts: Vec[int], index: int, length: int) -> int:
+    counts[index] = counts[index] + 1
+    return length
+end
+
+func value(counts: Vec[int]) -> int:
+    counts[2] = counts[2] + 1
+    return counts[2]
+end
+
+func main():
+    counts := [0, 0, 0]
+    values := [size(counts, 0, 2) of [size(counts, 1, 3) of value(counts)]]
+    println(counts, ":", values)
+end

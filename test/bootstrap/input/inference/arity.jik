@@ -1,0 +1,7 @@
+func accept(value: int):
+    return value
+end
+
+func main():
+    return accept(1, 2)
+end
