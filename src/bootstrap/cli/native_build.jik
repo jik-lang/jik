@@ -1,7 +1,6 @@
 //! Apply prepared native requirements, invoke the C compiler, and copy assets.
 
 use "jik/fs"
-use "jik/io"
 use "jik/path"
 use "jik/process"
 use "jik/string"
@@ -75,7 +74,7 @@ func arguments(foreign comp: compiler::Compiler, profile: native::Profile, forei
 end
 
 
-throws func copy_files(comp: compiler::Compiler, profile: native::Profile, foreign executable: String, verbose: bool) -> void:
+throws func copy_files(comp: compiler::Compiler, profile: native::Profile, foreign executable: String) -> void:
     host := native_profiles::host_platform()
     order := comp.program.initialization_order
     output_dir := path::dirname(executable)
@@ -90,9 +89,7 @@ throws func copy_files(comp: compiler::Compiler, profile: native::Profile, forei
                 if path::normalize(source) == path::normalize(destination):
                     continue
                 end
-                if verbose:
-                    io::write_stderr(concat("jik: copy ", source, " -> ", destination, "\n"))
-                end
+                compiler::verbose(comp, concat("copy ", source, " -> ", destination))
                 try fs::copy_file(source, destination):
                 except:
                     diag::error(comp.program.diagnostics, "could not copy native requirement", concat(source, " -> ", destination, ": ", error_msg()), Some{requirement.span})
@@ -108,7 +105,7 @@ end
 /// Translate before validating native requirements and constructing C arguments.
 /// Preview stops before host compilation and asset copying; propagate translation,
 /// profile, process, and copy failures.
-throws func compile(comp: compiler::Compiler, foreign cc: String, foreign executable: String, foreign flags: Vec[String], release: bool, preview: bool, verbose: bool) -> void:
+throws func compile(comp: compiler::Compiler, foreign cc: String, foreign executable: String, foreign flags: Vec[String], release: bool, preview: bool) -> void:
     try comp.run()
     profile := try native_profiles::validate(comp, cc, flags)
     tool := try sys::executable_path()
@@ -118,12 +115,10 @@ throws func compile(comp: compiler::Compiler, foreign cc: String, foreign execut
         println(command_line::format(cc, args, sys::platform() == "windows"))
         return
     end
-    if verbose:
-        io::write_stderr(concat("jik: compile ", command_line::format(cc, args, sys::platform() == "windows"), "\n"))
-    end
+    compiler::verbose(comp, concat("compile ", command_line::format(cc, args, sys::platform() == "windows")))
     status := try process::run(cc, args)
     if status != 0:
         fail(concat("C compilation failed (exit ", string::from_int(status), ")"))
     end
-    try copy_files(comp, profile, executable, verbose)
+    try copy_files(comp, profile, executable)
 end

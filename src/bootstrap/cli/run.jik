@@ -28,26 +28,24 @@ func make_parser(r: Region) -> ap::Parser:
 end
 
 
-throws func execute(comp: compiler::Compiler, foreign cc: String, foreign workspace: String, foreign flags: Vec[String], release: bool, verbose: bool) -> int:
+throws func execute(comp: compiler::Compiler, foreign cc: String, foreign workspace: String, foreign flags: Vec[String], release: bool) -> int:
     executable := path::join([copy(workspace), "program.exe"])
-    try native_build::compile(comp, cc, executable, flags, release, false, verbose)
-    if verbose:
-        io::write_stderr(concat("jik: run ", executable, "\n"))
-    end
+    try native_build::compile(comp, cc, executable, flags, release, false)
+    compiler::verbose(comp, concat("run ", executable))
     program_args: Vec[String]
     exit_status := try process::run(executable, program_args)
     return exit_status
 end
 
 
-throws func compile_and_execute(foreign input: String, foreign workspace: String, foreign cc: String, foreign flags: Vec[String], foreign options: ap::ParseResult, release: bool, verbose: bool) -> int:
+throws func compile_and_execute(foreign input: String, foreign workspace: String, foreign cc: String, foreign flags: Vec[String], foreign options: ap::ParseResult, release: bool) -> int:
     config := compiler::Config{
         input_path = copy(input),
         output_path = path::join([copy(workspace), "program.c"])
     }
     comp := try compiler::new(config)
     utils::apply_options(comp.config, options)
-    status := try execute(comp, cc, workspace, flags, release, verbose)
+    status := try execute(comp, cc, workspace, flags, release)
     return status
 end
 
@@ -63,8 +61,7 @@ throws func run(args: Vec[String]) -> int:
     workspace := try utils::make_workspace()
     status := 0
     try completed := compile_and_execute(input, workspace, cc, flags,
-        result, result.options["--release"] is Some,
-        result.options["--verbose"] is Some):
+        result, result.options["--release"] is Some):
         status = completed
     except:
         msg := error_msg()

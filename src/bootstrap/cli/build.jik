@@ -31,14 +31,14 @@ func make_parser(r: Region) -> ap::Parser:
 end
 
 
-throws func compile(foreign input: String, foreign output: String, foreign workspace: String, foreign cc: String, foreign flags: Vec[String], foreign options: ap::ParseResult, release: bool, preview: bool, verbose: bool) -> void:
+throws func compile(foreign input: String, foreign output: String, foreign workspace: String, foreign cc: String, foreign flags: Vec[String], foreign options: ap::ParseResult, release: bool, preview: bool) -> void:
     config := compiler::Config{
         input_path = copy(input),
         output_path = path::join([copy(workspace), "program.c"])
     }
     comp := try compiler::new(config)
     utils::apply_options(comp.config, options)
-    try native_build::compile(comp, cc, output, flags, release, preview, verbose)
+    try native_build::compile(comp, cc, output, flags, release, preview)
 end
 
 
@@ -57,8 +57,7 @@ throws func run(args: Vec[String]) -> void:
     cc := try utils::select_compiler(explicit)
     workspace := try utils::make_workspace()
     try compile(input, output, workspace, cc, flags, result,
-        result.options["--release"] is Some, result.options["--preview"] is Some,
-        result.options["--verbose"] is Some):
+        result.options["--release"] is Some, result.options["--preview"] is Some):
     except:
         msg := error_msg()
         code := error_code()
