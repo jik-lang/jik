@@ -9,7 +9,7 @@ use "jik/string"
 use "../../src/bootstrap/cli/run" as run_command
 use "../../src/bootstrap/cli/build" as build_command
 use "../../src/bootstrap/cli/tran" as tran_command
-use "../../src/bootstrap/cli/compiler_options"
+use "../../src/bootstrap/cli/utils" as cli_utils
 use "../../src/bootstrap/compiler"
 use "language/utils"
 
@@ -48,10 +48,10 @@ func test_configuration(ts: test::TestSuite):
     for parser in parsers:
         config := compiler::Config{}
         defaults := must ap::parse(parser, ["input.jik"])
-        compiler_options::configure(config, defaults)
+        cli_utils::apply_options(config, defaults)
         test::suite_assert(ts, not config.region_stats and not config.region_tree and not config.unsafe_no_bounds_checks and not config.verbose and not config.dump_ast, site())
         enabled := must ap::parse(parser, ["input.jik", "--region-stats", "--region-tree", "--unsafe-no-bounds-checks", "--verbose", "--dump-ast"])
-        compiler_options::configure(config, enabled)
+        cli_utils::apply_options(config, enabled)
         test::suite_assert(ts, config.region_stats and config.region_tree and config.unsafe_no_bounds_checks and config.verbose and config.dump_ast, site())
     end
 end
@@ -61,7 +61,7 @@ func run_tests(ts: test::TestSuite):
     println("[test] test_runtime_options")
     test_configuration(ts)
     tool := utils::compiler_command(_)
-    workspace := must run_command::make_workspace()
+    workspace := must cli_utils::make_workspace()
     source := "test/bootstrap/input/runtime_options/main.jik"
     generated := path::join([workspace, "runtime.c"])
     // Execute instrumentation once. Other commands share its configuration and
@@ -80,5 +80,5 @@ func run_tests(ts: test::TestSuite):
     verbose := must process::capture(tool, ["check", source, "--verbose"])
     test::suite_assert(ts, quiet.code == 0 and verbose.code == 0 and text(quiet.out) == text(verbose.out), site())
     test::suite_assert(ts, bytes::len(quiet.err) == 0 and bytes::len(verbose.err) > 0, site())
-    must run_command::cleanup(workspace)
+    must cli_utils::cleanup_workspace(workspace)
 end

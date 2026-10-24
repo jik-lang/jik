@@ -7,7 +7,7 @@ use "jik/process"
 use "jik/string"
 use "jik/sys"
 
-use "../../src/bootstrap/cli/run" as run_command
+use "../../src/bootstrap/cli/utils" as cli_utils
 use "../../src/bootstrap/compiler"
 use "../../src/bootstrap/codegen/codegen"
 use "language/utils"
@@ -36,8 +36,8 @@ end
 
 func test_output(ts: test::TestSuite):
     tool := utils::compiler_command(_)
-    cc := must run_command::select_compiler("")
-    workspace := must run_command::make_workspace()
+    cc := must cli_utils::select_compiler("")
+    workspace := must cli_utils::make_workspace()
     output := path::join([workspace, "output with spaces.c"])
     executable := path::join([workspace, "translated.exe"])
     input := "test/bootstrap/input/translation/main.jik"
@@ -108,7 +108,7 @@ func test_output(ts: test::TestSuite):
     end
     helpers::check_failure(ts, tool, ["tran", "test/bootstrap/input/preview/invalid.jik", "--out", output, "--embed-core", "--emit-source-loc"], "missing")
     helpers::check_failure(ts, tool, ["tran", input, "--out", workspace, "--embed-core"], "could not write output")
-    must run_command::cleanup(workspace)
+    must cli_utils::cleanup_workspace(workspace)
 end
 
 

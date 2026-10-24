@@ -9,6 +9,7 @@ use "jik/string"
 use "jik/sys"
 
 use "../../src/bootstrap/cli/run" as run_command
+use "../../src/bootstrap/cli/utils" as cli_utils
 use "language/utils"
 use "test_help_env" as helpers
 
@@ -43,7 +44,7 @@ func run_tests(ts: test::TestSuite):
         end
     end
     tool := utils::compiler_command(_)
-    workspace := must run_command::make_workspace()
+    workspace := must cli_utils::make_workspace()
     temporary := path::join([workspace, "temporary files with spaces"])
     must fs::mkdir(temporary)
     source := path::join([workspace, "source with spaces.jik"])
@@ -74,5 +75,5 @@ func run_tests(ts: test::TestSuite):
         test::suite_assert(ts, must io::read_file(file) == "preserve adjacent output", site())
     end
     must fs::remove_dir(temporary)
-    must run_command::cleanup(workspace)
+    must cli_utils::cleanup_workspace(workspace)
 end

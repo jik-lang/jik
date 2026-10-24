@@ -5,7 +5,7 @@ use "jik/string"
 use "jik/process"
 
 use "../compiler"
-use "compiler_options"
+use "utils"
 
 
 func make_parser(r: Region) -> ap::Parser:
@@ -19,7 +19,7 @@ func make_parser(r: Region) -> ap::Parser:
     ap::add_option(parser, "--emit-source-loc", "", "Emit source path:line:column comments before generated declarations.")
     ap::add_option(parser, "--format-c", "", "Format the generated C file in place with clang-format. Fails if clang-format is not available.")
     ap::add_option(parser, "--verbose", "", "Print translation and formatting stages to stderr.")
-    compiler_options::add_runtime(parser)
+    utils::add_runtime_options(parser)
     return parser
 end
 
@@ -40,7 +40,7 @@ throws func run(args: Vec[String]):
         emit_source_loc = res.options["--emit-source-loc"] is Some
     }
     comp := try compiler::new(config)
-    compiler_options::configure(comp.config, res)
+    utils::apply_options(comp.config, res)
     try comp.run()
     if res.options["--format-c"] is Some:
         compiler::verbose(comp, concat("format output: ", output_file))

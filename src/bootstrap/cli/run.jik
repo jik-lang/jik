@@ -1,18 +1,15 @@
 //! Reserve a temporary build workspace, compile, execute, and clean up.
 
 use "jik/argparse" as ap
-use "jik/fs"
 use "jik/io"
 use "jik/path"
 use "jik/process"
-use "jik/string"
 use "jik/sys"
-use "jik/time"
 
 use "../compiler"
 use "native_build"
 use "cc_flags"
-use "compiler_options"
+use "utils"
 
 
 func make_parser(r: Region) -> ap::Parser:
@@ -26,67 +23,8 @@ func make_parser(r: Region) -> ap::Parser:
     ap::add_option(parser, "--release", "", "Optimize the generated program with -O3.")
     ap::add_option(parser, "--dump-ast", "", "Print the parsed AST for each module.")
     ap::add_option(parser, "--verbose", "", "Print compilation and execution stages to stderr.")
-    compiler_options::add_runtime(parser)
+    utils::add_runtime_options(parser)
     return parser
-end
-
-
-throws func select_compiler(foreign explicit: String, r: Region) -> String:
-    if len(explicit) > 0:
-        return copy(explicit, r)
-    end
-    configured := sys::getenv("JIK_CC")
-    if configured is Some and len(configured?) > 0:
-        return copy(configured?, r)
-    end
-    candidates := ["clang", "gcc", "cc"]
-    for candidate in candidates:
-        try result := process::capture(candidate, ["--version"]):
-            if result.code == 0:
-                return copy(candidate, r)
-            end
-        except:
-            // An unavailable candidate does not prevent trying the next one.
-        end
-    end
-    fail("no C compiler found; set JIK_CC or use --cc")
-end
-
-
-throws func make_workspace(r: Region) -> String:
-    base := fs::temp_dir()
-    stamp := time::unix_seconds()
-    for index = 0, 1000:
-        candidate := path::join([base, concat("jik-bootstrap-run-", string::from_int(stamp), "-", string::from_int(index))])
-        if fs::exists(candidate):
-            continue
-        end
-        try fs::mkdir(candidate):
-            return copy(candidate, r)
-        except:
-            // mkdir reserves the directory atomically, including concurrent runs.
-            if not fs::exists(candidate):
-                msg := error_msg()
-                code := error_code()
-                fail(msg, code)
-            end
-        end
-    end
-    fail("could not reserve a temporary directory for jik run")
-end
-
-
-throws func cleanup(workspace: String) -> void:
-    // The directory is exclusively reserved for this invocation. Native @copy
-    // requirements may have added files, including before a later copy fails.
-    names := try fs::read_dir(workspace)
-    for name in names:
-        file := path::join([copy(workspace), name])
-        if fs::exists(file):
-            try fs::remove_file(file)
-        end
-    end
-    try fs::remove_dir(workspace)
 end
 
 
@@ -108,7 +46,7 @@ throws func compile_and_execute(foreign input: String, foreign workspace: String
         output_path = path::join([copy(workspace), "program.c"])
     }
     comp := try compiler::new(config)
-    compiler_options::configure(comp.config, options)
+    utils::apply_options(comp.config, options)
     status := try execute(comp, cc, workspace, flags, release, verbose)
     return status
 end
@@ -121,8 +59,8 @@ throws func run(args: Vec[String]) -> int:
     explicit := result.options["--cc"]?["compiler"]? if result.options["--cc"] is Some else ""
     flag_text := result.options["--ccflags"]?["args"]? if result.options["--ccflags"] is Some else ""
     flags := try cc_flags::parse(flag_text, sys::platform() == "windows")
-    cc := try select_compiler(explicit)
-    workspace := try make_workspace()
+    cc := try utils::select_compiler(explicit)
+    workspace := try utils::make_workspace()
     status := 0
     try completed := compile_and_execute(input, workspace, cc, flags,
         result, result.options["--release"] is Some,
@@ -131,12 +69,12 @@ throws func run(args: Vec[String]) -> int:
     except:
         msg := error_msg()
         code := error_code()
-        try cleanup(workspace):
+        try utils::cleanup_workspace(workspace):
         except:
             io::write_stderr(concat("jik: temporary cleanup failed: ", error_msg(), "\n"))
         end
         fail(msg, code)
     end
-    try cleanup(workspace)
+    try utils::cleanup_workspace(workspace)
     return status
 end

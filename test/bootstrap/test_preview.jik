@@ -9,7 +9,7 @@ use "jik/sys"
 
 use "../../src/bootstrap/cli/command_line"
 use "../../src/bootstrap/cli/cc_flags"
-use "../../src/bootstrap/cli/run" as run_command
+use "../../src/bootstrap/cli/utils" as cli_utils
 use "language/utils"
 
 
@@ -54,7 +54,7 @@ end
 
 func test_commands(ts: test::TestSuite):
     tool := utils::compiler_command(_)
-    workspace := must run_command::make_workspace()
+    workspace := must cli_utils::make_workspace()
     output := path::join([workspace, "preview output.exe"])
     cc := path::join([workspace, "missing compiler.exe"])
     input := "test/bootstrap/input/preview/main.jik"
@@ -122,7 +122,7 @@ func test_commands(ts: test::TestSuite):
         check_failure(ts, tool, ["build", "test/bootstrap/input/preview/profiled.jik", "--cc", probe, "--preview"], "unsupported by the selected toolchain")
         test::suite_assert(ts, must io::read_file(output) == "keep executable", site())
     end
-    must run_command::cleanup(workspace)
+    must cli_utils::cleanup_workspace(workspace)
 end
 
 

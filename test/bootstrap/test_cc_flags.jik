@@ -9,6 +9,7 @@ use "jik/string"
 use "../../src/bootstrap/cli/cc_flags"
 use "../../src/bootstrap/cli/build" as build_command
 use "../../src/bootstrap/cli/run" as run_command
+use "../../src/bootstrap/cli/utils" as cli_utils
 use "language/utils"
 
 
@@ -79,7 +80,7 @@ func test_commands(ts: test::TestSuite):
     tool := utils::compiler_command(_)
     input := "test/bootstrap/input/cc_flags/source dir/main.jik"
     flags := "-DCC_FLAGS_VALUE=42 -DCC_FLAGS_SECOND=7 -I\"test/bootstrap/input/cc_flags/include dir\" -include \"flag value.h\" -O0"
-    workspace := must run_command::make_workspace()
+    workspace := must cli_utils::make_workspace()
     output := path::join([workspace, "program with spaces.exe"])
     built := must process::capture(tool, ["build", input, "--out", output, "--release", "--ccflags", flags])
     if built.code != 0:
@@ -95,7 +96,7 @@ func test_commands(ts: test::TestSuite):
     end
     // test_preview covers flags passed to a target probe; test_run_command
     // covers missing-compiler handling and execution cleanup.
-    must run_command::cleanup(workspace)
+    must cli_utils::cleanup_workspace(workspace)
 end
 
 

@@ -9,7 +9,7 @@ use "jik/sys"
 
 use "../../src/bootstrap/version"
 use "../../src/bootstrap/cli/help" as help_command
-use "../../src/bootstrap/cli/run" as run_command
+use "../../src/bootstrap/cli/utils" as cli_utils
 use "language/utils"
 
 
@@ -80,7 +80,7 @@ end
 
 func test_installation(ts: test::TestSuite):
     tool := utils::compiler_command(_)
-    workspace := must run_command::make_workspace()
+    workspace := must cli_utils::make_workspace()
     installed := path::join([workspace, "compiler with spaces.exe"])
     must fs::copy_file(tool, installed)
     // A byte copy does not preserve POSIX execute permission.
@@ -126,7 +126,7 @@ func test_installation(ts: test::TestSuite):
     must fs::remove_file(index)
     must fs::remove_file(path::join([docs, "topic.md"]))
     must fs::remove_dir(docs)
-    must run_command::cleanup(workspace)
+    must cli_utils::cleanup_workspace(workspace)
 end
 
 

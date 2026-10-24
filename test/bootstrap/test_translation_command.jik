@@ -7,7 +7,7 @@ use "jik/process"
 use "jik/string"
 use "jik/sys"
 
-use "../../src/bootstrap/cli/run" as run_command
+use "../../src/bootstrap/cli/utils" as cli_utils
 use "language/utils"
 use "test_help_env" as helpers
 
@@ -38,7 +38,7 @@ end
 
 func test_paths(ts: test::TestSuite):
     tool := utils::compiler_command(_)
-    workspace := must run_command::make_workspace()
+    workspace := must cli_utils::make_workspace()
     source := path::join([workspace, "translation input.jik"])
     default_output := path::join([workspace, "translation input.c"])
     explicit_output := path::join([workspace, "explicit output.c"])
@@ -68,13 +68,13 @@ func test_paths(ts: test::TestSuite):
     check_failure(ts, tool, ["tran", source, "--out", ""], "could not write output")
     test::suite_assert(ts, not fs::exists(default_output), site())
     helpers::restore_environment("JIK_CC", old_cc)
-    must run_command::cleanup(workspace)
+    must cli_utils::cleanup_workspace(workspace)
 end
 
 
 func test_arguments_and_io(ts: test::TestSuite):
     tool := utils::compiler_command(_)
-    workspace := must run_command::make_workspace()
+    workspace := must cli_utils::make_workspace()
     input := "test/bootstrap/input/diagnostics/valid.jik"
     output := path::join([workspace, "output.c"])
     check_failure(ts, tool, ["tran"], "help tran")
@@ -91,13 +91,13 @@ func test_arguments_and_io(ts: test::TestSuite):
     absent_parent := path::join([workspace, "absent"])
     check_failure(ts, tool, ["tran", input, "--out", path::join([absent_parent, "out.c"])], "could not write output")
     test::suite_assert(ts, not fs::exists(absent_parent), site())
-    must run_command::cleanup(workspace)
+    must cli_utils::cleanup_workspace(workspace)
 end
 
 
 func test_diagnostics_and_retries(ts: test::TestSuite):
     tool := utils::compiler_command(_)
-    workspace := must run_command::make_workspace()
+    workspace := must cli_utils::make_workspace()
     output := path::join([workspace, "preserved output.c"])
     invalid := "test/bootstrap/input/diagnostics/codegen.jik"
     location := concat(path::normalize(invalid), ":2:12")
@@ -118,7 +118,7 @@ func test_diagnostics_and_retries(ts: test::TestSuite):
     test::suite_assert(ts, successful_output != "preserve existing output", site())
     check_failure(ts, tool, ["tran", invalid, "--out", output], location)
     test::suite_assert(ts, must io::read_file(output) == successful_output, site())
-    must run_command::cleanup(workspace)
+    must cli_utils::cleanup_workspace(workspace)
 end
 
 

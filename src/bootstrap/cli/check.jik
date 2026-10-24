@@ -3,7 +3,7 @@
 use "jik/argparse" as ap
 
 use "../compiler"
-use "compiler_options"
+use "utils"
 
 
 func make_parser(r: Region) -> ap::Parser:
@@ -20,7 +20,7 @@ throws func run(args: Vec[String]) -> void:
     parser := make_parser()
     result := try ap::parse(parser, args)
     config := compiler::Config{input_path = result.positionals["input"]?}
-    compiler_options::configure(config, result)
+    utils::apply_options(config, result)
     comp := try compiler::new(config)
     try comp.check()
     println("check passed")

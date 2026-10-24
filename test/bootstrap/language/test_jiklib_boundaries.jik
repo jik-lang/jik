@@ -5,14 +5,14 @@ use "jik/path"
 use "jik/process"
 use "jik/string"
 
-use "../../../src/bootstrap/cli/run" as run_command
+use "../../../src/bootstrap/cli/utils" as cli_utils
 use "utils"
 
 
 func run_tests(ts):
     println("[test] language/test_jiklib_boundaries")
     tool := utils::compiler_command(_)
-    workspace := must run_command::make_workspace()
+    workspace := must cli_utils::make_workspace()
     program := path::join([workspace, "library boundaries.exe"])
     built := must process::capture(tool, ["build", "test/bootstrap/language/input/library_boundaries/main.jik", "--out", program])
     if built.code != 0:
@@ -38,5 +38,5 @@ func run_tests(ts):
         test::suite_assert(ts, streams.code == 0, site())
         test::suite_assert(ts, must bytes::to_string_ascii(streams.out) == "stdout" and must bytes::to_string_ascii(streams.err) == "stderr", site())
     end
-    must run_command::cleanup(workspace)
+    must cli_utils::cleanup_workspace(workspace)
 end
