@@ -57,6 +57,37 @@ func test_configuration(ts: test::TestSuite):
 end
 
 
+func check_stage_order(ts: test::TestSuite, foreign diagnostic: String, foreign stages: Vec[String]):
+    previous := -1
+    for stage in stages:
+        offset := string::find(diagnostic, stage)
+        test::suite_assert(ts, offset > previous, site())
+        if offset < 0:
+            return
+        end
+        previous = offset
+    end
+end
+
+
+func test_verbose_failures(ts: test::TestSuite, foreign tool: String):
+    lexical := must process::capture(tool, ["check", "test/bootstrap/input/diagnostics/lexical.jik", "--verbose"])
+    lexical_error := text(lexical.err)
+    test::suite_assert(ts, lexical.code != 0 and bytes::len(lexical.out) == 0, site())
+    test::suite_assert(ts, string::starts_with(lexical_error, "jik: lex and parse sources\n"), site())
+    test::suite_assert(ts, not string::contains(lexical_error, "jik: analyze program"), site())
+    unresolved := must process::capture(tool, ["check", "test/bootstrap/input/preview/invalid.jik", "--verbose"])
+    resolution_error := text(unresolved.err)
+    test::suite_assert(ts, unresolved.code != 0 and bytes::len(unresolved.out) == 0, site())
+    test::suite_assert(ts, string::contains(resolution_error, "jik: analyze program") and not string::contains(resolution_error, "jik: check regions"), site())
+    inferred := must process::capture(tool, ["check", "test/bootstrap/input/inference/unanchored_recursion.jik", "--verbose"])
+    inference_error := text(inferred.err)
+    test::suite_assert(ts, inferred.code != 0 and bytes::len(inferred.out) == 0, site())
+    test::suite_assert(ts, string::contains(inference_error, "jik: analyze program"), site())
+    test::suite_assert(ts, not string::contains(inference_error, "jik: check regions"), site())
+end
+
+
 func run_tests(ts: test::TestSuite):
     println("[test] test_runtime_options")
     test_configuration(ts)
@@ -79,7 +110,20 @@ func run_tests(ts: test::TestSuite):
     quiet := must process::capture(tool, ["check", source])
     verbose := must process::capture(tool, ["check", source, "--verbose"])
     test::suite_assert(ts, quiet.code == 0 and verbose.code == 0 and bytes::len(quiet.out) == 0 and bytes::len(verbose.out) == 0, site())
-    test::suite_assert(ts, bytes::len(quiet.err) == 0 and string::ends_with(text(verbose.err), "jik: check passed\n"), site())
+    test::suite_assert(ts, bytes::len(quiet.err) == 0 and string::ends_with(text(verbose.err), "jik: check regions\n"), site())
+    test::suite_assert(ts, not string::contains(text(verbose.err), "check passed"), site())
+    test::suite_assert(ts, text(verbose.err) == "jik: lex and parse sources\njik: analyze program\njik: check regions\n", site())
+    test_verbose_failures(ts, tool)
+    imported := must process::capture(tool, ["check", "test/bootstrap/input/preview/main.jik", "--verbose"])
+    test::suite_assert(ts, imported.code == 0 and bytes::len(imported.out) == 0, site())
+    // Imported modules must not add per-module progress messages.
+    test::suite_assert(ts, text(imported.err) == text(verbose.err), site())
+    executed := must process::capture(tool, ["run", source, "--release", "--ccflags", "-DJIK_VERBOSE_TEST=1", "--verbose"])
+    execution_log := text(executed.err)
+    test::suite_assert(ts, executed.code == 0 and text(executed.out) == "42\n", site())
+    check_stage_order(ts, execution_log, ["jik: check regions", "jik: generate C", "jik: write output: ", "jik: compile ", "jik: run "])
+    test::suite_assert(ts, string::contains(execution_log, "-O3") and string::contains(execution_log, "-DJIK_VERBOSE_TEST=1"), site())
+    test::suite_assert(ts, string::contains(execution_log, "program.c") and string::contains(execution_log, "program.exe"), site())
     dumped := must process::capture(tool, ["check", source, "--dump-ast"])
     test::suite_assert(ts, dumped.code == 0 and bytes::len(dumped.err) == 0, site())
     test::suite_assert(ts, string::starts_with(text(dumped.out), "[AST: ") and not string::contains(text(dumped.out), "check passed"), site())

@@ -1,5 +1,7 @@
 //! Run semantic checks in order and stop when a step reports an error.
 
+use "jik/io"
+
 use "../program"
 use "resolution/resolve"
 use "typing/inference"
@@ -11,10 +13,13 @@ use "regions/regions"
 /// Errors accumulate in Program diagnostics rather than being thrown.
 /// With no diagnostics, syntax/type/region metadata is ready for codegen.
 /// The caller prepares the graph schedules separately in Program.
-func analyze_program(program: program::Program, entry_source_id: int) -> void:
+func analyze_program(program: program::Program, entry_source_id: int, verbose: bool) -> void:
     diagnostics := program.diagnostics
     if diagnostics.error_count > 0:
         return
+    end
+    if verbose:
+        io::write_stderr("jik: analyze program\n")
     end
     resolve::resolve_declarations(program)
     if diagnostics.error_count > 0:
@@ -30,6 +35,9 @@ func analyze_program(program: program::Program, entry_source_id: int) -> void:
     end
     typecheck::run(program)
     if diagnostics.error_count == 0:
+        if verbose:
+            io::write_stderr("jik: check regions\n")
+        end
         regions::run(program)
     end
 end

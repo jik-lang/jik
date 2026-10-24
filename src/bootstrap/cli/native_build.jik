@@ -119,7 +119,7 @@ throws func compile(comp: compiler::Compiler, foreign cc: String, foreign execut
         return
     end
     if verbose:
-        io::write_stderr(concat("jik: compile with ", cc, "\n"))
+        io::write_stderr(concat("jik: compile ", command_line::format(cc, args, sys::platform() == "windows"), "\n"))
     end
     status := try process::run(cc, args)
     if status != 0:

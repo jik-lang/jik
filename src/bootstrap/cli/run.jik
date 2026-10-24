@@ -32,7 +32,7 @@ throws func execute(comp: compiler::Compiler, foreign cc: String, foreign worksp
     executable := path::join([copy(workspace), "program.exe"])
     try native_build::compile(comp, cc, executable, flags, release, false, verbose)
     if verbose:
-        io::write_stderr("jik: run program\n")
+        io::write_stderr(concat("jik: run ", executable, "\n"))
     end
     program_args: Vec[String]
     exit_status := try process::run(executable, program_args)

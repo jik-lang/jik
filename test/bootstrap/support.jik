@@ -88,7 +88,7 @@ throws func translate(foreign main_source: String, foreign helper_source: String
     end
     dependency_order := module_graph::dependency_order(modules, sources, diagnostics, r)
     comp := program::Program{modules = modules, dependency_order = dependency_order, diagnostics = diagnostics, sources = sources}[.modules]
-    semantic::analyze_program(comp, 0)
+    semantic::analyze_program(comp, 0, false)
     if diagnostics.error_count > 0:
         fail("semantic analysis failed")
     end

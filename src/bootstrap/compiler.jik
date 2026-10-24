@@ -63,7 +63,7 @@ end
 /// Load and validate the program, returning its entry source ID.
 /// Record source/semantic errors in the program and fail before emission can begin.
 throws func analyze(comp: Compiler) -> int:
-    verbose(comp, concat("load sources: ", comp.config.input_path))
+    verbose(comp, "lex and parse sources")
     sid := try module_loader::load_modules(comp.program.sources, comp.program.modules, comp.program.diagnostics, comp.config.input_path)
     comp.program.dependency_order = module_graph::dependency_order(comp.program.modules, comp.program.sources, comp.program.diagnostics, .comp)
     if comp.program.diagnostics.error_count > 0:
@@ -82,8 +82,7 @@ throws func analyze(comp: Compiler) -> int:
         end
     end
 
-    verbose(comp, "analyze program")
-    semantic::analyze_program(comp.program, sid)
+    semantic::analyze_program(comp.program, sid, comp.config.verbose)
 
     if comp.program.diagnostics.error_count > 0:
         fail("compilation failed")
@@ -120,6 +119,7 @@ throws func translate(comp: Compiler) -> String:
     if comp.config.embed_core:
         executable := try sys::executable_path()
         core_path := path::join([path::dirname(executable), "support", "include", "core.h"])
+        verbose(comp, concat("read runtime: ", core_path))
         try core := io::read_file(core_path, .options):
             options.core_source = Some{core}[.options]
         except:

@@ -39,7 +39,7 @@ func test_codegen_uses_resolved_target(ts) -> void:
     modules: Vec[module::Module][.sources]
     support::add_source_module(sources, modules, diagnostics, "test/bootstrap_codegen/entry.jik", "func main():\n    return answer()\nend\nfunc answer():\n    return 42\nend\n")
     comp := program::Program{modules = modules, dependency_order = [0], initialization_order = [0], diagnostics = diagnostics, sources = sources}[.modules]
-    semantic::analyze_program(comp, 0)
+    semantic::analyze_program(comp, 0, false)
     test::suite_assert(ts, diagnostics.error_count == 0, site())
     // Once resolved, spelling/alias metadata is not an input to code generation.
     for node in modules[0].ast.nodes:

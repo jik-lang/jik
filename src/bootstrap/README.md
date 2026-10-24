@@ -47,6 +47,11 @@ handling can avoid printing them again. Code that calls a phase directly must
 prepare its required inputs. Having no errors does not mean earlier phases have
 run or filled in the data that phase needs.
 
+The compiler driver uses `compiler::verbose` for optional stage messages. Lexing
+and parsing are reported once for all sources. The semantic entry point receives
+a verbose flag and reports program analysis and region checking to stderr without
+depending on the driver or CLI modules. No per-module progress messages are printed.
+
 ## Finding a rule
 
 | Area | Starting modules |
