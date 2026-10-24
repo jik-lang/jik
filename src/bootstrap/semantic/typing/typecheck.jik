@@ -296,6 +296,127 @@ func check_extern_default(ctx: context::ModuleContext, type_id: int, node: ast::
 end
 
 
+/// Validate the throwing contract before checking the builtin or function signature.
+/// Handling applies only to this call; arguments use ordinary value checks.
+func check_call(ctx: context::ModuleContext, node: ast::Node, result: int, handling: Handling) -> Option[int]:
+    modules := ctx.program.modules
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    call := node.kind.CALL
+    if call.propagate:
+        handling = Handling.TRY
+    end
+    handled := handling != Handling.NONE
+    form := "must" if handling == Handling.MUST else "try"
+    // Receiver builtin fallback can retain a caller's function signature.
+    // Its throwing contract follows that target, as for ordinary call checks.
+    if handled and call.target is None:
+        diag::error(diagnostics, concat("invalid ", form, " call"), concat(form, " requires a throwing function"), Some{node.span})
+        return None
+    end
+    if call.target is Some:
+        target := call.target?
+        if target.source_id < 0 or target.source_id >= len(modules):
+            diag::error(diagnostics, "invalid call target", "module index is outside the compilation", Some{node.span})
+            return None
+        end
+        target_mod := modules[target.source_id]
+        if target.origin < 0 or target.origin >= len(target_mod.ast.nodes):
+            diag::error(diagnostics, "invalid call target", "declaration ID is outside the module", Some{node.span})
+            return None
+        end
+        declaration := target_mod.ast.nodes[target.origin]
+        if not (declaration.kind is FUNCTION_DECL):
+            diag::error(diagnostics, "invalid call target", "expected a function declaration", Some{node.span})
+            return None
+        end
+        if declaration.kind.FUNCTION_DECL.is_throwing and not handled:
+            diag::error(diagnostics, "unhandled throwing call", "throwing functions require try or must", Some{node.span})
+            return None
+        end
+        if handled and not declaration.kind.FUNCTION_DECL.is_throwing:
+            diag::error(diagnostics, concat("invalid ", form, " call"), concat(form, " requires a throwing function"), Some{node.span})
+            return None
+        end
+    end
+    if call.builtin is Some:
+        return check_builtin(ctx, node, result)
+    end
+    if call.target is None:
+        diag::error(diagnostics, "unresolved call", "call targets must be resolved before checking", Some{node.span})
+        return None
+    end
+    target := call.target?
+    target_mod := modules[target.source_id]
+    function_node := target_mod.ast.nodes[target.origin]
+    function_type := checked_type(ctx, function_node)
+    if function_type is None:
+        return None
+    end
+    if not (store.types[function_type?].kind is FUNCTION):
+        diag::error(diagnostics, "invalid call target", "expected a function declaration and signature", Some{node.span})
+        return None
+    end
+    signature := store.types[function_type?].kind.FUNCTION
+    supplied := len(call.arguments)
+    required := len(signature.parameter_types)
+    if supplied != required:
+        diag::error(diagnostics, "call arity mismatch", concat("expected ", string::from_int(required), " arguments, got ", string::from_int(supplied)), Some{node.span})
+        return None
+    end
+    for index, argument in call.arguments:
+        actual := check_value(ctx, argument)
+        if actual is Some:
+            require_equal(ctx, signature.parameter_types[index], actual?, mod.ast.nodes[argument])
+        end
+    end
+    require_equal(ctx, signature.return_type, result, node)
+    return Some{result}
+end
+
+
+func check_struct_literal(ctx: context::ModuleContext, node: ast::Node, result: int) -> Option[int]:
+    mod := ctx.mod
+    diagnostics := ctx.program.diagnostics
+    store := ctx.program.type_store
+    literal := node.kind.STRUCT_LITERAL
+    declared := mod.ast.nodes[literal.annotation].kind.TYPE_NAME.resolved_type
+    if declared is None or (not types::is_struct(store, result) and not types::is_extern_struct(store, result)):
+        diag::error(diagnostics, "invalid struct type", "a struct literal requires a resolved struct type", Some{node.span})
+        return None
+    end
+    require_equal(ctx, declared?, result, node)
+    if types::is_extern_struct(store, result) and not check_extern_default(ctx, result, node):
+        return None
+    end
+    definition := store.types[result].kind.NAMED
+    check_destination(ctx, literal.destination)
+    if len(literal.fields) != len(definition.member_types):
+        diag::error(diagnostics, "invalid struct fields", "every field must have an initializer after default expansion", Some{node.span})
+        return None
+    end
+    seen := [len(definition.member_types) of false]
+    for field in literal.fields:
+        member := types::record_member(store, result, field.name)
+        if member is None or field.member != member?:
+            diag::error(diagnostics, "invalid struct field", field.name, Some{node.span})
+            return None
+        end
+        if seen[member?]:
+            diag::error(diagnostics, "duplicate struct field", field.name, Some{node.span})
+            return None
+        end
+        seen[member?] = true
+        actual := check_value(ctx, field.value)
+        if actual is Some:
+            require_equal(ctx, definition.member_types[member?], actual?, mod.ast.nodes[field.value])
+        end
+    end
+    return Some{result}
+end
+
+
 /// Check an expression, including whether void results and throwing calls are allowed here.
 /// Return its stored type when available; callers must also check for diagnostics.
 /// Only the outer try operand is handled; arguments use ordinary expression checks.
@@ -400,39 +521,8 @@ func check_expression(ctx: context::ModuleContext, id: int, allow_void: bool, ha
             end
             require_equal(ctx, element?, result?, node)
         end
-    case STRUCT_LITERAL{literal}:
-        declared := mod.ast.nodes[literal.annotation].kind.TYPE_NAME.resolved_type
-        if declared is None or (not types::is_struct(store, result?) and not types::is_extern_struct(store, result?)):
-            diag::error(diagnostics, "invalid struct type", "a struct literal requires a resolved struct type", Some{node.span})
-            return None
-        end
-        require_equal(ctx, declared?, result?, node)
-        if types::is_extern_struct(store, result?) and not check_extern_default(ctx, result?, node):
-            return None
-        end
-        definition := store.types[result?].kind.NAMED
-        check_destination(ctx, literal.destination)
-        if len(literal.fields) != len(definition.member_types):
-            diag::error(diagnostics, "invalid struct fields", "every field must have an initializer after default expansion", Some{node.span})
-            return None
-        end
-        seen := [len(definition.member_types) of false]
-        for field in literal.fields:
-            member := types::record_member(store, result?, field.name)
-            if member is None or field.member != member?:
-                diag::error(diagnostics, "invalid struct field", field.name, Some{node.span})
-                return None
-            end
-            if seen[member?]:
-                diag::error(diagnostics, "duplicate struct field", field.name, Some{node.span})
-                return None
-            end
-            seen[member?] = true
-            actual := check_value(ctx, field.value)
-            if actual is Some:
-                require_equal(ctx, definition.member_types[member?], actual?, mod.ast.nodes[field.value])
-            end
-        end
+    case STRUCT_LITERAL:
+        return check_struct_literal(ctx, node, result?)
     case FIELD{field}:
         base_type := check_value(ctx, field.value)
         if base_type is Some:
@@ -634,75 +724,8 @@ func check_expression(ctx: context::ModuleContext, id: int, allow_void: bool, ha
             return None
         end
         require_equal(ctx, expected?, result?, node)
-    case CALL{call}:
-        if call.propagate:
-            handling = Handling.TRY
-        end
-        handled := handling != Handling.NONE
-        form := "must" if handling == Handling.MUST else "try"
-        // Receiver builtin fallback can retain a caller's function signature.
-        // Its throwing contract follows that target, as for ordinary call checks.
-        if handled and call.target is None:
-            diag::error(diagnostics, concat("invalid ", form, " call"), concat(form, " requires a throwing function"), Some{node.span})
-            return None
-        end
-        if call.target is Some:
-            target := call.target?
-            if target.source_id < 0 or target.source_id >= len(modules):
-                diag::error(diagnostics, "invalid call target", "module index is outside the compilation", Some{node.span})
-                return None
-            end
-            target_mod := modules[target.source_id]
-            if target.origin < 0 or target.origin >= len(target_mod.ast.nodes):
-                diag::error(diagnostics, "invalid call target", "declaration ID is outside the module", Some{node.span})
-                return None
-            end
-            declaration := target_mod.ast.nodes[target.origin]
-            if not (declaration.kind is FUNCTION_DECL):
-                diag::error(diagnostics, "invalid call target", "expected a function declaration", Some{node.span})
-                return None
-            end
-            if declaration.kind.FUNCTION_DECL.is_throwing and not handled:
-                diag::error(diagnostics, "unhandled throwing call", "throwing functions require try or must", Some{node.span})
-                return None
-            end
-            if handled and not declaration.kind.FUNCTION_DECL.is_throwing:
-                diag::error(diagnostics, concat("invalid ", form, " call"), concat(form, " requires a throwing function"), Some{node.span})
-                return None
-            end
-        end
-        if call.builtin is Some:
-            return check_builtin(ctx, node, result?)
-        end
-        if call.target is None:
-            diag::error(diagnostics, "unresolved call", "call targets must be resolved before checking", Some{node.span})
-            return None
-        end
-        target := call.target?
-        target_mod := modules[target.source_id]
-        function_node := target_mod.ast.nodes[target.origin]
-        function_type := checked_type(ctx, function_node)
-        if function_type is None:
-            return None
-        end
-        if not (store.types[function_type?].kind is FUNCTION):
-            diag::error(diagnostics, "invalid call target", "expected a function declaration and signature", Some{node.span})
-            return None
-        end
-        signature := store.types[function_type?].kind.FUNCTION
-        supplied := len(call.arguments)
-        required := len(signature.parameter_types)
-        if supplied != required:
-            diag::error(diagnostics, "call arity mismatch", concat("expected ", string::from_int(required), " arguments, got ", string::from_int(supplied)), Some{node.span})
-            return None
-        end
-        for index, argument in call.arguments:
-            actual := check_value(ctx, argument)
-            if actual is Some:
-                require_equal(ctx, signature.parameter_types[index], actual?, mod.ast.nodes[argument])
-            end
-        end
-        require_equal(ctx, signature.return_type, result?, node)
+    case CALL:
+        return check_call(ctx, node, result?, handling)
     other:
         diag::error(diagnostics, "unsupported expression", "type checker has no rule for this expression", Some{node.span})
         return None
