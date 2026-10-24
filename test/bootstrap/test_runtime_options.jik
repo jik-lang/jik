@@ -78,7 +78,10 @@ func run_tests(ts: test::TestSuite):
     test::suite_assert(ts, unchecked.code == 0 and text(unchecked.out) == "42 unchecked\n" and bytes::len(unchecked.err) == 0, site())
     quiet := must process::capture(tool, ["check", source])
     verbose := must process::capture(tool, ["check", source, "--verbose"])
-    test::suite_assert(ts, quiet.code == 0 and verbose.code == 0 and text(quiet.out) == text(verbose.out), site())
-    test::suite_assert(ts, bytes::len(quiet.err) == 0 and bytes::len(verbose.err) > 0, site())
+    test::suite_assert(ts, quiet.code == 0 and verbose.code == 0 and bytes::len(quiet.out) == 0 and bytes::len(verbose.out) == 0, site())
+    test::suite_assert(ts, bytes::len(quiet.err) == 0 and string::ends_with(text(verbose.err), "jik: check passed\n"), site())
+    dumped := must process::capture(tool, ["check", source, "--dump-ast"])
+    test::suite_assert(ts, dumped.code == 0 and bytes::len(dumped.err) == 0, site())
+    test::suite_assert(ts, string::starts_with(text(dumped.out), "[AST: ") and not string::contains(text(dumped.out), "check passed"), site())
     must cli_utils::cleanup_workspace(workspace)
 end

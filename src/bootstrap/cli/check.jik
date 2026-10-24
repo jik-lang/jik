@@ -11,7 +11,7 @@ func make_parser(r: Region) -> ap::Parser:
     ap::set_description(parser, "Check Jik syntax, types and regions without generating C or invoking a C compiler.")
     ap::add_positional(parser, "input", "Input file")
     ap::add_option(parser, "--dump-ast", "", "Print the parsed AST for each module.")
-    ap::add_option(parser, "--verbose", "", "Print analysis stages to stderr.")
+    ap::add_option(parser, "--verbose", "", "Print analysis stages and success status to stderr.")
     return parser
 end
 
@@ -23,5 +23,5 @@ throws func run(args: Vec[String]) -> void:
     utils::apply_options(config, result)
     comp := try compiler::new(config)
     try comp.check()
-    println("check passed")
+    compiler::verbose(comp, "check passed")
 end
