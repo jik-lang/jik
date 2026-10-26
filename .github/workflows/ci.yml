@@ -36,14 +36,12 @@ jobs:
           clang --version
           make --version
 
-      - name: Build
+      - name: Build and test
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
-        run: make
+        run: make test CC=clang
 
-      - name: Test
+      - name: Build and test full bootstrap
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         shell: pwsh
-        run: make test
-
-      - name: Test Bootstrap
-        shell: pwsh
-        run: make test-boot
+        run: make test-bootstrap-full CC=clang

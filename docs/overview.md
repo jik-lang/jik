@@ -1,9 +1,6 @@
 # Jik Language Overview
 
-This document is a **language tour**, not a full specification. It is meant to give you a
-solid feel for how to write Jik code and what the core features look like.
-
-This document applies to Jik version `0.1.0-alpha.29` and may change for future versions.
+This guide introduces Jik `0.1.0-beta.0` and shows how to write Jik programs.
 
 ## Chapters
 

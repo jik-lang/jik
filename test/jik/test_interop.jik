@@ -1,0 +1,136 @@
+use "jik/testing" as test
+use "jik/string"
+
+use "support"
+use "test_regions"
+use "../../src/jik/lexer/lexer"
+use "../../src/jik/lexer/token"
+use "../../src/jik/source"
+use "../../src/jik/diag"
+use "../../src/jik/parser/format"
+use "../../src/jik/semantic/typing/typecheck"
+use "../../src/jik/semantic/regions/regions"
+
+
+func test_raw_blocks(ts):
+    payload := "#define QUOTED \"\\n\"\r\n// Jik: end @ ! []\nC_suffix\n C\n"
+    text := concat("@embed{C}\n", payload, "C \t\r\nfunc next():\nend\n")
+    file := source::SourceFile{id = 7, text}
+    diagnostics := diag::Diagnostics{}
+    tokens := lexer::tokenize(file, diagnostics)
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    test::suite_assert(ts, tokens[0].type == token::TokenType.EMBEDDED_C, site())
+    test::suite_assert(ts, tokens[0].text? == payload, site())
+    test::suite_assert(ts, tokens[0].span.source_id == 7 and tokens[0].span.start == 0, site())
+    test::suite_assert(ts, tokens[0].span.stop == string::find(text, "func next"), site())
+    test::suite_assert(ts, tokens[1].type == token::TokenType.KWD_FUNC, site())
+    test::suite_assert(ts, tokens[1].span.start == tokens[0].span.stop, site())
+    empty_blocks := ["@embed{_9}\n_9", "@embed{Empty}\nEmpty\t"]
+    for input in empty_blocks:
+        parsed := support::parse_source(input)
+        test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+        declarations := parsed.ast.get_root_module().declarations
+        test::suite_assert(ts, len(declarations) == 1, site())
+        test::suite_assert(ts, parsed.ast.nodes[declarations[0]].kind.EMBEDDED_C == "", site())
+    end
+    ordinary := support::parse_source("func main():\n    value := \"implicit\"@\nend\n")
+    test::suite_assert(ts, ordinary.diagnostics.error_count == 0, site())
+end
+
+
+func test_malformed_blocks(ts):
+    inputs := ["@embed {}", "@embed{9C}\n9C\n", "@embed{}\n", "@embed{C} trailing\nC\n", "@embed{C}\rC\n", "@embed{C}\r", "@embed{C}", "@embed{C}\nint x;\n", "@embed{C}\n C\n", "@embed{C}\nC_suffix\n"]
+    for text in inputs:
+        parsed := support::parse_source(text)
+        test::suite_assert(ts, parsed.diagnostics.error_count > 0, site())
+        test::suite_assert(ts, parsed.diagnostics.messages[0].span is Some, site())
+    end
+    nested := support::parse_source("func main():\n@embed{C}\nC\nend\n")
+    test::suite_assert(ts, nested.diagnostics.error_count == 1, site())
+    test::suite_assert(ts, nested.diagnostics.messages[0].summary == "invalid embedded C placement", site())
+end
+
+
+func test_header_newlines(ts):
+    payload := "int value;\r\n// preserve body bytes\n"
+    newlines := ["\n", "\r\n"]
+    for newline in newlines:
+        text := concat("@embed{C}", newline, payload, "C\r\nfunc next():\nend\n")
+        file := source::SourceFile{id = 7, text}
+        diagnostics := diag::Diagnostics{}
+        tokens := lexer::tokenize(file, diagnostics)
+        test::suite_assert(ts, diagnostics.error_count == 0, site())
+        test::suite_assert(ts, tokens[0].type == token::TokenType.EMBEDDED_C, site())
+        test::suite_assert(ts, tokens[0].text is Some, site())
+        if tokens[0].text is Some:
+            test::suite_assert(ts, tokens[0].text? == payload, site())
+        end
+        test::suite_assert(ts, tokens[0].span.stop == string::find(text, "func next"), site())
+        test::suite_assert(ts, tokens[1].type == token::TokenType.KWD_FUNC, site())
+    end
+end
+
+
+func test_external_signatures(ts):
+    text := "extern throws func native_copy as\n    converted(foreign input: String, r: Region) -> String\nthrows extern func native_int as number(value: int) -> int\nextern func native_void as action() -> void\n"
+    comp := support::infer_source(text, -1)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    support::check_signature(ts, comp, "converted", "throws func(String, Region) -> String")
+    support::check_signature(ts, comp, "number", "throws func(int) -> int")
+    support::check_signature(ts, comp, "action", "func() -> void")
+    mod := comp.modules[0]
+    for id in mod.ast.get_root_module().declarations:
+        function := mod.ast.nodes[id].kind.FUNCTION_DECL
+        test::suite_assert(ts, function.external_name is Some, site())
+        test::suite_assert(ts, not function.is_region_safe and not function.needs_local_region, site())
+        test::suite_assert(ts, len(function.body.statements) == 0, site())
+    end
+    test::suite_assert(ts, string::find(format::format(mod.ast), "EXTERN native_copy THROWS FUNCTION") >= 0, site())
+    invalid := ["extern func native as f(x) -> int\n", "extern func native as f()\n", "extern func native f() -> int\n", "extern extern func native as f() -> int\n", "throws throws extern func native as f() -> int\n"]
+    for input in invalid:
+        parsed := support::parse_source(input)
+        test::suite_assert(ts, parsed.diagnostics.error_count > 0, site())
+    end
+end
+
+
+func test_external_regions(ts):
+    test_regions::check_error(ts, "extern func native as inspect(a: String, b: String) -> int\nfunc caller(a: String):\n    b := \"local\"\n    inspect(a, b)\nend\n", "region mismatch")
+    text := "extern func native as inspect(foreign a: String, b: String) -> int\nfunc caller(a: String):\n    b := \"local\"\n    inspect(a, b)\nend\n"
+    comp := support::infer_source(text, -1)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    test_regions::check_error(ts, "extern func native as f(value: int) -> int\nfunc caller():\n    f(true)\nend\n", "type inference conflict")
+    test_regions::check_error(ts, "extern throws func native as f() -> int\nfunc caller():\n    f()\nend\n", "unhandled throwing call")
+end
+
+
+func test_emission(ts):
+    text := "@embed{C}\nstatic int32_t c_value(int32_t n, JikError *err) { return n; }\nC\nextern throws func c_value as value(n: int) -> int\nfunc main():\n    return value(0)!\nend\n"
+    translated := must support::translate(text, "", _)
+    test::suite_assert(ts, string::find(translated, "static int32_t c_value(int32_t n, JikError *err) { return n; }\n") >= 0, site())
+    test::suite_assert(ts, string::find(translated, "c_value(jik_p_") >= 0 and string::find(translated, "&jik_must_error);") >= 0, site())
+    test::suite_assert(ts, string::find(translated, "jik_m0_value(") < 0, site())
+    plain := must support::translate("extern func toupper as upper(ch: char) -> char\nfunc main():\n    assert(upper('a') == 'A')\nend\n", "", _)
+    test::suite_assert(ts, string::find(plain, "toupper(((uint8_t)97))") >= 0, site())
+    opaque := must support::translate("extern struct CHandle as Handle\nextern func c_handle as handle(r: Region) -> Handle\nextern func c_read as read(value: Handle) -> int\nfunc main():\n    h := handle()\n    return h.read()\nend\n", "", _)
+    test::suite_assert(ts, string::find(opaque, "struct CHandle * jik_v_h = c_handle(jik_local_region)") >= 0, site())
+    test::suite_assert(ts, string::find(opaque, "c_read(jik_v_h)") >= 0, site())
+end
+
+
+func run_tests(ts):
+    println("[test] test_interop")
+    test_raw_blocks(ts)
+    test_header_newlines(ts)
+    test_malformed_blocks(ts)
+    test_external_signatures(ts)
+    test_external_regions(ts)
+    test_emission(ts)
+end

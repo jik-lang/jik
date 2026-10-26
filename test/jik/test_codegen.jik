@@ -1,0 +1,75 @@
+use "jik/testing" as test
+use "jik/string"
+
+use "../../src/jik/program"
+use "support"
+use "../../src/jik/codegen/codegen"
+use "../../src/jik/diag"
+use "../../src/jik/modules/module"
+use "../../src/jik/source"
+use "../../src/jik/semantic/semantic"
+
+
+func test_integer_program(ts) -> void:
+    translation := must support::translate("func main():\n    n := 2 + 3\n    if n < 6:\n        return n\n    end\n    return 0\nend\n", "", _)
+    test::suite_assert(ts, string::find(translation, "int32_t jik_v_n = (2 + 3);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "if ((jik_v_n < 6)) {") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "return jik_m0_main();") >= 0, site())
+end
+
+
+func test_imported_call(ts) -> void:
+    translation := must support::translate("use \"helper\" as h\nfunc main():\n    return h::add(20, 22)\nend\n", "func add(left: int, right: int):\n    return left + right\nend\n", _)
+    test::suite_assert(ts, string::find(translation, "int32_t jik_m1_add(int32_t jik_v_left, int32_t jik_v_right);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "return jik_m1_add(20, 22);") >= 0, site())
+end
+
+
+func test_local_call_and_bare_return(ts) -> void:
+    translation := must support::translate("func add(left, right):\n    return left + right\nend\nfunc stop():\n    return\nend\nfunc main():\n    value := add(1, 2)\n    return value\nend\n", "", _)
+    test::suite_assert(ts, string::find(translation, "int32_t jik_v_value = jik_m0_add(1, 2);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "void jik_m0_stop(void)") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "return;") >= 0, site())
+end
+
+
+func test_codegen_uses_resolved_target(ts) -> void:
+    sources := source::SourceManager{}
+    diagnostics := diag::Diagnostics{}[.sources]
+    modules: Vec[module::Module][.sources]
+    support::add_source_module(sources, modules, diagnostics, "test/bootstrap_codegen/entry.jik", "func main():\n    return answer()\nend\nfunc answer():\n    return 42\nend\n")
+    comp := program::Program{modules = modules, dependency_order = [0], initialization_order = [0], diagnostics = diagnostics, sources = sources}[.modules]
+    semantic::analyze_program(comp, 0, false)
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    // Once resolved, spelling/alias metadata is not an input to code generation.
+    for node in modules[0].ast.nodes:
+        if node.kind is CALL:
+            identifier := modules[0].ast.nodes[node.kind.CALL.callee].kind.IDENTIFIER_EXPR
+            identifier.name = "unresolved_spelling"
+            identifier.qualifier = Some{"unknown_alias"}
+        end
+    end
+    translation := must codegen::generate(comp, 0, codegen::Options{}, _)
+    test::suite_assert(ts, string::find(translation, "return jik_m0_answer();") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "unresolved_spelling") < 0, site())
+end
+
+
+func test_call_statements(ts) -> void:
+    translation := must support::translate("use \"helper\" as h\nfunc main():\n    stop()\n    if 1 < 2:\n        h::consume(42)\n    end\n    h::answer()\n    return 42\nend\nfunc stop():\n    return\nend\n", "func consume(value):\n    value = value + 1\nend\nfunc answer():\n    return 42\nend\n", _)
+    test::suite_assert(ts, string::find(translation, "void jik_m0_stop(void);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "jik_m0_stop();") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "void jik_m1_consume(int32_t jik_v_value);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "jik_m1_consume(42);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "jik_m1_answer();") >= 0, site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_codegen")
+    test_call_statements(ts)
+    test_integer_program(ts)
+    test_imported_call(ts)
+    test_local_call_and_bare_return(ts)
+    test_codegen_uses_resolved_target(ts)
+end

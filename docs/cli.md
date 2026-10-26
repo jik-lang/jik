@@ -1,7 +1,6 @@
 # Jik CLI Reference
 
-The `jik` command-line tool is used to parse, check, translate, build, and runs Jik
-programs. Usage is:
+Use `jik` to check, translate, build, and run Jik programs:
 
 ```sh
 jik <command> [<args>...] [--<option> [<value>]]...
@@ -18,16 +17,17 @@ Command arguments come before command options. For example, use
 ### `jik run <filepath>`
 
 Translate a Jik source file to C, compile it with the selected C compiler, run
-the executable, and then remove the executable.
+the executable, and then remove the temporary build files.
 
 Options:
 
 - `--cc <compiler_name>`: C compiler to use.
 - `--ccflags <args>`: Extra C compiler arguments.
-- `--release`: Build with release-oriented host compiler flags.
+- `--release`: Compile with `-O3` optimization.
 - `--unsafe-no-bounds-checks`: Disable runtime vector bounds checks
 - `--region-stats`: Print runtime region statistics at program exit.
 - `--region-tree`: Print the runtime region lifetime hierarchy.
+- `--dump-ast`: Print the parsed syntax tree.
 - `--verbose`: Print detailed pipeline status information.
 
 Example:
@@ -51,16 +51,16 @@ Translate a Jik source file to C and compile it to an executable.
 Options:
 
 - `--out <filepath>`: Write the executable to this path. When omitted, the
-  default output path is `<input_file>.exe` on Windows and `<input_file>` on
-  Linux.
+  default is the input path without `.jik`, with `.exe` added on Windows.
 - `--cc <compiler_name>`: C compiler to use.
 - `--ccflags <args>`: Extra C compiler arguments.
 - `--preview`: Print the compiler command without running it or creating an
   executable.
-- `--release`: Build with release-oriented host compiler flags.
+- `--release`: Compile with `-O3` optimization.
 - `--unsafe-no-bounds-checks`: Disable runtime vector bounds checks
 - `--region-stats`: Print runtime region statistics at program exit.
 - `--region-tree`: Print the runtime region lifetime hierarchy.
+- `--dump-ast`: Print the parsed syntax tree.
 - `--verbose`: Print detailed pipeline status information.
 
 Example:
@@ -90,7 +90,7 @@ Translate a Jik source file to C.
 Options:
 
 - `--out <filepath>`: Write the generated C to this path. When omitted, the
-  default output path is `<input-basename>.c`.
+  default is the input path with `.jik` replaced by `.c`.
 - `--embed-core`: Embed the Jik support library into the generated translation.
 - `--emit-source-loc`: Emit `// source: path:line:column` comments before generated
   declarations that correspond to Jik source declarations.
@@ -98,6 +98,7 @@ Options:
 - `--unsafe-no-bounds-checks`: Disable runtime vector bounds checks
 - `--region-stats`: Print runtime region statistics at program exit.
 - `--region-tree`: Print the runtime region lifetime hierarchy.
+- `--dump-ast`: Print the parsed syntax tree.
 - `--verbose`: Print detailed pipeline status information.
 
 Generated C includes the Jik support header as `#include "core.h"`. For manual compilation,
@@ -112,11 +113,12 @@ jik tran hello.jik --embed-core
 
 ### `jik check <filepath>`
 
-Parse and analyze a Jik source file.
+Check syntax, types, and regions without generating C or running a C compiler.
 
 Options:
 
 - `--verbose`: Print detailed pipeline status information.
+- `--dump-ast`: Print the parsed syntax tree.
 
 Example:
 
@@ -171,7 +173,7 @@ Commands that compile generated C select the host C compiler in this order:
 
 1. The `--cc <compiler_name>` option.
 2. The `JIK_CC` environment variable.
-3. The host default compiler, when available.
+3. The first available compiler from `clang`, `gcc`, then `cc`.
 
 If no compiler is found, `jik run` and `jik build` fail before compilation.
 
@@ -211,7 +213,7 @@ Use `jik env` to check the currently resolved value. It is printed as
 
 ## Common Workflows
 
-- Use `jik check <file>` for a fast parse and semantic check.
+- Use `jik check <file>` to check syntax, types, and regions.
 - Use `jik run <file>` while developing a program.
 - Use `jik tran <file>` when you want to inspect or format the generated C.
 - Use `jik build <file> --release` when you want an optimized executable.

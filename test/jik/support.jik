@@ -1,0 +1,121 @@
+// Shared compiler setup; each entry point names the phase it completes.
+use "jik/testing" as test
+use "jik/path"
+
+use "../../src/jik/program"
+use "../../src/jik/semantic/resolution/resolve"
+use "../../src/jik/language/types"
+use "../../src/jik/semantic/semantic"
+use "../../src/jik/semantic/typing/inference"
+use "../../src/jik/codegen/codegen"
+use "../../src/jik/modules/module"
+use "../../src/jik/modules/module_graph"
+use "../../src/jik/parser/parser"
+use "../../src/jik/parser/ast"
+use "../../src/jik/lexer/lexer"
+use "../../src/jik/source"
+use "../../src/jik/diag"
+
+
+struct ParseResult:
+    ast: ast::Ast
+    diagnostics: diag::Diagnostics
+end
+
+
+func parse_source(foreign text: String, r: Region) -> ParseResult:
+    file := source::SourceFile{id = 0, path = "<test>", text = copy(text, r)}[r]
+    diagnostics := diag::Diagnostics{}[r]
+    tokens := lexer::tokenize(file, diagnostics)
+    parsed := parser::parse(file, tokens, diagnostics)
+    return ParseResult{ast = parsed, diagnostics = diagnostics}[r]
+end
+
+
+func add_source(comp: program::Program, foreign text: String, source_id: int) -> void:
+    assert(source_id == len(comp.modules))
+    comp.dependency_order.push(source_id)
+    file := source::SourceFile{id = source_id, path = "<test>", text = copy(text, .comp)}[.comp]
+    tokens := lexer::tokenize(file, comp.diagnostics)
+    tree := parser::parse(file, tokens, comp.diagnostics)
+    comp.modules.push(module::Module{source_id, tokens, ast = tree})
+end
+
+
+func resolve_source(foreign text: String, r: Region) -> program::Program:
+    comp := program::Program{}[r]
+    add_source(comp, text, 0)
+    if comp.diagnostics.error_count == 0:
+        resolve::resolve_declarations(comp)
+    end
+    return comp
+end
+
+
+func infer_source(foreign text: String, entry: int, r: Region) -> program::Program:
+    comp := resolve_source(text, r)
+    if comp.diagnostics.error_count == 0:
+        inference::run(comp, entry)
+    end
+    return comp
+end
+
+
+func add_source_module(sources: source::SourceManager, modules: Vec[module::Module], diagnostics: diag::Diagnostics, foreign path: String, foreign text: String) -> void:
+    id := len(sources.sources)
+    file := source::SourceFile{id, path = path::normalize(path, .sources), text = copy(text, .sources)}[.sources]
+    sources.source_id_by_path[file.path] = id
+    sources.sources.push(file)
+    source::_add_line_starts(file)
+    tokens := lexer::tokenize(file, diagnostics)
+    ast := parser::parse(file, tokens, diagnostics)
+    modules.push(module::Module{source_id = id, tokens, ast})
+end
+
+
+throws func translate(foreign main_source: String, foreign helper_source: String, r: Region) -> String:
+    sources := source::SourceManager{}[r]
+    diagnostics := diag::Diagnostics{}[r]
+    modules: Vec[module::Module][r]
+    add_source_module(sources, modules, diagnostics, "test/bootstrap_codegen/entry.jik", main_source)
+    if len(helper_source) > 0:
+        add_source_module(sources, modules, diagnostics, "test/bootstrap_codegen/helper.jik", helper_source)
+        root := modules[0].ast.get_root_module()
+        for id in root.imports:
+            node := modules[0].ast.nodes[id]
+            modules[0].imports.push(module::ResolvedImport{target_id = 1, alias = ast::effective_alias(node.kind.IMPORT, .modules), span = node.span})
+        end
+    end
+    dependency_order := module_graph::dependency_order(modules, sources, diagnostics, r)
+    comp := program::Program{modules = modules, dependency_order = dependency_order, diagnostics = diagnostics, sources = sources}[.modules]
+    semantic::analyze_program(comp, 0, false)
+    if diagnostics.error_count > 0:
+        fail("semantic analysis failed")
+    end
+    comp.initialization_order = module_graph::initialization_order(modules, 0, .comp)
+    translation := try codegen::generate(comp, 0, codegen::Options{}, r)
+    return translation
+end
+
+
+func check_signature(ts, foreign comp: program::Program, foreign name: String, foreign expected: String) -> void:
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    entry := mod.global_scope.symbols[name]
+    test::suite_assert(ts, entry is Some, site())
+    if entry is None:
+        return
+    end
+    node := mod.ast.nodes[entry?.origin]
+    test::suite_assert(ts, node.inferred_type is Some, site())
+    if node.inferred_type is Some:
+        rendered := must types::format(mod.type_store, node.inferred_type?)
+        test::suite_assert(ts, rendered == expected, site())
+    end
+    for checked_node in mod.ast.nodes:
+        test::suite_assert(ts, checked_node.inference_slot == -1, site())
+    end
+end

@@ -1,21 +1,17 @@
 # Jik Grammar Reference
 
-This document is an implementation-derived grammar reference for Jik.
-It is based on the current lexer and parser in `src/jik/lexer.c` and
-`src/jik/parser.c`.
-
-It is intended to describe the accepted surface syntax of the language.
-It is not yet a complete formal language specification, because some forms
-are resolved later during semantic analysis.
+This page describes Jik `0.1.0-beta.0` syntax. It follows the
+[lexer](../src/jik/lexer/lexer.jik) and [parser](../src/jik/parser/parser.jik),
+including [expressions](../src/jik/parser/expressions.jik) and
+[statements](../src/jik/parser/statements.jik).
 
 ## Scope
 
-- This grammar describes syntax, not full typing or region semantics.
-- Some constructs are context-sensitive. In particular:
+- Type and region rules are described in the [language guide](overview.md).
+- The meaning of some expressions depends on their types:
   - `Type.Member` may denote enum values or variant tags.
-  - `value.Member` denotes a variant payload unwrap when `value` has a variant type.
-  - allocation suffixes such as `[r]`, `[.x]`, and `@` are syntactically regular, but
-    semantically restricted.
+  - `value.Member` accesses a variant's payload when `value` has a variant type.
+  - Allocation suffixes such as `[r]`, `[.x]`, and `@` must follow the region rules.
 - Newlines are significant between statements and after block headers.
 
 ## Lexical Structure
@@ -507,19 +503,19 @@ and `name` must be an ordinary function in that type's defining module whose
 first parameter has an explicit annotation for the receiver's type. It is
 shorthand for a normal call with `receiver` as the first argument.
 
-Special implementation rule:
-
-- `unwrap(x)` is parsed specially and treated as equivalent to `x?`.
+The builtin `unwrap(x)` extracts an option's value, like `x?`.
 
 ### Struct Literals
 
 ```ebnf
 struct_literal ::= qualified_identifier "{"
-                   [ struct_field { "," struct_field } ]
+                   [ struct_field { "," struct_field } [ "," ] ]
                    "}"
 
-struct_field ::= identifier "=" expr
+struct_field ::= identifier [ "=" expr ]
 ```
+
+`Point{x}` is short for `Point{x = x}`.
 
 ### Variant Literals
 
@@ -560,20 +556,20 @@ dict_literal ::= "{"
 dict_entry ::= expr ":" expr
 ```
 
-Keys are checked semantically and must be of type `String`.
+Dictionary keys must be of type `String`.
 
-## Semantic Resolution Notes
+## Checks after parsing
 
-These forms are parsed first and refined later:
+Some names are resolved after parsing:
 
 - `EnumName.VALUE` is initially parsed as member access, then rewritten as an
-  enum value during semantic analysis.
+  enum value once the compiler knows its type.
 - `VariantName.TAG` is initially parsed as member access, then rewritten as a variant tag marker
-  during semantic analysis. Constructing a variant value always requires braces.
+  once the compiler knows its type. Constructing a variant value always requires braces.
 - `value.TAG` remains member access and is resolved as checked payload access when
   `value` has a variant type.
 
-## Current Implementation Gaps and Constraints
+## Limits
 
 - Top-level typed globals are not currently parsed.
 - `match` supports payload-binding and payloadless variant-tag patterns; richer patterns are not

@@ -1,0 +1,93 @@
+use "jik/string"
+use "jik/testing" as test
+
+use "support"
+use "../../src/jik/parser/format"
+use "../../src/jik/semantic/typing/typecheck"
+use "../../src/jik/language/types"
+
+
+func test_shapes_and_scopes(ts) -> void:
+    text := "func main():\n    total := 0\n    for index = 0, 3:\n        while index < 2:\n            total = total + index\n            break\n        end\n        continue\n    end\n    return total\nend\n"
+    parsed := support::parse_source(text, _)
+    test::suite_assert(ts, parsed.diagnostics.error_count == 0, site())
+    root := parsed.ast.get_root_module()
+    body := parsed.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL.body
+    loop := parsed.ast.nodes[body.statements[1]].kind.FOR
+    test::suite_assert(ts, parsed.ast.nodes[loop.variable].kind.LOOP_VARIABLE == "index", site())
+    test::suite_assert(ts, len(loop.body.statements) == 2, site())
+    test::suite_assert(ts, parsed.ast.nodes[loop.body.statements[0]].kind is WHILE, site())
+    test::suite_assert(ts, parsed.ast.nodes[loop.body.statements[1]].kind is CONTINUE, site())
+    formatted := format::format(parsed.ast)
+    test::suite_assert(ts, string::find(formatted, "LOOP_VARIABLE") >= 0, site())
+    test::suite_assert(ts, string::find(formatted, "BREAK") >= 0, site())
+    comp := support::infer_source(text, 0)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    mod := comp.modules[0]
+    main := mod.ast.nodes[mod.global_scope.symbols["main"]?.origin].kind.FUNCTION_DECL
+    checked := mod.ast.nodes[main.body.statements[1]].kind.FOR
+    test::suite_assert(ts, main.body.scope.symbols["index"] is None, site())
+    test::suite_assert(ts, checked.body.scope.symbols["index"]?.origin == checked.variable, site())
+    test::suite_assert(ts, mod.ast.nodes[checked.variable].inferred_type? == types::atom(mod.type_store, types::Atom.INT), site())
+    condition := mod.ast.nodes[mod.ast.nodes[checked.body.statements[0]].kind.WHILE.condition].kind.BINARY
+    test::suite_assert(ts, mod.ast.nodes[condition.left].kind.IDENTIFIER_EXPR.local_origin? == checked.variable, site())
+end
+
+
+func test_return_inference(ts) -> void:
+    comp := support::infer_source("func first(flag: bool):\n    while flag:\n        return 42\n    end\nend\nfunc second():\n    for index = 0, 1:\n        return 42\n    end\nend\n", -1)
+    support::check_signature(ts, comp, "first", "func(bool) -> int")
+    support::check_signature(ts, comp, "second", "func() -> int")
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    invalid := support::infer_source("func inspect(value: Site):\n    while value:\n        break\n    end\nend\n", -1)
+    test::suite_assert(ts, invalid.diagnostics.error_count == 0, site())
+    typecheck::run(invalid)
+    test::suite_assert(ts, invalid.diagnostics.error_count == 1, site())
+    test::suite_assert(ts, invalid.diagnostics.messages[0].summary == "invalid condition type", site())
+end
+
+
+func test_parser_errors(ts) -> void:
+    invalid_sources := ["func main():\n    while true:\n", "func main():\n    for index = 0, 1:\n",
+        "func main():\n    for index = 0:\n    end\nend\n",
+        "func main():\n    while true:\n    else:\n    end\nend\n"]
+    for text in invalid_sources:
+        parsed := support::parse_source(text, _)
+        test::suite_assert(ts, parsed.diagnostics.error_count > 0, site())
+    end
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_loops")
+    test_shapes_and_scopes(ts)
+    test_return_inference(ts)
+    test_parser_errors(ts)
+    test_missing_loop_end_preserves_branch(ts)
+end
+
+
+func test_missing_loop_end_preserves_branch(ts) -> void:
+    texts := ["func main():\n    if true:\n        while true:\n            break\n    else:\n        return 42\n    end\nend\n",
+        "func main():\n    if true:\n        for index = 0, 1:\n            break\n    elif false:\n        return 42\n    end\nend\n"]
+    for text in texts:
+        parsed := support::parse_source(text)
+        test::suite_assert(ts, parsed.diagnostics.error_count == 1, site())
+        root := parsed.ast.get_root_module()
+        test::suite_assert(ts, len(root.declarations) == 1, site())
+        if len(root.declarations) != 1:
+            continue
+        end
+        body := parsed.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL.body
+        test::suite_assert(ts, len(body.statements) == 1, site())
+        if len(body.statements) != 1:
+            continue
+        end
+        statement := parsed.ast.nodes[body.statements[0]].kind.IF
+        test::suite_assert(ts, len(statement.branches[0].body.statements) == 0, site())
+        test::suite_assert(ts, statement.else_body is Some or len(statement.branches) == 2, site())
+    end
+end

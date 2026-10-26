@@ -1,0 +1,76 @@
+//! Write C type names and generate consistent names for named/container types.
+
+use "jik/string"
+
+use "writer"
+use "../language/types"
+
+
+// Base C type names used in declarations and generated container names.
+// Pointer syntax belongs to write_atom_type, never to an identifier fragment.
+table CTypeNames[types::Atom] -> String:
+    INT: "int32_t"
+    DOUBLE: "double"
+    BOOL: "bool"
+    CHAR: "uint8_t"
+    STRING: "JikString"
+    VOID: "void"
+    REGION: "JikRegion"
+    SITE: "JikSite"
+end
+
+
+/// Complete C value type for an atomic Jik type; callers supply declarator spacing.
+func write_atom_type(output: writer::Writer, atom: types::Atom) -> void:
+    output.write(CTypeNames[atom])
+    if atom == types::Atom.STRING or atom == types::Atom.REGION:
+        output.write(" *")
+    end
+end
+
+
+table ContainerPrefixes[types::Container] -> String:
+    VECTOR: "jik_vec_"
+    DICTIONARY: "jik_dict_"
+    OPTION: "jik_opt_"
+end
+
+
+// Source-module identity and the declared name distinguish named types without
+// exposing their position in the compilation's shared type store.
+func write_named(output: writer::Writer, foreign store: types::Store, id: int) -> void:
+    definition := store.types[id].kind.NAMED
+    output.write(concat("jik_type_m", string::from_int(definition.source_id), "_", definition.name))
+end
+
+
+func write_fragment(output: writer::Writer, foreign store: types::Store, id: int) -> void:
+    kind := store.types[id].kind
+    match kind:
+    case ATOM{atom}:
+        output.write(CTypeNames[atom])
+    case NAMED:
+        write_named(output, store, id)
+    case CONTAINER:
+        write_container(output, store, id)
+    case FUNCTION:
+        // Function values are not supported as container elements.
+        assert(false)
+    end
+end
+
+
+// Match runtime container names, including the seed's compact repeated vector
+// and dictionary prefixes. Options and mixed containers retain full prefixes.
+func write_container(output: writer::Writer, foreign store: types::Store, id: int) -> void:
+    container := store.types[id].kind.CONTAINER
+    output.write(ContainerPrefixes[container.kind])
+    element := container.element_type
+    if container.kind != types::Container.OPTION:
+        while store.types[element].kind is CONTAINER and store.types[element].kind.CONTAINER.kind == container.kind:
+            output.write("vec_" if container.kind == types::Container.VECTOR else "dict_")
+            element = store.types[element].kind.CONTAINER.element_type
+        end
+    end
+    write_fragment(output, store, element)
+end

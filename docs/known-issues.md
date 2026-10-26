@@ -1,29 +1,23 @@
-# Known Issues and Current Limitations
+# Known limitations
 
-This document lists implementation limitations and known technical issues in the current Jik version.
+Jik `0.1.0-beta.0` is the first beta release. Bugs and changes are still expected.
 
+## Platforms and tools
 
-## Current status
+- Windows x64 and Linux x64 are the tested release platforms. Use Clang or GCC;
+  MSVC is not supported.
+- Generated C uses some GCC/Clang extensions, including for `[n of expr]` vector
+  initializers. Other C compilers may reject it.
+- Generated C can produce compiler warnings.
 
-Jik is currently in alpha. The language is stabilizing, but some implementation details are still
-being refined, and some portability work remains to be completed.
+## Source builds
 
-## Known limitations
+The bundled C seed still runs build commands through a shell. Paths containing
+special shell characters may cause problems. The primary Jik compiler passes
+program arguments directly, without a shell.
 
-- Generated C is currently intended for `gcc` and `clang`. MSVC is not part of the default supported path.
-- Some generated code currently relies on GNU-compatible C extensions, especially for vector
-  repeat-initializers of the form `[n of expr]`.
-- Portability work for strict non-GNU C toolchains is not complete.
-- Some compiler command paths still construct shell command strings for host compiler and tool
-  execution. This is a known robustness and portability limitation, especially for unusual paths,
-  quoting edge cases, or host tool configurations.
+## Memory
 
-## Known runtime issues under review
-
-- Region allocator arithmetic does not yet fully guard against overflow for extremely large allocation sizes.
-- Region allocator alignment is not yet guaranteed to match alignof(max_align_t) on all host ABIs, especially for some FFI-defined C types.
-
-### Scope note
-
-This page should stay short and practical. It is meant to document known user-visible limitations and
-important implementation issues, not to replace internal task planning documents.
+- Very large allocations can make size calculations wrap around. These cases
+  are not fully checked.
+- Region memory may not meet the alignment needed by some C types.

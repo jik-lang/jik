@@ -1,0 +1,130 @@
+use "jik/testing" as test
+use "jik/bytes"
+use "jik/fs"
+use "jik/io"
+use "jik/path"
+use "jik/process"
+use "jik/string"
+use "jik/sys"
+
+use "../../src/jik/cli/utils" as cli_utils
+use "language/utils"
+use "test_help_env" as helpers
+
+
+func check_success(ts: test::TestSuite, foreign tool: String, foreign args: Vec[String]):
+    result := must process::capture(tool, args)
+    if result.code != 0:
+        println(must bytes::to_string_ascii(result.err))
+    end
+    test::suite_assert(ts, result.code == 0, site())
+    test::suite_assert(ts, bytes::len(result.out) == 0 and bytes::len(result.err) == 0, site())
+end
+
+
+func check_failure(ts: test::TestSuite, foreign tool: String, foreign args: Vec[String], foreign expected: String):
+    result := must process::capture(tool, args)
+    diagnostic := must bytes::to_string_ascii(result.err)
+    if result.code != 1 or not string::contains(diagnostic, expected):
+        println("Expected rejection containing: ", expected, "\n", diagnostic)
+    end
+    test::suite_assert(ts, result.code == 1, site())
+    test::suite_assert(ts, bytes::len(result.out) == 0, site())
+    test::suite_assert(ts, string::contains(diagnostic, expected), site())
+    // One primary error must not be printed again at the CLI boundary.
+    test::suite_assert(ts, len(string::split(diagnostic, "jik error:")) == 2, site())
+end
+
+
+func test_paths(ts: test::TestSuite):
+    tool := utils::compiler_command(_)
+    workspace := must cli_utils::make_workspace()
+    source := path::join([workspace, "translation input.jik"])
+    default_output := path::join([workspace, "translation input.c"])
+    explicit_output := path::join([workspace, "explicit output.c"])
+    must io::write_file(source, "func main():\n    println(42)\nend\n")
+    // Translation must work without a usable native compiler.
+    old_cc := sys::getenv("JIK_CC")
+    assert(helpers::set_environment("JIK_CC", "__jik_missing_translation_cc__", true) == 0)
+    relative_source := "test/jik/language/tmp/h1-relative-input.jik"
+    relative_output := "test/jik/language/tmp/h1-relative-input.c"
+    must fs::mkdir_all("test/jik/language/tmp")
+    must fs::copy_file(source, relative_source)
+    check_success(ts, tool, ["tran", relative_source])
+    test::suite_assert(ts, fs::is_file(relative_output), site())
+    must fs::remove_file(relative_source)
+    must fs::remove_file(relative_output)
+    check_success(ts, tool, ["tran", source])
+    test::suite_assert(ts, fs::is_file(default_output), site())
+    generated := must io::read_file(default_output)
+    test::suite_assert(ts, len(generated) > 0 and string::contains(generated, "#include \"core.h\""), site())
+    must fs::remove_file(default_output)
+    check_success(ts, tool, ["tran", source, "--out", explicit_output])
+    test::suite_assert(ts, not fs::exists(default_output), site())
+    test::suite_assert(ts, must io::read_file(explicit_output) == generated, site())
+    must io::write_file(explicit_output, "old output")
+    check_success(ts, tool, ["tran", source, "-o", explicit_output])
+    test::suite_assert(ts, must io::read_file(explicit_output) == generated, site())
+    check_failure(ts, tool, ["tran", source, "--out", ""], "could not write output")
+    test::suite_assert(ts, not fs::exists(default_output), site())
+    helpers::restore_environment("JIK_CC", old_cc)
+    must cli_utils::cleanup_workspace(workspace)
+end
+
+
+func test_arguments_and_io(ts: test::TestSuite):
+    tool := utils::compiler_command(_)
+    workspace := must cli_utils::make_workspace()
+    input := "test/jik/input/diagnostics/valid.jik"
+    output := path::join([workspace, "output.c"])
+    check_failure(ts, tool, ["tran"], "help tran")
+    check_failure(ts, tool, ["tran", "--out", output], "missing input file; try `jik help tran`")
+    check_failure(ts, tool, ["tran", input, "--out"], "missing value for option")
+    check_failure(ts, tool, ["tran", input, "--unknown"], "unknown option")
+    check_failure(ts, tool, ["tran", input, "extra.jik", "--out", output], "unexpected argument: extra.jik")
+    missing := path::join([workspace, "missing.jik"])
+    check_failure(ts, tool, ["tran", missing, "--out", output], "could not read source")
+    test::suite_assert(ts, not fs::exists(output), site())
+    // A directory and a missing parent are deterministic unwritable targets,
+    // including when tests run with elevated permissions.
+    check_failure(ts, tool, ["tran", input, "--out", workspace], "could not write output")
+    absent_parent := path::join([workspace, "absent"])
+    check_failure(ts, tool, ["tran", input, "--out", path::join([absent_parent, "out.c"])], "could not write output")
+    test::suite_assert(ts, not fs::exists(absent_parent), site())
+    must cli_utils::cleanup_workspace(workspace)
+end
+
+
+func test_diagnostics_and_retries(ts: test::TestSuite):
+    tool := utils::compiler_command(_)
+    workspace := must cli_utils::make_workspace()
+    output := path::join([workspace, "preserved output.c"])
+    invalid := "test/jik/input/diagnostics/codegen.jik"
+    location := concat(path::normalize(invalid), ":2:12")
+    check_failure(ts, tool, ["tran", invalid, "--out", output], location)
+    test::suite_assert(ts, not fs::exists(output), site())
+    must io::write_file(output, "preserve existing output")
+    fixtures := ["lexical.jik", "parser.jik", "codegen.jik", "import.jik"]
+    locations := [":2:5", ":1:11", ":2:12", ":1:1"]
+    for index, fixture in fixtures:
+        input := path::normalize(path::join(["test/jik/input/diagnostics", fixture]))
+        check_failure(ts, tool, ["tran", input, "--out", output], concat(input, locations[index]))
+        test::suite_assert(ts, must io::read_file(output) == "preserve existing output", site())
+    end
+    // Failure -> success -> failure exercises exit status and output preservation
+    // across repeated CLI invocations using the same destination.
+    check_success(ts, tool, ["tran", "test/jik/input/diagnostics/valid.jik", "--out", output])
+    successful_output := must io::read_file(output)
+    test::suite_assert(ts, successful_output != "preserve existing output", site())
+    check_failure(ts, tool, ["tran", invalid, "--out", output], location)
+    test::suite_assert(ts, must io::read_file(output) == successful_output, site())
+    must cli_utils::cleanup_workspace(workspace)
+end
+
+
+func run_tests(ts: test::TestSuite):
+    println("[test] test_translation_command")
+    test_paths(ts)
+    test_arguments_and_io(ts)
+    test_diagnostics_and_retries(ts)
+end

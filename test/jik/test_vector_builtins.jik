@@ -1,0 +1,195 @@
+use "jik/testing" as test
+use "jik/string"
+
+use "../../src/jik/program"
+use "../../src/jik/language/builtin"
+use "support"
+use "../../src/jik/parser/ast"
+use "../../src/jik/language/types"
+use "../../src/jik/language/region_source"
+use "../../src/jik/semantic/typing/typecheck"
+use "../../src/jik/semantic/regions/regions"
+
+
+func analyze(foreign text: String, r: Region) -> program::Program:
+    comp := support::infer_source(text, -1, r)
+    typecheck::run(comp)
+    regions::run(comp)
+    return comp
+end
+
+
+func test_inference(ts) -> void:
+    text := "func consume(values, value):\n    push(values, value)\n    return pop(values)\nend\nfunc erase(values: Vec[int]):\n    clear(values)\nend\nfunc main():\n    values := [1]\n    result := consume(values, 42)\n    erase(values)\n    return result\nend\n"
+    comp := support::infer_source(text, 0)
+    support::check_signature(ts, comp, "consume", "func(Vec[int], int) -> int")
+    support::check_signature(ts, comp, "erase", "func(Vec[int]) -> void")
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    for node in comp.modules[0].ast.nodes:
+        if node.kind is CALL and node.kind.CALL.builtin is Some:
+            kind := node.kind.CALL.builtin?
+            expected := types::Atom.INT if kind == builtin::Kind.POP else types::Atom.VOID
+            test::suite_assert(ts, node.inferred_type? == types::atom(comp.modules[0].type_store, expected), site())
+            test::suite_assert(ts, node.kind.CALL.target is None, site())
+        end
+    end
+end
+
+
+func test_regions_and_safety(ts) -> void:
+    text := "func append(rows: Vec[Vec[String]]):\n    push(rows, [\"stored\"])\nend\nfunc take(rows: Vec[Vec[String]]) -> Vec[String]:\n    return pop(rows)\nend\nfunc primitive(values: Vec[int], unrelated: Vec[String]):\n    push(values, 42)\n    clear(unrelated)\nend\nfunc transfer(left: Vec[String], right: Vec[String]):\n    source := [\"local\"]\n    destination: Vec[String]\n    push(destination, pop(source))\nend\nfunc wrapper(rows: Vec[Vec[String]]):\n    append(rows)\nend\n"
+    comp := analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    expected := [true, false, true, true, true]
+    for index, id in root.declarations:
+        function := mod.ast.nodes[id].kind.FUNCTION_DECL
+        test::suite_assert(ts, function.is_region_safe == expected[index], site())
+    end
+    append := mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL
+    call := mod.ast.nodes[append.body.statements[0]].kind.CALL
+    vector := mod.ast.nodes[call.arguments[1]]
+    child := mod.ast.nodes[vector.kind.VECTOR_LITERAL.elements[0]]
+    test::suite_assert(ts, vector.region_source.kind == region_source::Kind.CALLER, site())
+    test::suite_assert(ts, child.region_source.kind == region_source::Kind.CALLER, site())
+    test::suite_assert(ts, vector.allocation_target? == append.parameters[0], site())
+    test::suite_assert(ts, child.allocation_target? == append.parameters[0], site())
+    test::suite_assert(ts, not append.needs_local_region, site())
+    take := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    popped := mod.ast.nodes[mod.ast.nodes[take.body.statements[0]].kind.RETURN.value?]
+    test::suite_assert(ts, popped.region_source.kind == region_source::Kind.CALLER and popped.region_source.parameter_id == take.parameters[0], site())
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+end
+
+
+func test_fresh_literal_safety(ts) -> void:
+    prefix := "struct Item:\n    text: String\n    count: int\nend\nvariant Value:\n    ITEM: Option[Item]\nend\n"
+    cases := [
+        "func nested(items: Vec[Vec[Value]], input: String):\n    push(items, [Value.ITEM{Some{Item{text = \"fresh\", count = len(input)}}}])\nend\nfunc independent(items: Vec[Vec[Value]], foreign input: String):\n    nested(items, input)\nend\n",
+        "func field(item: Item, input: String):\n    item.text = \"fresh\"\nend\n",
+        "func indexed(items: Vec[Item], input: String):\n    items[0] = Item{text = \"fresh\", count = len(input)}\nend\n",
+        "func dictionary(items: Vec[Dict[Item]], input: String):\n    push(items, {input: Item{text = \"fresh\", count = 1}})\nend\n",
+        "func borrowed(items: Vec[Item], input: String):\n    push(items, Item{text = input, count = 1})\nend\n",
+        "func bound(items: Vec[Item]):\n    value := Item{text = \"local\", count = 1}\n    push(items, value)\nend\n",
+        "func explicit(items: Vec[Item], r: Region):\n    push(items, Item{text = \"explicit\", count = 1}[r])\nend\n",
+        "func effect(items: Vec[Item], left: Vec[String], right: String) -> int:\n    push(left, right)\n    return 1\nend\nfunc scalar_call(items: Vec[Item], left: Vec[String], right: String):\n    push(items, Item{text = \"fresh\", count = effect(items, left, right)})\nend\n"
+    ]
+    expected_safe := [true, true, true, true, false, false, false, false]
+    expected_errors := [0, 0, 0, 0, 0, 1, 0, 0]
+    for index, source in cases:
+        comp := analyze(concat(prefix, source))
+        test::suite_assert(ts, comp.diagnostics.error_count == expected_errors[index], site())
+        if expected_errors[index] == 1 and comp.diagnostics.error_count == 1:
+            test::suite_assert(ts, comp.diagnostics.messages[0].summary == "region mismatch", site())
+        end
+        root := comp.modules[0].ast.get_root_module()
+        declaration := comp.modules[0].ast.nodes[root.declarations[len(root.declarations) - 1]]
+        test::suite_assert(ts, declaration.kind is FUNCTION_DECL, site())
+        if not (declaration.kind is FUNCTION_DECL):
+            continue
+        end
+        function := declaration.kind.FUNCTION_DECL
+        test::suite_assert(ts, function.is_region_safe == expected_safe[index], site())
+    end
+    same_region := concat(prefix, cases[4], "func main():\n    items: Vec[Item]\n    text := \"shared\"[.items]\n    borrowed(items, text)\nend\n")
+    accepted := analyze(same_region)
+    test::suite_assert(ts, accepted.diagnostics.error_count == 0, site())
+    mixed_regions := concat(prefix, cases[4], "func call(items: Vec[Item], foreign input: String):\n    borrowed(items, input)\nend\n")
+    rejected := analyze(mixed_regions)
+    test::suite_assert(ts, rejected.diagnostics.error_count == 1, site())
+    if rejected.diagnostics.error_count == 1:
+        test::suite_assert(ts, rejected.diagnostics.messages[0].summary == "region mismatch", site())
+    end
+end
+
+
+func test_callable_overrides(ts) -> void:
+    comp := analyze("func pop(value: int) -> int:\n    return value\nend\nfunc main():\n    return pop(42)\nend\n")
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    found := false
+    for node in comp.modules[0].ast.nodes:
+        if node.kind is CALL:
+            test::suite_assert(ts, node.kind.CALL.builtin is None and node.kind.CALL.target is Some, site())
+            found = true
+        end
+    end
+    test::suite_assert(ts, found, site())
+end
+
+
+func test_error_categories(ts) -> void:
+    cases := [
+        "func main():\n    pop()\nend\n",
+        "func main():\n    push([1])\nend\n",
+        "func main():\n    clear()\nend\n",
+        "func main():\n    pop(42)\nend\n",
+        "func main():\n    clear(42)\nend\n",
+        "func main():\n    push([1], true)\nend\n",
+        "func main():\n    value := push([1], 2)\nend\n",
+        "func main():\n    value := clear([1])\nend\n",
+        "func invalid(values: Vec[String]):\n    local := \"local\"\n    push(values, local)\nend\n",
+        "func invalid(r: Region) -> String:\n    local := [\"local\"]\n    return pop(local)\nend\n"
+    ]
+    summaries := ["call arity mismatch", "call arity mismatch", "call arity mismatch", "invalid vector argument", "invalid vector argument", "type inference conflict", "void value", "void value", "region mismatch", "cannot return local allocation"]
+    for index, text in cases:
+        comp := analyze(text)
+        test::suite_assert(ts, comp.diagnostics.error_count == 1, site())
+        if comp.diagnostics.error_count == 1:
+            message := comp.diagnostics.messages[0]
+            test::suite_assert(ts, message.summary == summaries[index], site())
+            test::suite_assert(ts, message.span is Some, site())
+        end
+    end
+end
+
+
+func test_independent_type_check(ts) -> void:
+    comp := support::infer_source("func take(values: Vec[int]) -> int:\n    return pop(values)\nend\n", -1)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    for node in mod.ast.nodes:
+        if node.kind is CALL:
+            node.inferred_type = Some{types::atom(mod.type_store, types::Atom.BOOL)}[.node]
+        end
+    end
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count > 0, site())
+end
+
+
+func test_return_cleanup(ts) -> void:
+    text := "func take(values: Vec[String]) -> String:\n    scratch := \"local\"\n    return pop(values)\nend\nfunc main():\n    values := [\"value\"]\n    popped := take(values)\n    clear(values)\n    return 42\nend\n"
+    translation := must support::translate(text, "", _)
+    popped := string::find(translation, "_pop(jik_v_values,")
+    destroyed := string::find(translation, "jik_region_free(jik_local_region);")
+    returned := string::find(translation, "return jik_return_value;")
+    test::suite_assert(ts, popped >= 0 and destroyed > popped and returned > destroyed, site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_vector_builtins")
+    test_inference(ts)
+    test_regions_and_safety(ts)
+    test_fresh_literal_safety(ts)
+    test_callable_overrides(ts)
+    test_error_categories(ts)
+    test_independent_type_check(ts)
+    test_return_cleanup(ts)
+end

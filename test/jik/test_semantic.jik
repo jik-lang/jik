@@ -1,0 +1,386 @@
+use "jik/testing" as test
+use "jik/string"
+
+use "../../src/jik/program"
+use "../../src/jik/semantic/resolution/resolve"
+use "../../src/jik/diag"
+use "../../src/jik/modules/module"
+use "../../src/jik/source"
+use "../../src/jik/lexer/lexer"
+use "../../src/jik/parser/parser"
+use "../../src/jik/language/symbol"
+
+
+func parse_module(foreign text: String, r: Region) -> module::Module:
+    file := source::SourceFile{id = 0, path = "<test>", text = copy(text, r)}[r]
+    diagnostics := diag::Diagnostics{}[r]
+    tokens := lexer::tokenize(file, diagnostics)
+    ast := parser::parse(file, tokens, diagnostics)
+    return module::Module{source_id = file.id, tokens, ast}[r]
+end
+
+
+func test_function_scopes(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func first():\n    value := 1\nend\nfunc second():\n    value := 2\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0], diagnostics = diagnostics}[.modules])
+
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    first := mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL
+    second := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    test::suite_assert(ts, first.body.scope.parent is Some, site())
+    test::suite_assert(ts, second.body.scope.parent is Some, site())
+    test::suite_assert(ts, first.body.scope.symbols["value"] is Some, site())
+    test::suite_assert(ts, second.body.scope.symbols["value"] is Some, site())
+    test::suite_assert(ts, first.body.scope.symbols["value"]?.origin == first.body.statements[0], site())
+    test::suite_assert(ts, mod.global_scope.symbols["value"] is None, site())
+end
+
+
+func test_local_conflicts(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("global := 0\nfunc helper():\n    global := 1\n    value := 2\n    value := 3\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0], diagnostics = diagnostics}[.modules])
+
+    test::suite_assert(ts, diagnostics.error_count == 2, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    function := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    test::suite_assert(ts, function.body.scope.symbols["global"] is None, site())
+    test::suite_assert(ts, function.body.scope.symbols["value"]?.kind == symbol::SymbolKind.LOCAL, site())
+    test::suite_assert(ts, function.body.scope.symbols["value"]?.origin == function.body.statements[1], site())
+end
+
+
+func test_locals_hide_module_functions(ts):
+    sources := [
+        "func wrapped():\n    return 1\nend\nfunc helper():\n    wrapped := 2\n    return wrapped\nend\n",
+        "func helper():\n    wrapped := 2\n    return wrapped\nend\nfunc wrapped():\n    return 1\nend\n",
+        "func helper():\n    items := [2]\n    for item in items:\n        wrapped := item\n        println(wrapped)\n    end\nend\nfunc wrapped():\n    return 1\nend\n",
+        "func wrapped():\n    return 1\nend\nfunc helper():\n    for wrapped = 0, 2:\n        println(wrapped)\n    end\nend\n"
+    ]
+    for text in sources:
+        modules: Vec[module::Module]@
+        modules.push(parse_module(text, .modules))
+        diagnostics := diag::Diagnostics{}[.modules]
+        resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0], diagnostics = diagnostics}[.modules])
+        test::suite_assert(ts, diagnostics.error_count == 0, site())
+        if diagnostics.error_count == 0:
+            mod := modules[0]
+            entry := mod.global_scope.symbols["wrapped"]
+            test::suite_assert(ts, entry is Some, site())
+            if entry is Some:
+                test::suite_assert(ts, entry?.kind == symbol::SymbolKind.FUNCTION, site())
+            end
+            for node in mod.ast.nodes:
+                if node.kind is IDENTIFIER_EXPR and node.kind.IDENTIFIER_EXPR.name == "wrapped":
+                    origin := node.kind.IDENTIFIER_EXPR.local_origin
+                    test::suite_assert(ts, origin is Some, site())
+                    if origin is Some:
+                        binding := mod.ast.nodes[origin?]
+                        test::suite_assert(ts, binding.kind is LOCAL_DECL or binding.kind is LOOP_VARIABLE, site())
+                    end
+                end
+            end
+        end
+    end
+end
+
+
+func test_if_scopes(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func main():\n    if 1:\n        first := 1\n        if first:\n            second := 2\n        end\n    end\n    if 1:\n        first := 3\n    end\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0], diagnostics = diagnostics}[.modules])
+
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    function := mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL
+    first_if := mod.ast.nodes[function.body.statements[0]].kind.IF.branches[0]
+    nested_if := mod.ast.nodes[first_if.body.statements[1]].kind.IF.branches[0]
+    second_if := mod.ast.nodes[function.body.statements[1]].kind.IF.branches[0]
+    test::suite_assert(ts, first_if.body.scope.parent is Some, site())
+    test::suite_assert(ts, nested_if.body.scope.parent is Some, site())
+    test::suite_assert(ts, first_if.body.scope.symbols["first"]?.origin == first_if.body.statements[0], site())
+    test::suite_assert(ts, nested_if.body.scope.symbols["second"]?.origin == nested_if.body.statements[0], site())
+    test::suite_assert(ts, second_if.body.scope.symbols["first"]?.origin == second_if.body.statements[0], site())
+    test::suite_assert(ts, function.body.scope.symbols["first"] is None, site())
+    test::suite_assert(ts, nested_if.body.scope.symbols["first"] is None, site())
+end
+
+
+func test_if_cannot_shadow(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func main():\n    value := 1\n    if value:\n        value := 2\n        inner := 3\n        if inner:\n            inner := 4\n        end\n    end\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0], diagnostics = diagnostics}[.modules])
+
+    test::suite_assert(ts, diagnostics.error_count == 2, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    function := mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL
+    outer := mod.ast.nodes[function.body.statements[1]].kind.IF.branches[0]
+    inner := mod.ast.nodes[outer.body.statements[2]].kind.IF.branches[0]
+    test::suite_assert(ts, outer.body.scope.symbols["value"] is None, site())
+    test::suite_assert(ts, inner.body.scope.symbols["inner"] is None, site())
+end
+
+
+func test_local_declaration_order(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func main(flag: bool):\n    if flag:\n        value := 1\n        result := value\n    end\n    value := 2\n    return value\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0], diagnostics = diagnostics}[.modules])
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    if diagnostics.error_count > 0:
+        return
+    end
+    mod := modules[0]
+    function := mod.ast.nodes[mod.ast.get_root_module().declarations[0]].kind.FUNCTION_DECL
+    branch := mod.ast.nodes[function.body.statements[0]].kind.IF.branches[0]
+    inner_use := mod.ast.nodes[branch.body.statements[1]].kind.LOCAL_DECL.initializer?
+    outer_use := mod.ast.nodes[function.body.statements[2]].kind.RETURN.value?
+    check_origin(ts, mod.ast.nodes[inner_use].kind.IDENTIFIER_EXPR.local_origin, branch.body.statements[0])
+    check_origin(ts, mod.ast.nodes[outer_use].kind.IDENTIFIER_EXPR.local_origin, function.body.statements[1])
+end
+
+
+func test_parameters_in_function_scope(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func add(left, right):\n    result := left + right\n    return result\nend\nfunc helper(left):\n    return left\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0], diagnostics = diagnostics}[.modules])
+
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    add := mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL
+    second_function := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    test::suite_assert(ts, add.body.scope.symbols["left"]?.kind == symbol::SymbolKind.PARAMETER, site())
+    test::suite_assert(ts, add.body.scope.symbols["left"]?.origin == add.parameters[0], site())
+    test::suite_assert(ts, add.body.scope.symbols["right"]?.origin == add.parameters[1], site())
+    test::suite_assert(ts, second_function.body.scope.symbols["left"]?.origin == second_function.parameters[0], site())
+    test::suite_assert(ts, mod.global_scope.symbols["left"] is None, site())
+end
+
+
+func test_parameter_conflicts(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func global():\nend\nfunc main(first, first, global):\n    first := 1\n    if first:\n        first := 2\n    end\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0], diagnostics = diagnostics}[.modules])
+
+    test::suite_assert(ts, diagnostics.error_count == 3, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    function := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    test::suite_assert(ts, function.body.scope.symbols["first"]?.origin == function.parameters[0], site())
+    test::suite_assert(ts, function.body.scope.symbols["global"]?.origin == function.parameters[2], site())
+end
+
+
+func test_parameters_hide_module_functions(ts):
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func earlier():\n    return 7\nend\nfunc combine(earlier: int, later: int):\n    return earlier + later\nend\nfunc later():\n    return 9\nend\nfunc identity(identity: int):\n    return identity\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0], diagnostics = diagnostics}[.modules])
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    if diagnostics.error_count > 0:
+        return
+    end
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    function := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    expression := mod.ast.nodes[mod.ast.nodes[function.body.statements[0]].kind.RETURN.value?].kind.BINARY
+    check_origin(ts, mod.ast.nodes[expression.left].kind.IDENTIFIER_EXPR.local_origin, function.parameters[0])
+    check_origin(ts, mod.ast.nodes[expression.right].kind.IDENTIFIER_EXPR.local_origin, function.parameters[1])
+    test::suite_assert(ts, mod.global_scope.symbols["earlier"]?.origin == root.declarations[0], site())
+    test::suite_assert(ts, mod.global_scope.symbols["later"]?.origin == root.declarations[2], site())
+    self_named := mod.ast.nodes[root.declarations[3]].kind.FUNCTION_DECL
+    returned := mod.ast.nodes[self_named.body.statements[0]].kind.RETURN.value?
+    check_origin(ts, mod.ast.nodes[returned].kind.IDENTIFIER_EXPR.local_origin, self_named.parameters[0])
+    test::suite_assert(ts, mod.global_scope.symbols["identity"]?.origin == root.declarations[3], site())
+end
+
+
+func check_origin(ts, origin: Option[int], expected: int) -> void:
+    test::suite_assert(ts, origin is Some, site())
+    if origin is Some:
+        test::suite_assert(ts, origin? == expected, site())
+    end
+end
+
+
+func test_resolved_values(ts) -> void:
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func helper(arg):\n    return arg\nend\nfunc main(input):\n    first := input + 1\n    if first < input:\n        second := helper(first)\n        return second + input\n    end\n    return first\nend\n", .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0], diagnostics = diagnostics}[.modules])
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    mod := modules[0]
+    root := mod.ast.get_root_module()
+    function := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    first_id := function.body.statements[0]
+    first := mod.ast.nodes[first_id].kind.LOCAL_DECL
+    initializer := mod.ast.nodes[first.initializer?].kind.BINARY
+    check_origin(ts, mod.ast.nodes[initializer.left].kind.IDENTIFIER_EXPR.local_origin, function.parameters[0])
+    branch := mod.ast.nodes[function.body.statements[1]].kind.IF.branches[0]
+    condition := mod.ast.nodes[branch.condition].kind.BINARY
+    check_origin(ts, mod.ast.nodes[condition.left].kind.IDENTIFIER_EXPR.local_origin, first_id)
+    check_origin(ts, mod.ast.nodes[condition.right].kind.IDENTIFIER_EXPR.local_origin, function.parameters[0])
+    second_id := branch.body.statements[0]
+    second := mod.ast.nodes[second_id].kind.LOCAL_DECL
+    call := mod.ast.nodes[second.initializer?].kind.CALL
+    check_origin(ts, mod.ast.nodes[call.arguments[0]].kind.IDENTIFIER_EXPR.local_origin, first_id)
+    test::suite_assert(ts, mod.ast.nodes[call.callee].kind.IDENTIFIER_EXPR.local_origin is None, site())
+    result := mod.ast.nodes[branch.body.statements[1]].kind.RETURN
+    sum := mod.ast.nodes[result.value?].kind.BINARY
+    check_origin(ts, mod.ast.nodes[sum.left].kind.IDENTIFIER_EXPR.local_origin, second_id)
+    check_origin(ts, mod.ast.nodes[sum.right].kind.IDENTIFIER_EXPR.local_origin, function.parameters[0])
+end
+
+
+func check_bad_reference(ts, foreign text: String, foreign expected: String, foreign name: String) -> void:
+    modules: Vec[module::Module]@
+    modules.push(parse_module(text, .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0], diagnostics = diagnostics}[.modules])
+    test::suite_assert(ts, diagnostics.error_count == 1, site())
+    if len(diagnostics.messages) != 1:
+        return
+    end
+    message := diagnostics.messages[0]
+    test::suite_assert(ts, message.summary == "semantic analysis", site())
+    test::suite_assert(ts, string::find(message.detail, expected) >= 0, site())
+    test::suite_assert(ts, message.span is Some, site())
+    if message.span is Some:
+        span := message.span?
+        test::suite_assert(ts, span.source_id == 0, site())
+        test::suite_assert(ts, must string::slice(text, span.start, span.stop) == name, site())
+        for node in modules[0].ast.nodes:
+            if node.kind is IDENTIFIER_EXPR and node.span.start == span.start:
+                test::suite_assert(ts, node.kind.IDENTIFIER_EXPR.local_origin is None, site())
+            end
+        end
+    end
+end
+
+
+func test_reference_visibility(ts) -> void:
+    check_bad_reference(ts, "func main():\n    return missing\nend\n", "undefined symbol: missing", "missing")
+    check_bad_reference(ts, "func main():\n    result := value + 1\n    value := 41\n    return result\nend\n", "used before its declaration", "value")
+    check_bad_reference(ts, "func main():\n    value := value + 1\n    return value\nend\n", "used before its declaration", "value")
+    check_bad_reference(ts, "func main():\n    if 1:\n        return later\n    end\n    later := 2\nend\n", "used before its declaration", "later")
+    check_bad_reference(ts, "func main():\n    if 1:\n        inner := 2\n    end\n    return inner\nend\n", "undefined symbol: inner", "inner")
+    check_bad_reference(ts, "func main():\n    if 1:\n        inner := 2\n    end\n    if 1:\n        return inner\n    end\nend\n", "undefined symbol: inner", "inner")
+    check_bad_reference(ts, "func helper(arg):\n    return arg\nend\nfunc main():\n    return arg\nend\n", "undefined symbol: arg", "arg")
+    check_bad_reference(ts, "func helper():\n    value := 1\n    return value\nend\nfunc main():\n    return value\nend\n", "undefined symbol: value", "value")
+    check_bad_reference(ts, "func main():\n    if missing < 1:\n        return 0\n    end\nend\n", "undefined symbol: missing", "missing")
+    check_bad_reference(ts, "func helper(arg):\n    return arg\nend\nfunc main():\n    return helper(missing + 1)\nend\n", "undefined symbol: missing", "missing")
+end
+
+
+func check_call_target(ts, call, source_id: int, origin: int) -> void:
+    test::suite_assert(ts, call.target is Some, site())
+    if call.target is Some:
+        test::suite_assert(ts, call.target?.source_id == source_id, site())
+        test::suite_assert(ts, call.target?.origin == origin, site())
+    end
+end
+
+
+func test_function_resolution(ts) -> void:
+    modules: Vec[module::Module]@
+    modules.push(parse_module("func value():\n    return 20\nend\n", .modules))
+    modules[0].source_id = 0
+    modules.push(parse_module("func main():\n    return left::value() + right::value() + value()\nend\nfunc value():\n    return value()\nend\n", .modules))
+    modules[1].source_id = 1
+    modules.push(parse_module("func value():\n    return shared::value()\nend\n", .modules))
+    modules[2].source_id = 2
+    span := modules[1].ast.nodes[0].span
+    modules[1].imports.push(module::ResolvedImport{target_id = 0, alias = "left", span})
+    modules[1].imports.push(module::ResolvedImport{target_id = 2, alias = "right", span})
+    modules[2].imports.push(module::ResolvedImport{target_id = 0, alias = "shared", span})
+    diagnostics := diag::Diagnostics{}[.modules]
+    resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0, 2, 1], diagnostics = diagnostics}[.modules])
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+    helper_root := modules[0].ast.get_root_module()
+    entry_root := modules[1].ast.get_root_module()
+    wrapper_root := modules[2].ast.get_root_module()
+    calls := 0
+    for node in modules[1].ast.nodes:
+        if node.kind is CALL:
+            call := node.kind.CALL
+            identifier := modules[1].ast.nodes[call.callee].kind.IDENTIFIER_EXPR
+            if identifier.qualifier is Some:
+                if identifier.qualifier? == "left":
+                    check_call_target(ts, call, 0, helper_root.declarations[0])
+                else:
+                    check_call_target(ts, call, 2, wrapper_root.declarations[0])
+                end
+            else:
+                check_call_target(ts, call, 1, entry_root.declarations[1])
+            end
+            calls += 1
+        end
+    end
+    test::suite_assert(ts, calls == 4, site())
+    for node in modules[2].ast.nodes:
+        if node.kind is CALL:
+            check_call_target(ts, node.kind.CALL, 0, helper_root.declarations[0])
+        end
+    end
+end
+
+
+func check_bad_call(ts, foreign text: String, foreign expected: String) -> void:
+    modules: Vec[module::Module]@
+    modules.push(parse_module(text, .modules))
+    diagnostics := diag::Diagnostics{}[.modules]
+    resolve::resolve_declarations(program::Program{modules = modules, dependency_order = [0], diagnostics = diagnostics}[.modules])
+    test::suite_assert(ts, diagnostics.error_count == 1, site())
+    if len(diagnostics.messages) != 1:
+        return
+    end
+    message := diagnostics.messages[0]
+    test::suite_assert(ts, message.summary == expected, site())
+    test::suite_assert(ts, message.span is Some, site())
+    for node in modules[0].ast.nodes:
+        if node.kind is CALL:
+            test::suite_assert(ts, node.kind.CALL.target is None, site())
+        end
+    end
+end
+
+
+func test_bad_calls(ts) -> void:
+    check_bad_call(ts, "func main():\n    return missing()\nend\n", "unknown function")
+    check_bad_call(ts, "func main():\n    return missing::value()\nend\n", "unknown import alias")
+    check_bad_call(ts, "func main():\n    value := 1\n    return value()\nend\n", "unsupported call target")
+    check_bad_call(ts, "func main(value):\n    return value()\nend\n", "unsupported call target")
+    check_bad_call(ts, "func value():\n    return 1\nend\nfunc helper(value: int):\n    return value()\nend\n", "unsupported call target")
+    check_bad_call(ts, "func value():\n    return 1\nend\nfunc helper():\n    value := 2\n    return value()\nend\n", "unsupported call target")
+end
+
+
+func run_tests(ts):
+    println("[test] test_semantic")
+    test_function_scopes(ts)
+    test_local_conflicts(ts)
+    test_locals_hide_module_functions(ts)
+    test_if_scopes(ts)
+    test_if_cannot_shadow(ts)
+    test_local_declaration_order(ts)
+    test_parameters_in_function_scope(ts)
+    test_parameter_conflicts(ts)
+    test_parameters_hide_module_functions(ts)
+    test_resolved_values(ts)
+    test_reference_visibility(ts)
+    test_function_resolution(ts)
+    test_bad_calls(ts)
+end

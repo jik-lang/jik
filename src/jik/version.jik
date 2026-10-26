@@ -1,0 +1,3 @@
+//! Release version shared by CLI reporting and generated C.
+
+VERSION := "0.1.0-beta.0"

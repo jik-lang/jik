@@ -528,6 +528,13 @@
         "throws": false
       },
       {
+        "name": "hypot",
+        "kind": "function",
+        "signature": "hypot(x: double, y: double) -> double",
+        "doc": "Compute the length of a two-dimensional vector.",
+        "throws": false
+      },
+      {
         "name": "sin",
         "kind": "function",
         "signature": "sin(x: double) -> double",
@@ -817,6 +824,13 @@
         "kind": "struct",
         "signature": "StrBuf",
         "doc": "Opaque string buffer allocated in a `Region`."
+      },
+      {
+        "name": "new_empty",
+        "kind": "function",
+        "signature": "new_empty(region: Region) -> StrBuf",
+        "doc": "Create an empty buffer when a StrBuf is default-initialized.",
+        "throws": false
       },
       {
         "name": "new",

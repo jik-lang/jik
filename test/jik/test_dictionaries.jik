@@ -1,0 +1,129 @@
+use "jik/testing" as test
+
+use "support"
+use "test_strings"
+use "../../src/jik/language/types"
+use "../../src/jik/semantic/typing/typecheck"
+use "../../src/jik/language/region_source"
+
+
+func test_types_and_iteration(ts) -> void:
+    text := "func lookup(values: Dict[int], key: String) -> Option[int]:\n    return values[key]\nend\nfunc main():\n    values := {\"a\": 1, \"b\": 2}\n    values[\"c\"] = 3\n    empty: Dict[Vec[String]]\n    total := 0\n    for key, value in values:\n        total = total + value\n    end\n    return total\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    for node in mod.ast.nodes:
+        if node.kind is INDEX:
+            if node.kind.INDEX.is_store:
+                test::suite_assert(ts, node.inferred_type? == types::atom(mod.type_store, types::Atom.INT), site())
+            else:
+                test::suite_assert(ts, types::option_element(mod.type_store, node.inferred_type?)? == types::atom(mod.type_store, types::Atom.INT), site())
+            end
+        elif node.kind is FOREACH:
+            loop := node.kind.FOREACH
+            test::suite_assert(ts, mod.ast.nodes[loop.first].inferred_type? == types::atom(mod.type_store, types::Atom.STRING), site())
+            test::suite_assert(ts, mod.ast.nodes[loop.second?].inferred_type? == types::atom(mod.type_store, types::Atom.INT), site())
+        elif node.kind is DICT_LITERAL:
+            test::suite_assert(ts, types::dict_element(mod.type_store, node.inferred_type?) is Some, site())
+        end
+    end
+end
+
+
+func test_context_regions_and_safety(ts) -> void:
+    text := "struct Node:\n    text: String\n    links: Option[Dict[Node]]\nend\nfunc make(r: Region) -> Dict[Option[Node]]:\n    return {\"node\": Some{Node{text = \"caller\"}}, \"missing\": None}\nend\nfunc read(values: Dict[String], key: String) -> int:\n    return len(values[key]?)\nend\nfunc store(values: Dict[String], key: String, text: String):\n    values[key] = text\nend\nfunc main():\n    value := make()\n    return 42\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    make := mod.ast.nodes[root.declarations[1]].kind.FUNCTION_DECL
+    read := mod.ast.nodes[root.declarations[2]].kind.FUNCTION_DECL
+    store := mod.ast.nodes[root.declarations[3]].kind.FUNCTION_DECL
+    test::suite_assert(ts, not make.needs_local_region and not make.is_region_safe, site())
+    test::suite_assert(ts, read.is_region_safe and not read.needs_local_region, site())
+    test::suite_assert(ts, not store.is_region_safe and not store.needs_local_region, site())
+    for node in mod.ast.nodes:
+        if node.kind is DICT_LITERAL or node.kind is OPTION_LITERAL or node.kind is STRUCT_LITERAL or node.kind is STRING_LITERAL or node.kind is DEFAULT_VALUE:
+            test::suite_assert(ts, node.region_source.kind == region_source::Kind.CALLER, site())
+            test::suite_assert(ts, node.allocation_target is Some, site())
+        end
+    end
+end
+
+
+func test_local_iteration_safety(ts) -> void:
+    text := "func compare(left: Dict[String], right: Dict[String]) -> bool:\n    scratch := {\"key\": \"local\"}\n    for key, value in scratch:\n        scratch[key] = value\n    end\n    return left[\"key\"]? == right[\"key\"]?\nend\n"
+    comp := test_strings::analyze(text)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    root := mod.ast.get_root_module()
+    test::suite_assert(ts, mod.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL.is_region_safe, site())
+end
+
+
+func test_errors(ts) -> void:
+    test_strings::check_error(ts, "func bad():\n    value := {}\nend\n", "empty dictionary literal")
+    test_strings::check_error(ts, "func bad():\n    value := {1: 2}\nend\n", "type inference conflict")
+    test_strings::check_error(ts, "func bad():\n    value := {\"a\": 1, \"b\": true}\nend\n", "type inference conflict")
+    test_strings::check_error(ts, "func bad(values: Dict[int]):\n    value := values[1]\nend\n", "type inference conflict")
+    test_strings::check_error(ts, "func bad(values: Dict[int]):\n    values[false] = 1\nend\n", "type inference conflict")
+    test_strings::check_error(ts, "func bad(values: Dict[int]):\n    values[\"key\"] = true\nend\n", "type inference conflict")
+    test_strings::check_error(ts, "func bad(values: Dict[int]):\n    values[\"key\"] = 1.5\nend\n", "type inference conflict")
+    test_strings::check_error(ts, "func bad(values: Dict[int]):\n    value := values[:]\nend\n", "unsupported slice")
+    test_strings::check_error(ts, "func bad(r: Region) -> Dict[String]:\n    text := \"local\"\n    return {\"key\": text}\nend\n", "region mismatch")
+    test_strings::check_error(ts, "func bad(values: Dict[String]):\n    text := \"local\"\n    values[\"key\"] = text\nend\n", "region mismatch")
+    test_strings::check_error(ts, "func bad(r: Region) -> Option[int]:\n    values := {\"key\": 1}\n    return values[\"key\"]\nend\n", "cannot return local allocation")
+    test_strings::check_error(ts, "func bad():\n    value := ({\"key\": 1})[\"key\"]\nend\n", "composite value must be bound")
+    test_strings::check_error(ts, "func bad():\n    values := {\"key\": 1}\n    for key, key in values:\n    end\nend\n", "semantic analysis")
+    test_strings::check_error(ts, "func bad():\n    values := {\"key\": 1}\n    for key, value in values:\n    end\n    result := value\nend\n", "semantic analysis")
+    test_strings::check_error(ts, "func bad(values: Dict[Region]):\nend\n", "invalid dictionary type")
+    test_strings::check_error(ts, "struct Invalid:\n    values: Dict[void]\nend\n", "invalid dictionary type")
+end
+
+
+func test_checked_metadata(ts) -> void:
+    comp := support::infer_source("func read(values: Dict[int]) -> Option[int]:\n    return values[\"key\"]\nend\n", -1)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
+    end
+    mod := comp.modules[0]
+    for node in mod.ast.nodes:
+        if node.kind is INDEX:
+            node.inferred_type = Some{types::atom(mod.type_store, types::Atom.INT)}[.node]
+        end
+    end
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count > 0, site())
+end
+
+
+func test_parser_recovery(ts) -> void:
+    parsed := support::parse_source("func main(r: Region):\n    invalid := {\"key\": \"nested\"[r]}\n    valid: Dict[int][r]\n    return 42\nend\n")
+    test::suite_assert(ts, parsed.diagnostics.error_count == 1, site())
+    root := parsed.ast.get_root_module()
+    test::suite_assert(ts, len(root.declarations) == 1, site())
+    if len(root.declarations) == 1:
+        test::suite_assert(ts, len(parsed.ast.nodes[root.declarations[0]].kind.FUNCTION_DECL.body.statements) == 2, site())
+    end
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_dictionaries")
+    test_types_and_iteration(ts)
+    test_context_regions_and_safety(ts)
+    test_local_iteration_safety(ts)
+    test_errors(ts)
+    test_checked_metadata(ts)
+    test_parser_recovery(ts)
+end

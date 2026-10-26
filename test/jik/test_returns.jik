@@ -1,0 +1,40 @@
+use "jik/string"
+use "jik/testing" as test
+
+use "support"
+use "../../src/jik/semantic/typing/typecheck"
+
+
+func test_partial_returns(ts) -> void:
+    text := "func integer(flag: bool) -> int:\n    if flag:\n        return 42\n    end\nend\nfunc real(flag: bool) -> double:\n    if flag:\n        return 2.5\n    end\nend\nfunc boolean(flag: bool) -> bool:\n    if flag:\n        return true\n    end\nend\nfunc letter(flag: bool, value: char) -> char:\n    if flag:\n        return value\n    end\nend\nfunc inferred(flag: bool):\n    if flag:\n        return 1\n    end\nend\n"
+    comp := support::infer_source(text, -1)
+    support::check_signature(ts, comp, "integer", "func(bool) -> int")
+    support::check_signature(ts, comp, "real", "func(bool) -> double")
+    support::check_signature(ts, comp, "boolean", "func(bool) -> bool")
+    support::check_signature(ts, comp, "letter", "func(bool, char) -> char")
+    support::check_signature(ts, comp, "inferred", "func(bool) -> int")
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+end
+
+
+func test_no_returns_and_post_return(ts) -> void:
+    comp := support::infer_source("func empty():\nend\nfunc annotated() -> void:\n    value := 1\nend\nfunc bare():\n    return\n    value := 1\nend\nfunc post_return():\n    return 42\n    value := 1\n    value = 2\nend\nfunc complete(flag: bool):\n    if flag:\n        return 42\n    else:\n        return 42\n    end\n    value := 1\nend\nfunc main():\nend\n", 0)
+    support::check_signature(ts, comp, "empty", "func() -> void")
+    support::check_signature(ts, comp, "annotated", "func() -> void")
+    support::check_signature(ts, comp, "bare", "func() -> void")
+    support::check_signature(ts, comp, "post_return", "func() -> int")
+    support::check_signature(ts, comp, "complete", "func(bool) -> int")
+    support::check_signature(ts, comp, "main", "func() -> int")
+    typecheck::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    translation := must support::translate("func main():\nend\nfunc helper(flag: bool) -> double:\n    if flag:\n        return 2.5\n    end\nend\n", "", _)
+    test::suite_assert(ts, string::find(translation, "return 0;") >= 0, site())
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_returns")
+    test_partial_returns(ts)
+    test_no_returns_and_post_return(ts)
+end

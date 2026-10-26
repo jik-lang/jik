@@ -1,0 +1,84 @@
+use "jik/testing" as test
+use "jik/path"
+
+use "../../src/jik/modules/import_path"
+use "../../src/jik/modules/module_loader"
+use "../../src/jik/diag"
+use "../../src/jik/source"
+use "../../src/jik/lexer/lexer"
+use "../../src/jik/parser/parser"
+
+
+func check_duplicate_import(ts, foreign input_path: String, expected_imports: int) -> void:
+    sources := source::SourceManager{}
+    diagnostics := diag::Diagnostics{}
+    id := must sources.add_source(input_path)
+    file := sources.sources[id]
+    tokens := lexer::tokenize(file, diagnostics)
+    tree := parser::parse(file, tokens, diagnostics)
+    test::suite_assert(ts, diagnostics.error_count == 0, site())
+
+    imports := module_loader::resolve_imports(sources, tree, diagnostics, file)
+    test::suite_assert(ts, diagnostics.error_count == 1, site())
+    test::suite_assert(ts, len(diagnostics.messages) == 1, site())
+    test::suite_assert(ts, len(imports) == expected_imports, site())
+    test::suite_assert(ts, len(sources.sources) == expected_imports + 1, site())
+    if len(diagnostics.messages) != 1:
+        return
+    end
+
+    root := tree.get_root_module()
+    first := tree.nodes[root.imports[0]].kind.IMPORT
+    second_node := tree.nodes[root.imports[1]]
+    second := second_node.kind.IMPORT
+    first_path := must import_path::resolve_path(sources, first.path, file)
+    target := first_path.path
+    second_path := must import_path::resolve_path(sources, second.path, file)
+    test::suite_assert(ts, second_path.path == target, site())
+    cached := sources.source_id_by_path[target]
+    test::suite_assert(ts, cached is Some, site())
+    if cached is Some and len(imports) > 0:
+        test::suite_assert(ts, imports[0].target_id == cached?, site())
+    end
+
+    message := diagnostics.messages[0]
+    test::suite_assert(ts, message.summary == concat("reuse of module ", target), site())
+    test::suite_assert(ts, message.span is Some, site())
+    if message.span is Some:
+        test::suite_assert(ts, message.span?.source_id == file.id, site())
+        test::suite_assert(ts, message.span?.start == second_node.span.start, site())
+        test::suite_assert(ts, message.span?.stop == second_node.span.stop, site())
+    end
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_import_paths")
+    check_duplicate_import(ts, "test/jik/input/import_paths/identical.jik", 1)
+    check_duplicate_import(ts, "test/jik/input/import_paths/normalized.jik", 1)
+    check_duplicate_import(ts, "test/jik/input/import_paths/same_alias.jik", 1)
+    check_duplicate_import(ts, "test/jik/input/import_paths/continue_checking.jik", 2)
+    test_resolved_import_after_error(ts)
+end
+
+
+func test_resolved_import_after_error(ts) -> void:
+    sources := source::SourceManager{}
+    diagnostics := diag::Diagnostics{}
+    file := source::SourceFile{path = "test/jik/input/import_paths/main.jik",
+        text = "use \"missing\" as skipped\nuse \"../local_imports/shared\" as remaining\n"}
+    tokens := lexer::tokenize(file, diagnostics)
+    tree := parser::parse(file, tokens, diagnostics)
+    imports := module_loader::resolve_imports(sources, tree, diagnostics, file)
+    test::suite_assert(ts, diagnostics.error_count == 1, site())
+    test::suite_assert(ts, len(imports) == 1 and len(sources.sources) == 1, site())
+    if len(imports) != 1:
+        return
+    end
+    successful_node := tree.nodes[tree.get_root_module().imports[1]]
+    test::suite_assert(ts, imports[0].target_id == sources.sources[0].id, site())
+    test::suite_assert(ts, sources.sources[imports[0].target_id].path == path::normalize("test/jik/input/local_imports/shared.jik"), site())
+    test::suite_assert(ts, imports[0].alias == "remaining", site())
+    test::suite_assert(ts, imports[0].span.start == successful_node.span.start, site())
+    test::suite_assert(ts, imports[0].span.stop == successful_node.span.stop, site())
+end

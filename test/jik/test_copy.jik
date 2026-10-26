@@ -1,163 +1,82 @@
 use "jik/testing" as test
 
-variant CopyResult:
-    OK: int
-    MSG: String
-end
+use "../../src/jik/semantic/typing/rules"
+use "support"
+use "test_regions"
+use "../../src/jik/language/builtin"
+use "../../src/jik/language/region_source"
+use "../../src/jik/semantic/typing/typecheck"
+use "../../src/jik/semantic/regions/regions"
+use "../../src/jik/language/types"
 
-struct CopyPoint:
-    x: int
-    y: double
-    label: String
-end
 
-func make_copied_string(r: Region) -> String:
-    s := "source"
-    return copy(s, r)
-end
-
-func make_copied_names(r: Region) -> Vec[String]:
-    names := ["ada", "grace"]
-    return copy(names, r)
-end
-
-func make_copied_counts(r: Region) -> Dict[int]:
-    counts: Dict[int]
-    counts["one"] = 1
-    counts["two"] = 2
-    return copy(counts, r)
-end
-
-func make_copied_labels(r: Region) -> Dict[String]:
-    labels: Dict[String]
-    labels["first"] = "alpha"
-    labels["second"] = "beta"
-    return copy(labels, r)
-end
-
-func make_copied_some(r: Region) -> Option[String]:
-    maybe := Some{"present"}
-    return copy(maybe, r)
-end
-
-func make_copied_none(r: Region) -> Option[String]:
-    maybe: Option[String]
-    maybe = None
-    return copy(maybe, r)
-end
-
-func make_copied_variant(flag: bool, r: Region) -> CopyResult:
-    if flag:
-        result := CopyResult.MSG{"message"}
-        return copy(result, r)
+func test_copy_regions(ts) -> void:
+    text := "func duplicate(foreign source: Vec[String], r: Region) -> Vec[String]:\n    local := copy(source)\n    return copy(local, r)\nend\n"
+    comp := support::infer_source(text, -1)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count > 0:
+        return
     end
-    result := CopyResult.OK{7}
-    return copy(result, r)
+    mod := comp.modules[0]
+    function := mod.ast.nodes[mod.ast.get_root_module().declarations[0]].kind.FUNCTION_DECL
+    local := mod.ast.nodes[function.body.statements[0]]
+    call := mod.ast.nodes[local.kind.LOCAL_DECL.initializer?]
+    test::suite_assert(ts, call.kind.CALL.builtin? == builtin::Kind.COPY, site())
+    test::suite_assert(ts, call.kind.CALL.auto_region and len(call.kind.CALL.arguments) == 2, site())
+    test::suite_assert(ts, call.region_source.kind == region_source::Kind.LOCAL and function.needs_local_region, site())
+    returned := mod.ast.nodes[mod.ast.nodes[function.body.statements[1]].kind.RETURN.value?]
+    test::suite_assert(ts, returned.region_source.kind == region_source::Kind.CALLER, site())
+    test::suite_assert(ts, returned.region_source.parameter_id == function.parameters[1], site())
+    test::suite_assert(ts, returned.inferred_type? == mod.ast.nodes[function.parameters[0]].inferred_type?, site())
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0 and returned.region_source.parameter_id == function.parameters[1], site())
 end
 
-func make_copied_struct(r: Region) -> CopyPoint:
-    point := CopyPoint{x = 3, y = 4.5, label = "origin"}
-    return copy(point, r)
+
+func test_copy_restrictions(ts) -> void:
+    test_regions::check_error(ts, "func bad():\n    value := copy(1)\nend\n", "unsupported copy type")
+    test_regions::check_error(ts, "func bad():\n    value := copy([[1]])\nend\n", "unsupported copy type")
+    test_regions::check_error(ts, "func bad(source: String) -> String:\n    return copy(source)\nend\n", "cannot return local allocation")
+    test_regions::check_error(ts, "func bad(foreign source: String) -> String:\n    return copy(source, .source)\nend\n", "cannot return foreign composite value")
 end
 
-func _assert_arg_to_local(ts, foreign names: Vec[String]):
-    local := copy(names)
-    test::suite_assert(ts, len(local) == 2, site())
-    test::suite_assert(ts, local[0] == "ada", site())
-    test::suite_assert(ts, local[1] == "grace", site())
+
+func test_copy_type_boundary(ts) -> void:
+    store := types::Store{}
+    types::initialize(store)
+    integer := types::atom(store, types::Atom.INT)
+    text := types::atom(store, types::Atom.STRING)
+    vector := must types::container(store, types::Container.VECTOR, text)
+    nested := must types::container(store, types::Container.VECTOR, vector)
+    external := must types::named(store, types::NamedKind.EXTERN_STRUCT, 0, 1, "Handle")
+    test::suite_assert(ts, rules::is_copyable(store, text) and rules::is_copyable(store, vector), site())
+    test::suite_assert(ts, not rules::is_copyable(store, integer), site())
+    test::suite_assert(ts, not rules::is_copyable(store, nested), site())
+    test::suite_assert(ts, not rules::is_copyable(store, external), site())
 end
 
-func _copy_arg_to_region(foreign names: Vec[String], r: Region) -> Vec[String]:
-    return copy(names, r)
+
+func test_copy_safe_store(ts) -> void:
+    text := "func append(values: Vec[String], text: String):\n    push(values, copy(text, .values))\nend\nfunc invoke(values: Vec[String]):\n    local := \"local\"\n    append(values, local)\nend\n"
+    comp := support::infer_source(text, -1)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count == 0:
+        mod := comp.modules[0]
+        append := mod.ast.nodes[mod.ast.get_root_module().declarations[0]].kind.FUNCTION_DECL
+        test::suite_assert(ts, append.is_region_safe, site())
+    end
+    test_regions::check_error(ts, "func append(values: Vec[String], text: String, r: Region):\n    push(values, copy(text, r))\nend\nfunc invoke(values: Vec[String]):\n    local := \"local\"\n    append(values, local, _)\nend\n", "region mismatch")
 end
 
-func test_copy_string(ts):
-    s := make_copied_string(_)
-    test::suite_assert(ts, s == "source", site())
-end
 
-func test_copy_vec_int(ts):
-    nums := [1, 2, 3]
-    nums2 := copy(nums)
-    nums[1] = 99
-    test::suite_assert(ts, len(nums2) == 3, site())
-    test::suite_assert(ts, nums2[0] == 1, site())
-    test::suite_assert(ts, nums2[1] == 2, site())
-    test::suite_assert(ts, nums2[2] == 3, site())
-end
-
-func test_copy_vec_string(ts):
-    names := make_copied_names(_)
-    test::suite_assert(ts, len(names) == 2, site())
-    test::suite_assert(ts, names[0] == "ada", site())
-    test::suite_assert(ts, names[1] == "grace", site())
-end
-
-func test_copy_dict_int(ts):
-    counts := make_copied_counts(_)
-    test::suite_assert(ts, counts["one"] is Some, site())
-    test::suite_assert(ts, counts["one"]? == 1, site())
-    test::suite_assert(ts, counts["two"] is Some, site())
-    test::suite_assert(ts, counts["two"]? == 2, site())
-end
-
-func test_copy_dict_string(ts):
-    labels := make_copied_labels(_)
-    test::suite_assert(ts, labels["first"] is Some, site())
-    test::suite_assert(ts, labels["first"]? == "alpha", site())
-    test::suite_assert(ts, labels["second"] is Some, site())
-    test::suite_assert(ts, labels["second"]? == "beta", site())
-end
-
-func test_copy_option_string_some(ts):
-    maybe := make_copied_some(_)
-    test::suite_assert(ts, maybe is Some, site())
-    test::suite_assert(ts, maybe? == "present", site())
-end
-
-func test_copy_option_string_none(ts):
-    maybe := make_copied_none(_)
-    test::suite_assert(ts, maybe is None, site())
-end
-
-func test_copy_variant_simple_payloads(ts):
-    msg := make_copied_variant(true, _)
-    ok := make_copied_variant(false, _)
-    test::suite_assert(ts, msg is MSG, site())
-    test::suite_assert(ts, msg.MSG == "message", site())
-    test::suite_assert(ts, ok is OK, site())
-    test::suite_assert(ts, ok.OK == 7, site())
-end
-
-func test_copy_struct_simple_fields(ts):
-    point := make_copied_struct(_)
-    test::suite_assert(ts, point.x == 3, site())
-    test::suite_assert(ts, point.y == 4.5, site())
-    test::suite_assert(ts, point.label == "origin", site())
-end
-
-func test_copy_region_transfer_arg_to_local(ts):
-    names := make_copied_names(_)
-    _assert_arg_to_local(ts, names)
-end
-
-func test_copy_region_transfer_arg_to_arg(ts):
-    names := make_copied_names(_)
-    names2 := _copy_arg_to_region(names, _)
-    test::suite_assert(ts, len(names2) == 2, site())
-    test::suite_assert(ts, names2[0] == "ada", site())
-end
-
-func run_tests(ts):
-    test_copy_string(ts)
-    test_copy_vec_int(ts)
-    test_copy_vec_string(ts)
-    test_copy_dict_int(ts)
-    test_copy_dict_string(ts)
-    test_copy_option_string_some(ts)
-    test_copy_option_string_none(ts)
-    test_copy_variant_simple_payloads(ts)
-    test_copy_struct_simple_fields(ts)
-    test_copy_region_transfer_arg_to_local(ts)
-    test_copy_region_transfer_arg_to_arg(ts)
+func run_tests(ts) -> void:
+    println("[test] test_copy")
+    test_copy_regions(ts)
+    test_copy_restrictions(ts)
+    test_copy_type_boundary(ts)
+    test_copy_safe_store(ts)
 end

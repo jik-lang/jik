@@ -1,157 +1,104 @@
 CC = clang
 CFLAGS = -Wall -Wextra -Wno-unused-parameter -std=c11 \
          -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_WARNINGS
-RELEASE_CFLAGS = -O3
-#CFLAGS += -fsanitize=address -fno-omit-frame-pointer -g
-# IMPORTANT: use this to check for memory leaks
-#		gcc -g -O0 -o tt tests.c && valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --errors-for-leak-kinds=all --track-fds=yes ./tt
-
 
 ifeq ($(OS),Windows_NT)
     SHELL = cmd.exe
     .SHELLFLAGS = /C
-    RM = -del /F /Q
-    RMDIR = -rmdir /S /Q
-    MKDIR = mkdir
     EXE = .exe
-	RUN = .\$(TARGET)
-	CP = copy /Y
-	CPDIR = xcopy /E /I /Y
-	PLATFORM = windows
-	ARCHIVE_EXT = zip
-    BOOTSTRAP_COMPILER = .\$(1)$(EXE)
-    BOOTSTRAP_TEST_ENV = set "JIK_TEST_COMPILER=.\$(1)$(EXE)"&&
+    COMPILER = .\$(1)$(EXE)
+    TEST_ENV = set "JIK_CC=$(CC)"&& set "JIK_TEST_COMPILER=.\$(1)$(EXE)"&&
+    PLATFORM = windows
+    ARCHIVE_EXT = zip
 else
-    RM = rm -f
-    RMDIR = rm -rf
-    MKDIR = mkdir -p
     EXE =
-	RUN = ./$(TARGET)
-	CP = cp -f
-	CPDIR = cp -R
-	PLATFORM = linux
-	ARCHIVE_EXT = tar.gz
-    BOOTSTRAP_COMPILER = ./$(1)$(EXE)
-    BOOTSTRAP_TEST_ENV = JIK_TEST_COMPILER=./$(1)$(EXE)
+    PLATFORM_CFLAGS = -D_POSIX_C_SOURCE=200809L
+    COMPILER = ./$(1)$(EXE)
+    TEST_ENV = JIK_CC="$(CC)" JIK_TEST_COMPILER="./$(1)$(EXE)"
+    PLATFORM = linux
+    ARCHIVE_EXT = tar.gz
 endif
 
+SEED_SOURCES := $(wildcard src/seed/*.c)
+ARCHIVE = jik-$(VERSION)-$(PLATFORM)-x64.$(ARCHIVE_EXT)
+CLEAN_COMPILERS = jik jik-seed jik-stage1 jik-stage2 jik-stage3
+CLEAN_EXECUTABLES = $(CLEAN_COMPILERS) $(addsuffix .exe,$(CLEAN_COMPILERS))
 
-TARGET      = jik$(EXE)
-BOOTSTRAP_TARGET = jik1$(EXE)
+.PHONY: all seed test test-seed test-bootstrap-full release release-archive clean help
 
-OBJ_DIR  = obj
-SRC_DIR  = src/jik
-BOOTSTRAP_DIR = src/bootstrap
+# Rebuild each time: source edits and changed flags always take effect.
+all: seed
+	"$(call COMPILER,jik-seed)" build src/jik/main.jik --cc "$(CC)" --ccflags "$(CFLAGS) $(PLATFORM_CFLAGS)" --out jik$(EXE)
 
-BIN_DIR = release
-ARTIFACT_DIR = artifacts
-ARCH = x64
+seed:
+	"$(CC)" $(CFLAGS) $(PLATFORM_CFLAGS) -o jik-seed$(EXE) $(SEED_SOURCES)
 
-SRCS      := $(notdir $(wildcard $(SRC_DIR)/*.c))
-OBJS      := $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
-CORE_OBJS := $(filter-out $(OBJ_DIR)/jik.o,$(OBJS))
+test: all
+	$(call TEST_ENV,jik) "$(call COMPILER,jik)" run test/jik/tests.jik --cc "$(CC)"
 
-DEPS = $(OBJS:.o=.d)
-ARCHIVE_BASENAME = jik-$(VERSION)-$(PLATFORM)-$(ARCH)
+test-seed: seed
+	$(call TEST_ENV,jik-seed) "$(call COMPILER,jik-seed)" run test/seed/tests.jik --cc "$(CC)"
 
-.PHONY: all run test test-core test-boot test-bootstrap-full boot clean ensuredirs release release-archive force-version
+test-bootstrap-full: test-seed
+	"$(call COMPILER,jik-seed)" build src/jik/main.jik --cc "$(CC)" --release --out jik-stage1$(EXE)
+	$(call TEST_ENV,jik-stage1) "$(call COMPILER,jik-stage1)" run test/jik/tests.jik --cc "$(CC)"
+	"$(call COMPILER,jik-stage1)" build src/jik/main.jik --cc "$(CC)" --release --out jik-stage2$(EXE)
+	$(call TEST_ENV,jik-stage2) "$(call COMPILER,jik-stage2)" run test/jik/tests.jik --cc "$(CC)"
+	"$(call COMPILER,jik-stage2)" build src/jik/main.jik --cc "$(CC)" --release --out jik-stage3$(EXE)
+	$(call TEST_ENV,jik-stage3) "$(call COMPILER,jik-stage3)" run test/jik/tests.jik --cc "$(CC)"
+	"$(call COMPILER,jik-stage3)" run scripts/compare-bootstrap.jik --cc "$(CC)"
 
-all: ensuredirs $(TARGET)
+# Package the exact stage-2 executable verified by the full bootstrap.
+release: test-bootstrap-full
+ifeq ($(OS),Windows_NT)
+	@if not exist release mkdir release
+	@copy /Y jik-stage2$(EXE) release\jik$(EXE) >nul
+	@copy /Y LICENSE release\ >nul
+	@for %%d in (jiklib support docs examples) do @if exist "release\%%d" rmdir /S /Q "release\%%d"
+	@xcopy /E /I /Y jiklib release\jiklib\ >nul
+	@xcopy /E /I /Y support release\support\ >nul
+	@xcopy /E /I /Y docs release\docs\ >nul
+	@xcopy /E /I /Y examples release\examples\ >nul
+else
+	mkdir -p release
+	cp jik-stage2$(EXE) release/jik$(EXE)
+	cp LICENSE release/
+	rm -rf release/jiklib release/support release/docs release/examples
+	cp -R jiklib support docs examples release/
+endif
 
-ensuredirs: $(OBJ_DIR)
-$(OBJ_DIR):
-	mkdir $(OBJ_DIR)
-
-$(TARGET): $(OBJ_DIR)/jik.o $(CORE_OBJS)
-	$(CC) $(CFLAGS) -o $@ $^
-
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
-	$(CC) $(CFLAGS) -MMD -c $< -o $@
-
--include $(DEPS)
-
-run: $(TARGET)
-	$(RUN)
-
-boot: ensuredirs $(TARGET)
-	$(RUN) build $(BOOTSTRAP_DIR)/main.jik --out $(BOOTSTRAP_TARGET)
-
-test: test-core
-
-test-core: $(TARGET)
-	$(call BOOTSTRAP_TEST_ENV,jik) $(RUN) run test/jik/tests.jik
-
-test-boot: boot
-	$(call BOOTSTRAP_TEST_ENV,jik1) $(call BOOTSTRAP_COMPILER,jik1) run test/bootstrap/tests.jik
-
-# Each suite and its nested compiler invocations use the same bootstrap stage.
-define bootstrap-test
-	$(call BOOTSTRAP_TEST_ENV,$(1)) $(call BOOTSTRAP_COMPILER,$(1)) run test/bootstrap/tests.jik
-endef
-
-test-bootstrap-full: all
-	@echo [1/9] C seed ready
-	@echo [2/9] Test the seed
-	$(call BOOTSTRAP_TEST_ENV,jik) $(RUN) run test/jik/tests.jik
-	@echo [3/9] Build jik1 with the seed
-	$(RUN) build $(BOOTSTRAP_DIR)/main.jik --out jik1$(EXE)
-	@echo [4/9] Test jik1
-	$(call bootstrap-test,jik1)
-	@echo [5/9] Build jik2 with jik1
-	$(call BOOTSTRAP_COMPILER,jik1) build $(BOOTSTRAP_DIR)/main.jik --out jik2$(EXE)
-	@echo [6/9] Test jik2
-	$(call bootstrap-test,jik2)
-	@echo [7/9] Build jik3 with jik2
-	$(call BOOTSTRAP_COMPILER,jik2) build $(BOOTSTRAP_DIR)/main.jik --out jik3$(EXE)
-	@echo [8/9] Test jik3
-	$(call bootstrap-test,jik3)
-	@echo [9/9] Compare C generated by jik2 and jik3
-	$(call BOOTSTRAP_COMPILER,jik3) run scripts/compare-bootstrap.jik
-	@echo Bootstrap passed: seed regressions, all three bootstrap suites, and matching C.
+release-archive:
+ifndef VERSION
+	$(error VERSION is required. Use make release-archive VERSION=v0.1.0-beta.0)
+else
+release-archive: release
+ifeq ($(OS),Windows_NT)
+	@if not exist artifacts mkdir artifacts
+	@powershell -NoProfile -Command "Compress-Archive -Path 'release\*' -DestinationPath 'artifacts\$(ARCHIVE)' -Force"
+else
+	mkdir -p artifacts
+	tar -C release -czf "artifacts/$(ARCHIVE)" .
+endif
+	@echo Created artifacts/$(ARCHIVE)
+endif
 
 clean:
-	$(RM) $(OBJ_DIR)/* $(TARGET) $(BOOTSTRAP_TARGET)
-	$(RMDIR) $(OBJ_DIR)
-	$(RMDIR) $(BIN_DIR)
-	$(RMDIR) $(ARTIFACT_DIR)
-
-# --- Release builds
-
-release:
-	@"$(MAKE)" CFLAGS="$(CFLAGS) $(RELEASE_CFLAGS)" all
 ifeq ($(OS),Windows_NT)
-	@if not exist "$(BIN_DIR)" mkdir "$(BIN_DIR)"
-	@copy /Y "$(TARGET)" "$(BIN_DIR)\"
-	@copy /Y "LICENSE" "$(BIN_DIR)\"
-	@rmdir /S /Q "$(BIN_DIR)\jiklib" 2>nul || exit /B 0
-	@rmdir /S /Q "$(BIN_DIR)\support" 2>nul || exit /B 0
-	@rmdir /S /Q "$(BIN_DIR)\docs" 2>nul || exit /B 0
-	@rmdir /S /Q "$(BIN_DIR)\examples" 2>nul || exit /B 0
-	@xcopy /E /I /Y "jiklib"  "$(BIN_DIR)\jiklib\"  >nul
-	@xcopy /E /I /Y "support" "$(BIN_DIR)\support\" >nul
-	@xcopy /E /I /Y "docs"    "$(BIN_DIR)\docs\"    >nul
-	@xcopy /E /I /Y "examples" "$(BIN_DIR)\examples\" >nul
+	@for %%f in ($(CLEAN_EXECUTABLES)) do @if exist "%%f" del /F /Q "%%f"
+	@for %%d in (build release artifacts) do @if exist "%%d" rmdir /S /Q "%%d"
 else
-	@mkdir -p "$(BIN_DIR)"
-	@cp -f "$(TARGET)" "$(BIN_DIR)/"
-	@cp -f "LICENSE" "$(BIN_DIR)/"
-	@rm -rf "$(BIN_DIR)/jiklib" "$(BIN_DIR)/support" "$(BIN_DIR)/docs" "$(BIN_DIR)/examples"
-	@cp -R "jiklib"  "$(BIN_DIR)/"
-	@cp -R "support" "$(BIN_DIR)/"
-	@cp -R "docs"    "$(BIN_DIR)/"
-	@cp -R "examples" "$(BIN_DIR)/"
+	rm -f $(CLEAN_EXECUTABLES)
+	rm -rf build release artifacts
 endif
 
-release-archive: $(if $(strip $(VERSION)),,force-version) release
-ifeq ($(OS),Windows_NT)
-	@if not exist "$(ARTIFACT_DIR)" mkdir "$(ARTIFACT_DIR)"
-	@powershell -NoProfile -Command "if (Test-Path '$(ARTIFACT_DIR)\$(ARCHIVE_BASENAME).$(ARCHIVE_EXT)') { Remove-Item -Force '$(ARTIFACT_DIR)\$(ARCHIVE_BASENAME).$(ARCHIVE_EXT)' }; Compress-Archive -Path '$(BIN_DIR)\*' -DestinationPath '$(ARTIFACT_DIR)\$(ARCHIVE_BASENAME).$(ARCHIVE_EXT)' -Force"
-	@echo Created $(ARTIFACT_DIR)\$(ARCHIVE_BASENAME).$(ARCHIVE_EXT)
-else
-	@mkdir -p "$(ARTIFACT_DIR)"
-	@tar -C "$(BIN_DIR)" -czf "$(ARTIFACT_DIR)/$(ARCHIVE_BASENAME).$(ARCHIVE_EXT)" .
-	@echo Created $(ARTIFACT_DIR)/$(ARCHIVE_BASENAME).$(ARCHIVE_EXT)
-endif
-
-force-version:
-	$(error VERSION is required. Use make release-archive VERSION=v0.1.0)
+help:
+	@echo make - Build the development compiler as jik$(EXE)
+	@echo make test - Build and run compiler/language tests
+	@echo make seed - Build only the C seed
+	@echo make test-seed - Build and test the C seed
+	@echo make test-bootstrap-full - Test the seed and three optimized stages
+	@echo make release - Verify all stages and stage release/jik$(EXE)
+	@echo make release-archive VERSION=... - Verify and create an archive in artifacts/
+	@echo make clean - Remove generated build and release outputs
+	@echo Use CC=gcc or CC=clang to select the C compiler.
+	@echo See docs/development.md for build and release details.

@@ -1,0 +1,65 @@
+use "jik/testing" as test
+
+use "../../src/jik/codegen/c_names"
+use "../../src/jik/codegen/writer"
+use "../../src/jik/language/types"
+
+
+func check_name(ts, foreign store: types::Store, id: int, foreign expected: String) -> void:
+    output := writer::new()
+    c_names::write_fragment(output, store, id)
+    test::suite_assert(ts, writer::finish(output) == expected, site())
+end
+
+
+func test_container_names(ts) -> void:
+    store := types::Store{}
+    atoms := [types::Atom.INT, types::Atom.DOUBLE, types::Atom.BOOL, types::Atom.CHAR, types::Atom.STRING, types::Atom.SITE]
+    fragments := ["int32_t", "double", "bool", "uint8_t", "JikString", "JikSite"]
+    for index, atom in atoms:
+        element := types::atom(store, atom)
+        vector := must types::container(store, types::Container.VECTOR, element)
+        dictionary := must types::container(store, types::Container.DICTIONARY, element)
+        option := must types::container(store, types::Container.OPTION, element)
+        check_name(ts, store, vector, concat("jik_vec_", fragments[index]))
+        check_name(ts, store, dictionary, concat("jik_dict_", fragments[index]))
+        check_name(ts, store, option, concat("jik_opt_", fragments[index]))
+    end
+    integer := types::atom(store, types::Atom.INT)
+    vector := must types::container(store, types::Container.VECTOR, integer)
+    nested_vector := must types::container(store, types::Container.VECTOR, vector)
+    dictionary := must types::container(store, types::Container.DICTIONARY, integer)
+    nested_dictionary := must types::container(store, types::Container.DICTIONARY, dictionary)
+    option := must types::container(store, types::Container.OPTION, integer)
+    nested_option := must types::container(store, types::Container.OPTION, option)
+    mixed := must types::container(store, types::Container.DICTIONARY, vector)
+    check_name(ts, store, nested_vector, "jik_vec_vec_int32_t")
+    check_name(ts, store, nested_dictionary, "jik_dict_dict_int32_t")
+    check_name(ts, store, nested_option, "jik_opt_jik_opt_int32_t")
+    check_name(ts, store, mixed, "jik_dict_jik_vec_int32_t")
+end
+
+
+func test_named_identity_and_type_order(ts) -> void:
+    first := types::Store{}
+    left := must types::named(first, types::NamedKind.STRUCT, 1, 7, "Point")
+    right := must types::named(first, types::NamedKind.STRUCT, 2, 7, "Point")
+    left_vector := must types::container(first, types::Container.VECTOR, left)
+    right_vector := must types::container(first, types::Container.VECTOR, right)
+    check_name(ts, first, left_vector, "jik_vec_jik_type_m1_Point")
+    check_name(ts, first, right_vector, "jik_vec_jik_type_m2_Point")
+
+    second := types::Store{}
+    types::initialize(second)
+    shifted := must types::named(second, types::NamedKind.STRUCT, 1, 7, "Point")
+    shifted_vector := must types::container(second, types::Container.VECTOR, shifted)
+    test::suite_assert(ts, left != shifted, site())
+    check_name(ts, second, shifted_vector, "jik_vec_jik_type_m1_Point")
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_c_names")
+    test_container_names(ts)
+    test_named_identity_and_type_order(ts)
+end

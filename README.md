@@ -10,7 +10,7 @@ _A readable, statically typed language that compiles to C and manages memory wit
   <a href="https://github.com/jik-lang/jik/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jik-lang/jik/actions/workflows/ci.yml/badge.svg?branch=main&event=push"></a>
   <a href="https://jik-lang.org"><img alt="Website" src="https://img.shields.io/badge/website-jik--lang.org-111827"></a>
   <a href="https://discord.gg/cnA8X5yKeA"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join%20chat-5865F2?logo=discord&logoColor=white"></a>
-  <a href="docs/development.md#roadmap"><img alt="Status" src="https://img.shields.io/badge/status-alpha-b45309"></a>
+  <a href="docs/development.md#roadmap"><img alt="Status" src="https://img.shields.io/badge/status-beta-b45309"></a>
   <img alt="Backend" src="https://img.shields.io/badge/backend-C-2563eb">
   <img alt="Memory" src="https://img.shields.io/badge/memory-region--based-0f766e">
 </p>
@@ -144,16 +144,17 @@ Only `gcc` and `clang` host compilers were tested. MSVC was not tested.
 <a id="build-from-src"></a>
 ## Building Jik from source
 
-To build Jik from source, you will need `make` and a C compiler:
+You need Make and Clang or GCC. From the repository root:
 
-- download the Jik repository and navigate to the root
-- run `make`
+```sh
+make                       # Build jik
+make test                  # Build and run the tests
+make help                  # Show build commands
+```
 
-Additionally, to run the Jik test suite:
-
-- run `make test`
-
-Note that MSVC was not tested and is not the default build path in this repository
+Use `make CC=gcc` to build with GCC; Clang is the default. The build uses the
+bundled C seed, so you do not need to download a Jik compiler. See the
+[development notes](docs/development.md) for bootstrap stages and release builds.
 
 ## VS Code support
 

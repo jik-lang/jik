@@ -1,0 +1,278 @@
+//! Shared C generation state and helpers for writing names, types, and strings.
+
+use "jik/string"
+
+use "writer"
+use "c_names"
+use "../diag"
+use "../modules/module"
+use "../source"
+use "../parser/ast"
+use "../language/types"
+use "../lexer/string_literal"
+
+
+// Mutable state for one C translation; module and type IDs are compilation-wide.
+// Type collections and their visited sets accumulate across the translation.
+struct Translation:
+    output: writer::Writer
+    modules: Vec[module::Module]    // Indexed by source ID, matching sources.sources.
+    dependency_order: Vec[int]    // Source IDs in dependency-first traversal order.
+    initialization_order: Vec[int]    // Prepared startup schedule from Program; never chosen by the emitter.
+    sources: source::SourceManager
+    diagnostics: diag::Diagnostics
+    needs_global_region: bool    // Whether program startup must create a global allocation region.
+    main_source_id: int    // Source ID of the entry module; indexes modules.
+    vector_types: Vec[int]    // Vector type IDs; dependencies precede their containing vector.
+    // Type IDs needing print helpers, collected after their dependencies.
+    printed_types: Vec[int]
+    record_types: Vec[int]    // Struct/variant type IDs needing C data declarations and helpers.
+    option_types: Vec[int]    // Option type IDs needing C data declarations and helpers.
+    dict_types: Vec[int]    // Dictionary type IDs needing C data declarations and helpers.
+    // Visited type IDs during data-type collection; prevents recursive revisits.
+    data_types_seen: Vec[int]
+    // Visited type IDs during print-helper collection; prevents recursive revisits.
+    printed_types_seen: Vec[int]
+    emit_source_loc: bool
+    region_tree: bool
+end
+
+
+func emit_region_enter(g: Translation, foreign label: String):
+    if g.region_tree:
+        g.output.start_line()
+        g.output.write("jik_region_tree_enter(")
+        write_string_bytes(g, label)
+        g.output.write(");")
+        g.output.end_line()
+    end
+end
+
+func emit_region_free(g: Translation, foreign variable: String):
+    if g.region_tree:
+        g.output.line("jik_region_tree_leave();")
+    end
+    g.output.line(concat("jik_region_free(", variable, ");"))
+end
+
+func emit_source_location(g: Translation, node: ast::Node) -> void:
+    if not g.emit_source_loc:
+        return
+    end
+    file := g.sources.sources[node.span.source_id]
+    line := source::line_index(file, node.span.start)
+    column := node.span.start - source::line_start(file, line) + 1
+    // Keep filenames on one comment line, including escaped Windows paths.
+    escaped := string::replace(file.path, "\\", "\\\\")
+    escaped = string::replace(escaped, "\n", "\\n")
+    escaped = string::replace(escaped, "\r", "\\r")
+    g.output.line(concat("// source: ", escaped, ":", string::from_int(line + 1), ":", string::from_int(column)))
+end
+
+func write_copy_name(g: Translation, id: int) -> void:
+    g.output.write(concat("jik_copy_", string::from_int(id)))
+end
+
+func write_print_conversion(g: Translation, store: types::Store, id: int) -> void:
+    kind := store.types[id].kind
+    if kind is ATOM:
+        match kind.ATOM:
+        case INT:
+            g.output.write("jik_int_tostr")
+        case DOUBLE:
+            g.output.write("jik_double_tostr")
+        case BOOL:
+            g.output.write("jik_bool_tostr")
+        case CHAR:
+            g.output.write("jik_char_tostr")
+        case STRING:
+            g.output.write("jik_string_tostr")
+        other:
+            // Type checking rejects non-printable types before emission.
+            assert(false)
+        end
+    elif types::is_extern_struct(store, id):
+        g.output.write(concat("jik_opaque_", string::from_int(id), "_tostr"))
+    elif types::is_enum(store, id):
+        write_enum_name(g, id)
+        g.output.write("_tostr")
+    elif types::is_record(store, id):
+        write_record_name(g, id)
+        g.output.write("_tostr")
+    elif types::option_element(store, id) is Some:
+        write_option_name(g, id)
+        g.output.write("_tostr")
+    elif types::dict_element(store, id) is Some:
+        write_dict_name(g, id)
+        g.output.write("_tostr")
+    else:
+        write_vector_name(g, id)
+        g.output.write("_tostr")
+    end
+end
+
+func write_dict_name(g: Translation, type_id: int) -> void:
+    c_names::write_container(g.output, g.modules[g.main_source_id].type_store, type_id)
+end
+
+func write_collection_name(g: Translation, store: types::Store, type_id: int) -> void:
+    if types::dict_element(store, type_id) is Some:
+        write_dict_name(g, type_id)
+    else:
+        write_vector_name(g, type_id)
+    end
+end
+
+func write_option_name(g: Translation, type_id: int) -> void:
+    c_names::write_container(g.output, g.modules[g.main_source_id].type_store, type_id)
+end
+
+func write_record_name(g: Translation, type_id: int) -> void:
+    c_names::write_named(g.output, g.modules[g.main_source_id].type_store, type_id)
+end
+
+func write_enum_name(g: Translation, type_id: int) -> void:
+    c_names::write_named(g.output, g.modules[g.main_source_id].type_store, type_id)
+end
+
+func write_enum_member(g: Translation, type_id: int, member: int) -> void:
+    write_enum_name(g, type_id)
+    g.output.write(concat("_value_", string::from_int(member)))
+end
+
+func write_field_name(g: Translation, foreign name: String) -> void:
+    g.output.write(concat("jik_f_", name))
+end
+
+func write_vector_name(g: Translation, type_id: int) -> void:
+    c_names::write_container(g.output, g.modules[g.main_source_id].type_store, type_id)
+end
+
+func write_name(g: Translation, source_id: int, foreign name: String) -> void:
+    g.output.write("jik_m")
+    g.output.write(string::from_int(source_id))
+    g.output.write("_")
+    g.output.write(name)
+end
+
+func write_function_name(g: Translation, source_id: int, foreign function: ast::FunctionDecl) -> void:
+    if function.external_name is Some:
+        g.output.write(function.external_name?)
+    else:
+        write_name(g, source_id, function.name)
+    end
+end
+
+func write_local(g: Translation, foreign name: String) -> void:
+    g.output.write("jik_v_")
+    g.output.write(name)
+end
+
+func write_parameter(g: Translation, mod: module::Module, id: int) -> void:
+    parameter := mod.ast.nodes[id].kind.PARAMETER
+    if parameter.is_external:
+        // C wrappers do not inherit external parameter spelling or duplicates.
+        g.output.write(concat("jik_p_", string::from_int(id)))
+    else:
+        write_local(g, parameter.name)
+    end
+end
+
+// A separate prefix and declaration ID keep helpers distinct from source names.
+func write_must_name(g: Translation, source_id: int, origin: int) -> void:
+    g.output.write(concat("jik_must_m", string::from_int(source_id), "_f", string::from_int(origin)))
+end
+
+/// Write a checked type as a C value type, leaving declarator spacing to callers.
+/// Record an error and fail if the type cannot be written in C.
+throws func write_type(g: Translation, mod: module::Module, type_id: int, node: ast::Node) -> void:
+    kind := mod.type_store.types[type_id].kind
+    if types::is_extern_struct(mod.type_store, type_id):
+        definition := kind.NAMED
+        declaration := g.modules[definition.source_id].ast.nodes[definition.declaration_id].kind.TYPE_DECL
+        g.output.write("struct ")
+        g.output.write(declaration.external_name?)
+        g.output.write(" *")
+        return
+    end
+    if types::is_enum(mod.type_store, type_id):
+        g.output.write("enum ")
+        write_enum_name(g, type_id)
+        return
+    end
+    if types::dict_element(mod.type_store, type_id) is Some:
+        g.output.write("struct ")
+        write_dict_name(g, type_id)
+        g.output.write(" *")
+        return
+    end
+    if types::option_element(mod.type_store, type_id) is Some:
+        g.output.write("struct ")
+        write_option_name(g, type_id)
+        g.output.write(" *")
+        return
+    end
+    if types::is_record(mod.type_store, type_id):
+        g.output.write("struct ")
+        write_record_name(g, type_id)
+        g.output.write(" *")
+        return
+    end
+    if types::vector_element(mod.type_store, type_id) is Some:
+        g.output.write("struct ")
+        write_vector_name(g, type_id)
+        g.output.write(" *")
+        return
+    end
+    if kind is ATOM:
+        c_names::write_atom_type(g.output, kind.ATOM)
+        return
+    end
+    diag::error(g.diagnostics, "unsupported C type", "bootstrap emission currently supports scalar types, String, vectors, dictionaries, structs, Options, Region, Site and void", Some{node.span})
+    fail("code generation failed")
+end
+
+func write_string_bytes(g: Translation, foreign value: String) -> void:
+    g.output.write("\"")
+    for index = 0, len(value):
+        ch := value[index]
+        code := string_literal::byte_value(ch)
+        if ch == '"':
+            g.output.write("\\\"")
+        elif ch == '\\':
+            g.output.write("\\\\")
+        elif code >= 32 and code < 127:
+            g.output.write(string::from_char(ch))
+        else:
+            // Three octal digits prevent a following digit from extending an
+            // escape and preserve UTF-8 bytes independently of C source encoding.
+            g.output.write(concat("\\", string::from_int(code / 64), string::from_int((code / 8) % 8), string::from_int(code % 8)))
+        end
+    end
+    g.output.write("\"")
+end
+
+func write_debug_location(g: Translation, node: ast::Node) -> void:
+    file := g.sources.sources[node.span.source_id]
+    write_string_bytes(g, concat(file.path, " at byte ", string::from_int(node.span.start)))
+end
+
+func write_data_name(g: Translation, store: types::Store, id: int) -> void:
+    if types::is_record(store, id):
+        write_record_name(g, id)
+    elif types::option_element(store, id) is Some:
+        write_option_name(g, id)
+    elif types::dict_element(store, id) is Some:
+        write_dict_name(g, id)
+    else:
+        write_vector_name(g, id)
+    end
+end
+
+func write_table_name(g: Translation, source_id: int, foreign name: String) -> void:
+    g.output.write(concat("jik_table_", string::from_int(source_id), "_", name))
+end
+
+func write_global_name(g: Translation, source_id: int, foreign name: String) -> void:
+    g.output.write(concat("jik_global_", string::from_int(source_id), "_", name))
+end

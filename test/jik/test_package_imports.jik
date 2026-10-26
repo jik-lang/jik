@@ -1,0 +1,134 @@
+use "jik/fs"
+use "jik/path"
+use "jik/string"
+use "jik/sys"
+use "jik/testing" as test
+
+use "../../src/jik/modules/import_path"
+use "../../src/jik/modules/module_loader"
+use "../../src/jik/compiler"
+use "../../src/jik/diag"
+use "../../src/jik/source"
+use "../../src/jik/lexer/lexer"
+use "../../src/jik/parser/parser"
+
+
+func test_package_configuration(ts) -> void:
+    config := compiler::Config{}
+    comp := must compiler::new(config)
+    expected := sys::getenv("JIK_PKG_PATH")
+    test::suite_assert(ts, (comp.program.sources.package_path is Some) == (expected is Some), site())
+    if comp.program.sources.package_path is Some and expected is Some:
+        test::suite_assert(ts, comp.program.sources.package_path? == expected?, site())
+    end
+end
+
+
+func test_package_paths(ts) -> void:
+    sources := source::SourceManager{package_path = Some{"package store"}}
+    file := source::SourceFile{path = "unrelated/main.jik"}
+    entry_path := must import_path::resolve_path(sources, "pkg/demo", file)
+    entry := entry_path.path
+    nested_path := must import_path::resolve_path(sources, "pkg/demo/nested/offset", file)
+    nested := nested_path.path
+    local_path := must import_path::resolve_path(sources, "pkg_extra/demo", file)
+    local := local_path.path
+    test::suite_assert(ts, entry == path::normalize("package store/packages/demo/src/demo.jik"), site())
+    test::suite_assert(ts, nested == path::normalize("package store/packages/demo/src/nested/offset.jik"), site())
+    test::suite_assert(ts, local == path::normalize("unrelated/pkg_extra/demo.jik"), site())
+end
+
+
+func test_missing_package_path(ts) -> void:
+    sources := source::SourceManager{}
+    diagnostics := diag::Diagnostics{}
+    id := must sources.add_source("test/jik/input/package_imports/project/submodule.jik")
+    file := sources.sources[id]
+    tokens := lexer::tokenize(file, diagnostics)
+    tree := parser::parse(file, tokens, diagnostics)
+    imports := module_loader::resolve_imports(sources, tree, diagnostics, file)
+    test::suite_assert(ts, len(imports) == 0, site())
+    test::suite_assert(ts, len(sources.sources) == 1, site())
+    test::suite_assert(ts, diagnostics.error_count == 1, site())
+    if len(diagnostics.messages) != 1:
+        test::suite_assert(ts, false, site())
+        return
+    end
+    message := diagnostics.messages[0]
+    test::suite_assert(ts, string::starts_with(message.summary, "jik package path not set"), site())
+    test::suite_assert(ts, string::find(message.summary, "JIK_PKG_PATH") >= 0, site())
+    test::suite_assert(ts, message.span is Some, site())
+    if message.span is Some:
+        test::suite_assert(ts, message.span?.source_id == id and message.span?.start == 0, site())
+    end
+end
+
+
+func test_package_dependencies(ts) -> void:
+    output_path := path::join([fs::temp_dir(), "jik-bootstrap-package-imports.c"])
+    config := compiler::Config{input_path = "test/jik/input/package_imports/project/main.jik", output_path}
+    comp := must compiler::new(config)
+    repository := path::normalize(path::join([sys::cwd(), "test/jik/input/package_imports/repository"]), .comp)
+    comp.program.sources.package_path = Some{repository}[.comp]
+    must comp.run()
+    test::suite_assert(ts, comp.program.diagnostics.error_count == 0, site())
+    test::suite_assert(ts, len(comp.program.sources.sources) == 3 and len(comp.program.modules) == 3, site())
+    package_root := path::normalize(path::join([repository, "packages/demo/src"]))
+    for file in comp.program.sources.sources:
+        if file.id != 0:
+            test::suite_assert(ts, file.origin is PACKAGE, site())
+            if file.origin is PACKAGE:
+                test::suite_assert(ts, file.origin.PACKAGE == package_root, site())
+            end
+        end
+    end
+    test::suite_assert(ts, fs::is_file(output_path), site())
+    must fs::remove_file(output_path)
+
+    offset_path := path::normalize(path::join([repository, "packages/demo/src/nested/offset.jik"]))
+    offset_id := comp.program.sources.source_id_by_path[offset_path]
+    test::suite_assert(ts, offset_id is Some, site())
+    if offset_id is None:
+        return
+    end
+    users := 0
+    for mod in comp.program.modules:
+        for import in mod.imports:
+            if import.target_id == offset_id?:
+                users += 1
+            end
+        end
+    end
+    test::suite_assert(ts, users == 2, site())
+end
+
+
+func test_missing_package_file(ts) -> void:
+    sources := source::SourceManager{package_path = Some{"test/jik/input/package_imports/missing_repository"}}
+    diagnostics := diag::Diagnostics{}
+    id := must sources.add_source("test/jik/input/package_imports/project/submodule.jik")
+    file := sources.sources[id]
+    tokens := lexer::tokenize(file, diagnostics)
+    tree := parser::parse(file, tokens, diagnostics)
+    missing_path := must import_path::resolve_path(sources, "pkg/demo/nested/offset", file)
+    target := missing_path.path
+    imports := module_loader::resolve_imports(sources, tree, diagnostics, file)
+    test::suite_assert(ts, len(imports) == 0 and len(sources.sources) == 1, site())
+    test::suite_assert(ts, sources.source_id_by_path[target] is None, site())
+    test::suite_assert(ts, diagnostics.error_count == 1, site())
+    if len(diagnostics.messages) == 1:
+        test::suite_assert(ts, string::starts_with(diagnostics.messages[0].summary, concat("could not read source: ", target, ": ")), site())
+    else:
+        test::suite_assert(ts, false, site())
+    end
+end
+
+
+func run_tests(ts) -> void:
+    println("[test] test_package_imports")
+    test_package_configuration(ts)
+    test_package_paths(ts)
+    test_missing_package_path(ts)
+    test_package_dependencies(ts)
+    test_missing_package_file(ts)
+end

@@ -41,17 +41,23 @@ jobs:
           clang --version
           make --version
 
-      - name: Build
-        shell: pwsh
-        run: make
-
-      - name: Test
-        shell: pwsh
-        run: make test
-
-      - name: Build Release Archive
+      - name: Bootstrap, test, and package stage 2
         shell: pwsh
         run: make release-archive VERSION=$env:VERSION
+
+      - name: Validate compiler version
+        shell: pwsh
+        run: |
+          $compiler = if ($env:RUNNER_OS -eq 'Windows') { './release/jik.exe' } else { './release/jik' }
+          $reported = & $compiler version
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not read the release compiler version."
+          }
+          $expected = 'jik version: ' + ($env:VERSION -replace '^v', '')
+          if (($reported -join "`n") -cne $expected) {
+            throw "Release compiler reported '$reported'; expected '$expected'."
+          }
+          Write-Output $reported
 
       - name: Upload Release Artifact
         uses: actions/upload-artifact@v4
@@ -84,14 +90,11 @@ jobs:
         working-directory: tools/vscode-jik
         run: |
           $manifest = Get-Content package.json | ConvertFrom-Json
-          $tagVersion = $env:RELEASE_TAG
-          if ($tagVersion.StartsWith("v")) {
-            $tagVersion = $tagVersion.Substring(1)
-          }
+          $tagVersion = $env:RELEASE_TAG -replace '^v', ''
           if ($manifest.version -ne $tagVersion) {
-            Write-Error "Extension version '$($manifest.version)' in tools/vscode-jik/package.json does not match release tag '$env:RELEASE_TAG'. Expected '$tagVersion'."
+            throw "Extension version '$($manifest.version)' does not match Jik release '$tagVersion'."
           }
-          Write-Output "VSIX version matches release tag: $tagVersion"
+          Write-Output "Packaging extension $($manifest.version) for Jik $env:RELEASE_TAG"
 
       - name: Build VSIX
         shell: pwsh
@@ -101,6 +104,7 @@ jobs:
           $vsixName = "{0}-{1}.vsix" -f $manifest.name, $env:RELEASE_TAG
           Remove-Item *.vsix -Force -ErrorAction SilentlyContinue
           node ./scripts/generate-stdlib-index.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           vsce package --out $vsixName
 
       - name: Upload VSIX Release Artifact

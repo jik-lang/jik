@@ -37,6 +37,9 @@ When opened inside the Jik repository, the extension automatically uses the work
 
 ## Packaging
 
+The extension version follows Jik, including alpha/beta suffixes. Release CI
+checks it against the Jik tag. VSIX files are distributed through GitHub releases.
+
 Generate the bundled index:
 
 ```bat
