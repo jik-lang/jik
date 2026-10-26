@@ -6,6 +6,9 @@ use "jik/sys"
 
 func main(args):
     println("argc=", len(args))
+    for i = 1, len(args):
+        println("arg=", args[i])
+    end
     io::write_stderr("child stderr\n")
     executable := must sys::executable_path()
     print(must io::read_file(path::join([path::dirname(executable), "payload.txt"])))

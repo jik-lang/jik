@@ -28,31 +28,44 @@ func make_parser(r: Region) -> ap::Parser:
 end
 
 
-throws func execute(comp: compiler::Compiler, foreign cc: String, foreign workspace: String, foreign flags: Vec[String], release: bool) -> int:
+throws func execute(comp: compiler::Compiler, foreign cc: String, foreign workspace: String, foreign flags: Vec[String], foreign program_args: Vec[String], release: bool) -> int:
     executable := path::join([copy(workspace), "program.exe"])
     try native_build::compile(comp, cc, executable, flags, release, false)
     compiler::verbose(comp, concat("run ", executable))
-    program_args: Vec[String]
     exit_status := try process::run(executable, program_args)
     return exit_status
 end
 
 
-throws func compile_and_execute(foreign input: String, foreign workspace: String, foreign cc: String, foreign flags: Vec[String], foreign options: ap::ParseResult, release: bool) -> int:
+throws func compile_and_execute(foreign input: String, foreign workspace: String, foreign cc: String, foreign flags: Vec[String], foreign program_args: Vec[String], foreign options: ap::ParseResult, release: bool) -> int:
     config := compiler::Config{
         input_path = copy(input),
         output_path = path::join([copy(workspace), "program.c"])
     }
     comp := try compiler::new(config)
     utils::apply_options(comp.config, options)
-    status := try execute(comp, cc, workspace, flags, release)
+    status := try execute(comp, cc, workspace, flags, program_args, release)
     return status
 end
 
 
 throws func run(args: Vec[String]) -> int:
     parser := make_parser()
-    result := try ap::parse(parser, args)
+    separator := len(args)
+    i := 0
+    while i < len(args):
+        if args[i] == "--":
+            separator = i
+            break
+        end
+        // Option values may themselves be the literal "--".
+        if args[i] == "--cc" or args[i] == "--ccflags":
+            i += 1
+        end
+        i += 1
+    end
+    result := try ap::parse(parser, args[:separator])
+    program_args := args[separator + 1:] if separator < len(args) else args[len(args):]
     input := result.positionals["input"]?
     explicit := result.options["--cc"]?["compiler"]? if result.options["--cc"] is Some else ""
     flag_text := result.options["--ccflags"]?["args"]? if result.options["--ccflags"] is Some else ""
@@ -60,7 +73,7 @@ throws func run(args: Vec[String]) -> int:
     cc := try utils::select_compiler(explicit)
     workspace := try utils::make_workspace()
     status := 0
-    try completed := compile_and_execute(input, workspace, cc, flags,
+    try completed := compile_and_execute(input, workspace, cc, flags, program_args,
         result, result.options["--release"] is Some):
         status = completed
     except:

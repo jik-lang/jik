@@ -14,7 +14,7 @@ Command arguments come before command options. For example, use
 
 ## Commands
 
-### `jik run <filepath>`
+### `jik run <filepath> [options] [-- <args>...]`
 
 Translate a Jik source file to C, compile it with the selected C compiler, run
 the executable, and then remove the temporary build files.
@@ -34,7 +34,12 @@ Example:
 
 ```sh
 jik run hello.jik --cc clang
+jik run hello.jik --cc clang -- "hello world" --verbose
 ```
+
+Arguments after `--` are passed unchanged to the program, including empty strings
+and values beginning with `-`. Put compiler options before `--`. The program's
+`main(args)` receives the executable path at index 0, followed by these arguments.
 
 `--region-tree` draws one row per runtime region. Region IDs show creation order,
 and indentation shows nested lifetimes:

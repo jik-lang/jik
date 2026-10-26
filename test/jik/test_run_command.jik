@@ -35,7 +35,7 @@ func run_tests(ts: test::TestSuite):
     println("[test] test_run_command")
     // Argument rejection belongs to the parser and needs no child process.
     parser := run_command::make_parser()
-    forms := [["main.jik", "extra-program-argument"], ["main.jik", "--", "extra-program-argument"]]
+    forms := [["main.jik", "extra-program-argument"]]
     for args in forms:
         try ap::parse(parser, args):
             test::suite_assert(ts, false, site())
@@ -61,9 +61,14 @@ func run_tests(ts: test::TestSuite):
     assert(helpers::set_environment("TEMP", temporary, true) == 0)
     assert(helpers::set_environment("TMPDIR", temporary, true) == 0)
 
-    // One real compilation covers spaced paths, output streams, copying, and
+    // Real compilations cover spaced paths, output streams, copying, and
     // nonzero child status, including cleanup after the copied program exits.
     check_run(ts, tool, ["run", source], 7, "argc=1\ncopied payload\n", "child stderr", temporary)
+    check_run(ts, tool, ["run", source, "--"], 7, "argc=1\ncopied payload\n", "child stderr", temporary)
+    check_run(ts, tool, ["run", source, "--release", "--", "hello world", "", "--cc", "--", "a\"b", "C:\\path with spaces\\", "&|<>"], 7,
+        "argc=8\narg=hello world\narg=\narg=--cc\narg=--\narg=a\"b\narg=C:\\path with spaces\\\narg=&|<>\ncopied payload\n", "child stderr", temporary)
+    check_run(ts, tool, ["run", "--", "extra-program-argument"], 1, "", "missing input file", temporary)
+    check_run(ts, tool, ["run", source, "--unknown", "--", "argument"], 1, "", "unknown option", temporary)
     check_run(ts, tool, ["run", "test/jik/input/run_command/copy_failure.jik"], 1, "", "could not copy native requirement", temporary)
     check_run(ts, tool, ["run", "test/jik/input/diagnostics/lexical.jik"], 1, "", "unexpected character", temporary)
     check_run(ts, tool, ["run", source, "--cc", "__jik_missing_run_cc__"], 1, "", "could not start process", temporary)
