@@ -1130,14 +1130,19 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
     void dict_name##_set(                                                                          \
         struct dict_name *ht, JikString *key, dict_elem_type val, char *dbg_info) \
     {                                                                                              \
+        struct dict_name##_item *item =                                                            \
+            dict_name##_find_entry(ht->items, ht->capacity, key->data);                            \
+        if (item->key != NULL) {                                                                   \
+            item->ok  = true;                                                                     \
+            item->val = val;                                                                      \
+            return;                                                                               \
+        }                                                                                         \
         if (ht->size + 1 > ht->capacity * JIK_HTAB_LOAD_FACT) {                                    \
             size_t new_cap = ht->capacity * 2;                                                     \
             dict_name##_resize(ht, new_cap);                                                  \
+            item = dict_name##_find_entry(ht->items, ht->capacity, key->data);                     \
         }                                                                                          \
-        struct dict_name##_item *item =                                                            \
-            dict_name##_find_entry(ht->items, ht->capacity, key->data);                            \
-        if (item->key == NULL)                                                                     \
-            ht->size++;                                                                            \
+        ht->size++;                                                                                \
         item->ok  = true;                                                                          \
         item->key = jik_string_new(key->data, ht->jik_region);                                          \
         item->val = val;                                                                           \
