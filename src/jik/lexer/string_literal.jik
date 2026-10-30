@@ -40,7 +40,7 @@ throws func decode(foreign text: String, start: int, stop: int, multiline: bool,
         value := try string::slice(text, start, stop, r)
         return value
     end
-    output := strbuf::new("", r)
+    output := strbuf::new("")
     pos := start
     while pos < stop:
         ch := text[pos]

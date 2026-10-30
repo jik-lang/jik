@@ -119,7 +119,7 @@ end
 
 /// Render accumulated messages into a String allocated in r.
 func format_all(foreign diag: Diagnostics, foreign src_mngr: source::SourceManager, r: Region) -> String:
-    sb := strbuf::new("", r)
+    sb := strbuf::new("")
     for m in diag.messages:
         append_message(sb, m, src_mngr)
     end
