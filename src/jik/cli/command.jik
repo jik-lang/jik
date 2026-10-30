@@ -8,6 +8,7 @@ end
 
 
 COMMANDS := [
+    Command{name = "new", summary = "create a new Jik project"},
     Command{name = "tran", summary = "translate Jik source to C"},
     Command{name = "check", summary = "check syntax, types and regions"},
     Command{name = "env", summary = "print resolved Jik configuration"},

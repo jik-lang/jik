@@ -1,0 +1,79 @@
+//! Create a minimal project in a new directory.
+
+use "jik/argparse" as ap
+use "jik/fs"
+use "jik/io"
+use "jik/path"
+use "jik/string"
+
+
+SOURCE_CODE := """func main():
+    println("Hello, world!")
+end
+"""
+
+README := """# Jik project
+
+Jik starts at `func main()` in the file passed to the command. The source
+filename can be changed.
+
+Run the program:
+
+```sh
+jik run "{{source}}"
+```
+
+Check the source:
+
+```sh
+jik check "{{source}}"
+```
+
+Build an executable:
+
+```sh
+jik build "{{source}}"
+```
+
+To start tracking this project with Git, run `git init`.
+"""
+
+
+func make_parser(r: Region) -> ap::Parser:
+    parser := ap::new("jik new", r)
+    ap::set_description(parser, "Create a new Jik project containing src/<project-name>.jik, .gitignore, and README.md.")
+    ap::add_positional(parser, "directory", "New project directory")
+    return parser
+end
+
+
+throws func write_project_files(directory: String):
+    name := path::basename(path::normalize(directory))
+    source := concat("src/", name, ".jik")
+    try fs::mkdir(path::join([directory, "src"]))
+    try io::write_file(path::join([directory, source]), SOURCE_CODE)
+    ignored := concat("/src/", name, "\n/src/", name, ".exe\n/src/", name, ".c\n")
+    try io::write_file(path::join([directory, ".gitignore"]), ignored)
+    try io::write_file(path::join([directory, "README.md"]), string::replace(README, "{{source}}", source))
+end
+
+
+throws func run(args: Vec[String]):
+    result := try ap::parse(make_parser(), args)
+    directory := result.positionals["directory"]?
+    if len(directory) == 0:
+        fail("project directory must not be empty")
+    end
+    if fs::exists(directory):
+        fail(concat("destination already exists: ", directory))
+    end
+    try fs::mkdir(directory):
+    except:
+        fail(concat("could not create project directory ", directory, ": ", error_msg()), error_code())
+    end
+    try write_project_files(directory):
+    except:
+        fail(concat("could not finish project in ", directory, "; partial files may remain: ", error_msg()), error_code())
+    end
+    println("Created project: ", directory)
+end

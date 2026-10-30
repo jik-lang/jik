@@ -15,6 +15,7 @@ use "test/test" as test_command
 use "build" as build_command
 use "version"
 use "env"
+use "new" as new_command
 
 
 func format_help(r: Region) -> String:
@@ -85,6 +86,9 @@ throws func run(args: Vec[String]):
         println(ap::format_help(version::make_parser()))
     elif topic == "env":
         println(ap::format_help(env::make_parser()))
+    elif topic == "new":
+        println(ap::format_help(new_command::make_parser()))
+        println("Notes:\n    The destination directory must not already exist.\n    Its parent directory must exist.")
     else:
         executable := try sys::executable_path()
         docs := path::join([path::dirname(executable), "docs"])

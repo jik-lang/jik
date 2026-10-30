@@ -14,6 +14,23 @@ Command arguments come before command options. For example, use
 
 ## Commands
 
+### `jik new <directory>`
+
+Create a minimal project containing `src/<project-name>.jik`, `.gitignore`, and
+`README.md`. The source filename uses the destination directory's name.
+The destination must not exist, and its parent directory must already exist.
+Git is not required and no Git repository is initialized.
+
+```sh
+jik new my-project
+cd my-project
+jik run src/my-project.jik
+```
+
+The README describes how to run, check, and build the program. The `.gitignore`
+excludes the generated executable and C files alongside the source in `src/`.
+
+
 ### `jik run <filepath> [options] [-- <args>...]`
 
 Translate a Jik source file to C, compile it with the selected C compiler, run
