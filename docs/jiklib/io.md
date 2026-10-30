@@ -86,6 +86,17 @@ Read all bytes from a binary file, starting at the beginning.
 
 ---
 
+### `throws flush_stdout() -> void`
+
+Flush buffered standard output to its underlying stream. Use it after prompts
+or progress messages that must be visible immediately, including when output
+is redirected or captured.
+
+**Behavior**
+- Throws if flushing fails.
+
+---
+
 ### `throws read_file(foreign path: String, region: Region) -> String`
 
 Read an entire file by path.

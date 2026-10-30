@@ -1,0 +1,26 @@
+use "jik/testing" as test
+use "jik/bytes"
+use "jik/io"
+use "jik/path"
+use "jik/process"
+use "jik/string"
+
+use "../../src/jik/cli/utils" as cli_utils
+use "language/utils"
+
+
+func run_tests(ts: test::TestSuite):
+    println("[test] test_test_command")
+    workspace := must cli_utils::make_workspace()
+    source := path::join([workspace, "test_basic.jik"])
+    must io::write_file(source, "use \"jik/testing\" as t\nfunc test_basic(s):\n    t::suite_assert(s, true, site())\nend\n")
+
+    result := must process::capture(utils::compiler_command(), ["test", workspace])
+    output := string::replace(must bytes::to_string_ascii(result.out), "\r\n", "\n")
+    if result.code != 0:
+        println(output, must bytes::to_string_ascii(result.err))
+    end
+    test::suite_assert(ts, result.code == 0, site())
+    test::suite_assert(ts, output == "[test] test_basic::test_basic\n1 assertions, 0 failed, 1 passed\n", site())
+    must cli_utils::cleanup_workspace(workspace)
+end

@@ -317,6 +317,13 @@
         "throws": false
       },
       {
+        "name": "is_link",
+        "kind": "function",
+        "signature": "is_link(path: String) -> bool",
+        "doc": "Inspect the path itself for a symbolic link or Windows reparse point.\n\nOn POSIX, detect symbolic links without following their targets. On Windows,\ndetect reparse points, including symbolic links and directory junctions.\nThrow if the path cannot be inspected, including when it does not exist.",
+        "throws": true
+      },
+      {
         "name": "mkdir",
         "kind": "function",
         "signature": "mkdir(path: String) -> void",
@@ -445,6 +452,13 @@
         "signature": "write_stderr(text: String) -> void",
         "doc": "Write a string to standard error.\n\nWrite errors are ignored.",
         "throws": false
+      },
+      {
+        "name": "flush_stdout",
+        "kind": "function",
+        "signature": "flush_stdout() -> void",
+        "doc": "Flush buffered standard output to its underlying stream.\n\nThrow if flushing fails.",
+        "throws": true
       },
       {
         "name": "read_file",

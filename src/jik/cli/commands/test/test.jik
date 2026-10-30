@@ -1,0 +1,141 @@
+//! Discover, build, and run a suite without manual test registration.
+
+use "jik/argparse" as ap
+use "jik/fs"
+use "jik/io"
+use "jik/path"
+use "jik/process"
+use "jik/string"
+use "jik/sys"
+use "jik/testing"
+
+use "../../../compiler"
+use "../../native_build"
+use "../../cc_flags"
+use "../../utils"
+use "discovery" as test_discovery
+
+
+func make_parser(r: Region) -> ap::Parser:
+    parser := ap::new("jik test", r)
+    ap::set_description(parser, "Recursively discover test_*.jik files and nonthrowing test_*(suite) functions, build and run a suite.")
+    ap::add_positional(parser, "input", "Input directory or .jik file (default: current directory)")
+    ap::add_option(parser, "--list", "", "List discovered tests without building or running them.")
+    emit := ap::add_option(parser, "--emit-suite", "", "Write the generated suite without building or running it; destination must not exist.")
+    ap::add_option_positional(emit, "file", "Destination Jik source file.")
+    utils::add_compiler_options(parser)
+    utils::add_diagnostic_options(parser)
+    utils::add_runtime_options(parser)
+    return parser
+end
+
+
+func format_help(r: Region) -> String:
+    return string::replace(ap::format_help(make_parser()), "<input>", "[input]", r)
+end
+
+
+throws func parse_options(foreign args: Vec[String], r: Region) -> ap::ParseResult:
+    parser := make_parser()
+    // argparse requires positional arguments. Supply the default only after
+    // validating an invocation whose sole missing argument is the input.
+    try options := ap::parse(parser, args, r):
+        return options
+    except:
+        if error_msg() != "argparse: missing positional input":
+            fail(error_msg(), error_code())
+        end
+    end
+    default_args := ["."]
+    for arg in args:
+        default_args.push(copy(arg))
+    end
+    options := try ap::parse(parser, default_args, r)
+    return options
+end
+
+
+throws func execute(modules: Vec[test_discovery::TestModule], foreign workspace: String, foreign cc: String, foreign flags: Vec[String], foreign options: ap::ParseResult) -> int:
+    input := path::join([copy(workspace), "suite.jik"])
+    try io::write_file(input, test_discovery::runner(modules))
+    config := compiler::Config{
+        input_path = input,
+        output_path = path::join([copy(workspace), "program.c"])
+    }
+    comp := try compiler::new(config)
+    utils::apply_options(comp.config, options)
+    try comp.run()
+    try test_discovery::validate(comp, modules)
+    executable := path::join([copy(workspace), "program.exe"])
+    try native_build::compile_translation(comp, cc, executable, flags, options.options["--release"] is Some, false)
+    compiler::verbose(comp, concat("run ", executable))
+    io::write_stderr("jik: running suite\n")
+    program_args: Vec[String]
+    status := try process::run(executable, program_args)
+    return status
+end
+
+
+throws func run(args: Vec[String]) -> int:
+    options := try parse_options(args)
+    input := options.positionals["input"]?
+    listing := options.options["--list"] is Some
+    emitting := options.options["--emit-suite"] is Some
+    if listing and emitting:
+        fail("cannot combine --list and --emit-suite")
+    end
+    destination := options.options["--emit-suite"]?["file"]? if emitting else ""
+    if emitting and fs::exists(destination):
+        fail(concat("suite destination already exists: ", destination))
+    end
+    io::write_stderr(concat("jik: discovering tests in ", input, "\n"))
+    modules := try test_discovery::discover(input)
+    tests := 0
+    for item in modules:
+        tests += len(item.functions)
+    end
+    test_word := "test" if tests == 1 else "tests"
+    file_word := "file" if len(modules) == 1 else "files"
+    totals := concat(string::from_int(tests), " ", test_word,
+        " in ", string::from_int(len(modules)), " ", file_word)
+    if listing:
+        for item in modules:
+            for name in item.functions:
+                println(item.name, "::", name)
+            end
+        end
+        println(totals)
+        return 0
+    end
+    if emitting:
+        try io::write_file(destination, test_discovery::runner(modules))
+        io::write_stderr(concat("jik: wrote suite to ", destination, "\n"))
+        return 0
+    end
+    explicit := options.options["--cc"]?["compiler"]? if options.options["--cc"] is Some else ""
+    flag_text := options.options["--ccflags"]?["args"]? if options.options["--ccflags"] is Some else ""
+    flags := try cc_flags::parse(flag_text, sys::platform() == "windows")
+    if len(modules) == 0:
+        println("0 tests ran")
+        suite := testing::suite_new()
+        testing::suite_finish(suite)
+        return 0
+    end
+    io::write_stderr(concat("jik: found ", totals, ", building suite\n"))
+    cc := try utils::select_compiler(explicit)
+    workspace := try utils::make_workspace()
+    status := 0
+    try completed := execute(modules, workspace, cc, flags, options):
+        status = completed
+    except:
+        msg := error_msg()
+        code := error_code()
+        try utils::cleanup_workspace(workspace):
+        except:
+            io::write_stderr(concat("jik: temporary cleanup failed: ", error_msg(), "\n"))
+        end
+        fail(msg, code)
+    end
+    try utils::cleanup_workspace(workspace)
+    return status
+end

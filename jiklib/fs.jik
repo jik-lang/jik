@@ -31,6 +31,17 @@ extern func jik_impl_fs_is_file as
 extern func jik_impl_fs_is_dir as
     is_dir(path: String) -> bool
 
+/// Inspect the path itself for a symbolic link or Windows reparse point.
+///
+/// On POSIX, detect symbolic links without following their targets. On Windows,
+/// detect reparse points, including symbolic links and directory junctions.
+/// Throw if the path cannot be inspected, including when it does not exist.
+///
+/// @param path Filesystem path.
+/// @returns `true` for a symbolic link (POSIX) or reparse point (Windows).
+extern throws func jik_impl_fs_is_link as
+    is_link(foreign path: String) -> bool
+
 /// Create a directory.
 ///
 /// @param path Directory path.
@@ -170,6 +181,8 @@ extern func jik_impl_fs_temp_dir as
 #include <sys/types.h>
 #include <dirent.h>
 #include <unistd.h>
+// Callers may select strict C mode without enabling POSIX feature macros.
+extern int lstat(const char *, struct stat *);
 #endif
 
 static bool
@@ -319,6 +332,30 @@ jik_impl_fs_is_dir(JikString *path)
         return false;
     }
     return jik_impl_fs_is_dir_cstr(path->data);
+}
+
+bool
+jik_impl_fs_is_link(JikString *path, JikError *e)
+{
+    if (jik_impl_fs_invalid_path(path)) {
+        jik_error_set(e, 1, "fs::is_link: could not inspect filesystem path");
+        return false;
+    }
+#ifdef _WIN32
+    DWORD attrs = GetFileAttributesA(path->data);
+    if (attrs == INVALID_FILE_ATTRIBUTES) {
+        jik_error_set(e, 1, "fs::is_link: could not inspect filesystem path");
+        return false;
+    }
+    return (attrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+#else
+    struct stat info;
+    if (lstat(path->data, &info) != 0) {
+        jik_error_set(e, 1, "fs::is_link: could not inspect filesystem path");
+        return false;
+    }
+    return S_ISLNK(info.st_mode);
+#endif
 }
 
 void

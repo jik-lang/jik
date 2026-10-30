@@ -2,7 +2,7 @@
 
 use "jik/argparse" as ap
 
-use "../version"
+use "../../version"
 
 
 func make_parser(r: Region) -> ap::Parser:

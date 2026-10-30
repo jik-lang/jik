@@ -55,7 +55,7 @@ depending on the driver or CLI modules. No per-module progress messages are prin
 
 | Area | Starting modules |
 | --- | --- |
-| Commands and native integration | `main.jik`, `cli/cli.jik`, command modules, `cli/native_build.jik` and `native_profiles.jik` |
+| Commands and native integration | `main.jik`, `cli/cli.jik`, `cli/commands/`, `cli/native_build.jik` and `native_profiles.jik` |
 | Source identity, imports, diagnostics | `source.jik`, `diag.jik`, `modules/import_path.jik`, `module_loader.jik`, and `module_graph.jik` |
 | Tokens and grammar | `lexer/token.jik`, `lexer/lexer.jik`, `parser/state.jik`, `expressions.jik`, `statements.jik`, and `parser.jik` |
 | Persistent definitions | `program.jik`, `modules/module.jik`, `parser/ast.jik`, and `language/` |
@@ -63,6 +63,12 @@ depending on the driver or CLI modules. No per-module progress messages are prin
 | Type inference and validation | `semantic/typing/solver.jik`, `constraints.jik`, `inference.jik`, `typecheck.jik`, and shared `rules.jik` |
 | Lifetime and initialization rules | `semantic/regions/` and `semantic/initialization/` |
 | C names, types, helpers, and code generation | `codegen/c_names.jik`, `backend.jik`, `type_support.jik`, `operations.jik`, and `codegen.jik` |
+
+Command implementations live in `cli/commands/`. Simple commands use one module
+each; `cli/commands/test/` contains the test command, discovery and runner
+generation. Filesystem link inspection is provided by `jik/fs`. CLI dispatch,
+command metadata, and shared build and argument utilities remain directly
+under `cli/`.
 
 For a syntax change, start with its token and parser function, then the AST payload
 and the resolution/type/region cases that consume it. For a new builtin, start

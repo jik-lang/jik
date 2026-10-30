@@ -40,18 +40,25 @@ func test_predicates(ts):
     test::suite_assert(ts, not fs::exists(missing), site())
     test::suite_assert(ts, not fs::is_file(missing), site())
     test::suite_assert(ts, not fs::is_dir(missing), site())
+    try fs::is_link(missing):
+        test::suite_assert(ts, false, site())
+    except:
+        test::suite_assert(ts, error_code() != 0, site())
+    end
 
     dir_path := path::join([_root(), "dir1"])
     must fs::mkdir(dir_path)
     test::suite_assert(ts, fs::exists(dir_path), site())
     test::suite_assert(ts, fs::is_dir(dir_path), site())
     test::suite_assert(ts, not fs::is_file(dir_path), site())
+    test::suite_assert(ts, not (must fs::is_link(dir_path)), site())
 
     file_path := path::join([_root(), "file1.txt"])
     _write(file_path, "alpha")
     test::suite_assert(ts, fs::exists(file_path), site())
     test::suite_assert(ts, fs::is_file(file_path), site())
     test::suite_assert(ts, not fs::is_dir(file_path), site())
+    test::suite_assert(ts, not (must fs::is_link(file_path)), site())
 
     _cleanup_root()
 end

@@ -6,9 +6,9 @@ use "jik/path"
 use "jik/process"
 use "jik/string"
 
-use "../../src/jik/cli/run" as run_command
-use "../../src/jik/cli/build" as build_command
-use "../../src/jik/cli/tran" as tran_command
+use "../../src/jik/cli/commands/run" as run_command
+use "../../src/jik/cli/commands/build" as build_command
+use "../../src/jik/cli/commands/tran" as tran_command
 use "../../src/jik/cli/utils" as cli_utils
 use "../../src/jik/compiler"
 use "language/utils"
@@ -70,7 +70,8 @@ func check_stage_order(ts: test::TestSuite, foreign diagnostic: String, foreign 
 end
 
 
-func test_verbose_failures(ts: test::TestSuite, foreign tool: String):
+func test_verbose_failures(ts: test::TestSuite):
+    tool := utils::compiler_command(_)
     lexical := must process::capture(tool, ["check", "test/jik/input/diagnostics/lexical.jik", "--verbose"])
     lexical_error := text(lexical.err)
     test::suite_assert(ts, lexical.code != 0 and bytes::len(lexical.out) == 0, site())
@@ -113,7 +114,7 @@ func run_tests(ts: test::TestSuite):
     test::suite_assert(ts, bytes::len(quiet.err) == 0 and string::ends_with(text(verbose.err), "jik: check regions\n"), site())
     test::suite_assert(ts, not string::contains(text(verbose.err), "check passed"), site())
     test::suite_assert(ts, text(verbose.err) == "jik: lex and parse sources\njik: analyze program\njik: check regions\n", site())
-    test_verbose_failures(ts, tool)
+    test_verbose_failures(ts)
     imported := must process::capture(tool, ["check", "test/jik/input/preview/main.jik", "--verbose"])
     test::suite_assert(ts, imported.code == 0 and bytes::len(imported.out) == 0, site())
     // Imported modules must not add per-module progress messages.

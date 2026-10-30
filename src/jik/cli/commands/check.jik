@@ -2,16 +2,15 @@
 
 use "jik/argparse" as ap
 
-use "../compiler"
-use "utils"
+use "../../compiler"
+use "../utils"
 
 
 func make_parser(r: Region) -> ap::Parser:
     parser := ap::new("jik check", r)
     ap::set_description(parser, "Check Jik syntax, types and regions without generating C or invoking a C compiler.")
     ap::add_positional(parser, "input", "Input file")
-    ap::add_option(parser, "--dump-ast", "", "Print the parsed AST for each module.")
-    ap::add_option(parser, "--verbose", "", "Print analysis stages to stderr.")
+    utils::add_diagnostic_options(parser)
     return parser
 end
 

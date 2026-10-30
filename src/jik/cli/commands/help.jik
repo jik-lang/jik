@@ -7,10 +7,11 @@ use "jik/path"
 use "jik/string"
 use "jik/sys"
 
-use "command"
+use "../command"
 use "tran"
 use "check" as check_command
 use "run" as run_command
+use "test/test" as test_command
 use "build" as build_command
 use "version"
 use "env"
@@ -76,6 +77,10 @@ throws func run(args: Vec[String]):
     elif topic == "run":
         println(ap::format_help(run_command::make_parser()))
         println("Notes:\n    Pass program arguments after --: jik run <input> [options] -- [args...]\n    The executable is built in a temporary directory, run, and then removed.\n    Temporary build files and copied files are also removed.")
+    elif topic == "test":
+        println(test_command::format_help())
+        println("Modes:\n    --list prints discovered tests and totals without building or running.\n    --emit-suite <file> writes the generated runner and stops; the destination must not exist.\n    These modes cannot be combined. Full type and region checking happens when the suite is compiled.")
+        println("Notes:\n    With no input, discover tests in the current directory.\n    A directory recursively discovers test_*.jik files; an explicit .jik file may have any name.\n    Run top-level test_*(suite) functions: nonthrowing, with one TestSuite parameter and returning void.\n    Print each test before running it, then the assertion summary. Empty suites succeed.\n    Skip linked directories and reject a linked directory input. Program arguments are not supported.")
     elif topic == "version":
         println(ap::format_help(version::make_parser()))
     elif topic == "env":

@@ -131,6 +131,50 @@ Example:
 jik check hello.jik
 ```
 
+### `jik test [input] [options]`
+
+Discover, build, and run tests. Input defaults to the current directory.
+Directories are searched recursively for `test_*.jik` files; an explicitly
+selected `.jik` file may have any name.
+
+Tests are top-level `test_*` functions taking exactly one `jik/testing::TestSuite`
+parameter, returning `void`, and declared without `throws`. Types may be inferred:
+
+```jik
+use "jik/testing" as testing
+
+func test_addition(suite):
+    testing::suite_assert(suite, 2 + 2 == 4, site())
+end
+```
+
+```sh
+jik test
+jik test tests
+jik test tests/math_spec.jik
+jik test tests --list
+jik test tests --emit-suite suite.jik
+```
+
+Options:
+
+- `--list`: Print discovered module/function names and totals, then stop.
+- `--emit-suite <file>`: Write the generated runner, then stop. The destination
+  must not exist. The runner references the original source files and can be
+  executed with `jik run <file>`.
+- Compiler and runtime options are the same as for `jik run`, including `--cc`,
+  `--release`, and `--verbose`.
+
+`--list` and `--emit-suite` are mutually exclusive and need no C compiler.
+Type and region checks occur when the suite is compiled.
+
+Files run in relative path order, with functions in declaration order. Tests
+inherit the current working directory. Discovery skips linked directories,
+rejects a linked directory input, and stays within the selected input rather
+than expanding to imported dependencies. Temporary build files are cleaned up
+on completion or failure.
+
+
 ### `jik env`
 
 Print resolved Jik configuration values as `key=value` lines, including the Jik

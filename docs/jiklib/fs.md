@@ -46,6 +46,24 @@ Return whether a filesystem path refers to a directory.
 
 ---
 
+### `throws is_link(foreign path: String) -> bool`
+
+Inspect the path itself for a symbolic link or Windows reparse point.
+
+On POSIX, detect symbolic links without following their targets. On Windows,
+detect reparse points, including symbolic links and directory junctions.
+
+**Behavior**
+- Throws if the path cannot be inspected, including when it does not exist.
+
+**Parameters**
+1. `path: String` - Filesystem path.
+
+**Returns**
+- `true` for a symbolic link (POSIX) or reparse point (Windows).
+
+---
+
 ### `throws mkdir(path: String) -> void`
 
 Create a directory.

@@ -7,8 +7,8 @@ use "jik/process"
 use "jik/string"
 
 use "../../src/jik/cli/cc_flags"
-use "../../src/jik/cli/build" as build_command
-use "../../src/jik/cli/run" as run_command
+use "../../src/jik/cli/commands/build" as build_command
+use "../../src/jik/cli/commands/run" as run_command
 use "../../src/jik/cli/utils" as cli_utils
 use "language/utils"
 

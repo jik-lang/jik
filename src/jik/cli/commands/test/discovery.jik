@@ -1,0 +1,213 @@
+//! Discover test declarations and generate an ordinary Jik suite entry module.
+
+use "jik/fs"
+use "jik/path"
+use "jik/string"
+use "jik/strbuf"
+use "jik/sys"
+
+use "../../../compiler"
+use "../../../source"
+use "../../../diag"
+use "../../../lexer/lexer"
+use "../../../parser/parser"
+use "../../../language/types"
+
+
+struct TestModule:
+    path: String
+    name: String    // Relative path without .jik, using / separators.
+    functions: Vec[String]
+end
+
+
+throws func collect(foreign directory: String, foreign relative: String, files: Vec[String]) -> void:
+    names: Vec[String]
+    try entries := fs::read_dir(directory):
+        names = entries
+    except:
+        fail(concat("could not read test directory: ", directory, ": ", error_msg()), error_code())
+    end
+    for name in names:
+        child := path::join([copy(directory), name])
+        relative_child := concat(relative, "/", name) if len(relative) > 0 else copy(name)
+        if fs::is_dir(child):
+            linked := try fs::is_link(child)
+            if not linked:
+                try collect(child, relative_child, files)
+            end
+        elif fs::is_file(child) and string::starts_with(name, "test_") and string::ends_with(name, ".jik"):
+            files.push(copy(relative_child, .files))
+        end
+    end
+end
+
+
+func sort_paths(files: Vec[String]) -> void:
+    for i = 1, len(files):
+        j := i
+        while j > 0 and string::compare(files[j - 1], files[j]) > 0:
+            previous := files[j - 1]
+            files[j - 1] = files[j]
+            files[j] = previous
+            j -= 1
+        end
+    end
+end
+
+
+throws func parse_module(foreign root: String, foreign relative: String, r: Region) -> TestModule:
+    name := try string::slice(relative, 0, len(relative) - 4, r)
+    result := TestModule{
+        path = path::normalize(path::join([copy(root), copy(relative)]), r),
+        name
+    }[r]
+    sources := source::SourceManager{}
+    diagnostics := diag::Diagnostics{}
+    sid := try source::add_source(sources, result.path)
+    file := sources.sources[sid]
+    tokens := lexer::tokenize(file, diagnostics)
+    if diagnostics.error_count > 0:
+        diag::print_all(diagnostics, sources)
+        fail(compiler::ERROR_REPORTED)
+    end
+    tree := parser::parse(file, tokens, diagnostics)
+    for id in tree.get_root_module().declarations:
+        node := tree.nodes[id]
+        if not (node.kind is FUNCTION_DECL):
+            continue
+        end
+        function := node.kind.FUNCTION_DECL
+        if not string::starts_with(function.name, "test_"):
+            continue
+        end
+        if function.is_throwing or function.external_name is Some or len(function.parameters) != 1:
+            diag::error(diagnostics, "unsupported test signature", concat(function.name,
+                ": expected a nonthrowing Jik function with exactly one TestSuite parameter returning void"), Some{copy(node.span)})
+        end
+        result.functions.push(copy(function.name, r))
+    end
+    if diagnostics.error_count > 0:
+        diag::print_all(diagnostics, sources)
+        fail(compiler::ERROR_REPORTED)
+    end
+    return result
+end
+
+
+throws func discover(foreign input: String, r: Region) -> Vec[TestModule]:
+    if len(input) == 0:
+        fail("test input path must not be empty")
+    end
+    root := path::normalize(input) if path::is_absolute(input) else path::normalize(path::join([sys::cwd(), copy(input)]))
+    modules: Vec[TestModule][r]
+    if fs::is_file(root):
+        if not string::ends_with(root, ".jik"):
+            fail(concat("test input file must have a .jik extension: ", input))
+        end
+        item := try parse_module(path::dirname(root), path::basename(root), r)
+        if len(item.functions) > 0:
+            modules.push(item)
+        end
+        return modules
+    end
+    if not fs::is_dir(root):
+        fail(concat("test input is not a file or directory: ", input))
+    end
+    linked := try fs::is_link(root)
+    if linked:
+        fail(concat("test input must not be a linked directory: ", input))
+    end
+    files: Vec[String]
+    try collect(root, "", files)
+    sort_paths(files)
+    for relative in files:
+        item := try parse_module(root, relative, r)
+        if len(item.functions) > 0:
+            modules.push(item)
+        end
+    end
+    return modules
+end
+
+
+// Encode source strings rather than interpolating paths into Jik syntax.
+func quote(foreign value: String, r: Region) -> String:
+    output := strbuf::new("\"")
+    for ch in value:
+        if ch == '\\':
+            output.append("\\\\")
+        elif ch == '"':
+            output.append("\\\"")
+        elif ch == '\n':
+            output.append("\\n")
+        elif ch == '\r':
+            output.append("\\r")
+        elif ch == '\t':
+            output.append("\\t")
+        else:
+            strbuf::append_char(output, ch)
+        end
+    end
+    output.append("\"")
+    return strbuf::to_string(output, r)
+end
+
+
+func runner(foreign modules: Vec[TestModule], r: Region) -> String:
+    output := strbuf::new("use \"jik/testing\" as testing\nuse \"jik/io\"\n")
+    for index, item in modules:
+        import_path := must string::slice(item.path, 0, len(item.path) - 4)
+        if sys::platform() == "windows":
+            import_path = string::replace(import_path, "\\", "/")
+        end
+        output.append(concat("use ", quote(import_path), " as test_module_", string::from_int(index), "\n"))
+    end
+    output.append("\nfunc main():\n    suite := testing::suite_new()\n")
+    if len(modules) == 0:
+        output.append("    println(\"0 tests ran\")\n")
+    end
+    for index, item in modules:
+        for name in item.functions:
+            output.append(concat("    println(", quote(concat("[test] ", item.name, "::", name)), ")\n"))
+            // Flush before every test so captured progress survives an abort.
+            output.append("    must io::flush_stdout()\n")
+            output.append(concat("    test_module_", string::from_int(index), "::", name, "(suite)\n"))
+        end
+    end
+    output.append("    testing::suite_finish(suite)\nend\n")
+    return strbuf::to_string(output, r)
+end
+
+
+// Inspect inferred signatures after the generated calls have supplied context.
+// A call used as a statement would otherwise silently discard a nonvoid result.
+throws func validate(comp: compiler::Compiler, foreign modules: Vec[TestModule]) -> void:
+    store := comp.program.type_store
+    void_type := types::atom(store, types::Atom.VOID)
+    for item in modules:
+        sid := comp.program.sources.source_id_by_path[item.path]
+        if sid is None:
+            fail(concat("test module was not loaded: ", item.path))
+        end
+        tree := comp.program.modules[sid?].ast
+        for id in tree.get_root_module().declarations:
+            node := tree.nodes[id]
+            if not (node.kind is FUNCTION_DECL):
+                continue
+            end
+            function := node.kind.FUNCTION_DECL
+            if string::starts_with(function.name, "test_") and node.inferred_type is Some:
+                signature := store.types[node.inferred_type?].kind.FUNCTION
+                if signature.return_type != void_type:
+                    diag::error(comp.program.diagnostics, "unsupported test signature", concat(function.name,
+                        ": tests must return void"), Some{copy(node.span, .comp)})
+                end
+            end
+        end
+    end
+    if comp.program.diagnostics.error_count > 0:
+        comp.print_diagnostics()
+        fail(compiler::ERROR_REPORTED)
+    end
+end

@@ -107,6 +107,12 @@ end
 /// profile, process, and copy failures.
 throws func compile(comp: compiler::Compiler, foreign cc: String, foreign executable: String, foreign flags: Vec[String], release: bool, preview: bool) -> void:
     try comp.run()
+    try compile_translation(comp, cc, executable, flags, release, preview)
+end
+
+
+/// Build an already translated program, allowing callers to validate it first.
+throws func compile_translation(comp: compiler::Compiler, foreign cc: String, foreign executable: String, foreign flags: Vec[String], release: bool, preview: bool) -> void:
     profile := try native_profiles::validate(comp, cc, flags)
     tool := try sys::executable_path()
     include_path := path::join([path::dirname(tool), "support", "include"])

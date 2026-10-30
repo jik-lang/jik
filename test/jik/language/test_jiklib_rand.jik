@@ -13,7 +13,7 @@ func test_determinism_int(ts):
             break
         end
     end
-    return failed
+    test::suite_assert(ts, not failed, site())
 end
 
 
@@ -28,7 +28,7 @@ func test_determinism_double(s):
             break
         end
     end
-    return failed
+    test::suite_assert(s, not failed, site())
 end
 
 
@@ -42,7 +42,7 @@ func test_next_double_range(s):
             break
         end
     end
-    return failed
+    test::suite_assert(s, not failed, site())
 end
 
 
@@ -64,16 +64,16 @@ func test_range_int_bounds(s):
             break
         end
     end
-    return failed
+    test::suite_assert(s, not failed, site())
 end
 
 
 func run_tests(ts):    
     println("[test] language/test_jiklib_rand")
-    test::suite_assert(ts, not test_determinism_int(ts), site())
-    test::suite_assert(ts, not test_determinism_double(ts), site())
-    test::suite_assert(ts, not test_next_double_range(ts), site())
-    test::suite_assert(ts, not test_range_int_bounds(ts), site())
+    test_determinism_int(ts)
+    test_determinism_double(ts)
+    test_next_double_range(ts)
+    test_range_int_bounds(ts)
     rng := rand::new_time()
     test::suite_assert(ts, rand::next_int(rng) >= 0, site())
     try value := rand::range_int(rng, 3, 3):

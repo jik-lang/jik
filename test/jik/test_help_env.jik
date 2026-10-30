@@ -8,7 +8,7 @@ use "jik/string"
 use "jik/sys"
 
 use "../../src/jik/version"
-use "../../src/jik/cli/help" as help_command
+use "../../src/jik/cli/commands/help" as help_command
 use "../../src/jik/cli/utils" as cli_utils
 use "language/utils"
 

@@ -80,6 +80,12 @@ extern throws func jik_impl_io_write_bytes as
 extern func jik_impl_io_write_stderr as
     write_stderr(text: String) -> void
 
+/// Flush buffered standard output to its underlying stream.
+///
+/// Throw if flushing fails.
+extern throws func jik_impl_io_flush_stdout as
+    flush_stdout() -> void
+
 /// Read an entire file by path.
 ///
 /// @param path File path.
@@ -359,6 +365,14 @@ void
 jik_impl_io_write_stderr(JikString *s)
 {
     fputs(s->data, stderr);
+}
+
+void
+jik_impl_io_flush_stdout(JikError *e)
+{
+    if (fflush(stdout) != 0) {
+        jik_error_set(e, 1, "io::flush_stdout: fflush failed");
+    }
 }
 
 C_END

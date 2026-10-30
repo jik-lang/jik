@@ -4,8 +4,8 @@ use "jik/argparse" as ap
 use "jik/string"
 use "jik/process"
 
-use "../compiler"
-use "utils"
+use "../../compiler"
+use "../utils"
 
 
 func make_parser(r: Region) -> ap::Parser:
@@ -14,11 +14,11 @@ func make_parser(r: Region) -> ap::Parser:
     ap::add_positional(parser, "input", "Input file")
     opt_out := ap::add_option(parser, "--out", "-o", "Output file (default: beside the input, with a .c suffix)")
     ap::add_option_positional(opt_out, "file", "Output path.")
-    ap::add_option(parser, "--dump-ast", "", "Print the parsed AST for each module.")
+    utils::add_dump_ast_option(parser)
     ap::add_option(parser, "--embed-core", "", "Embed the installed core.h support library into the generated C.")
     ap::add_option(parser, "--emit-source-loc", "", "Emit source path:line:column comments before generated declarations.")
     ap::add_option(parser, "--format-c", "", "Format the generated C file in place with clang-format. Fails if clang-format is not available.")
-    ap::add_option(parser, "--verbose", "", "Print translation and formatting stages to stderr.")
+    utils::add_verbose_option(parser)
     utils::add_runtime_options(parser)
     return parser
 end

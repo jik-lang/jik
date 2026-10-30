@@ -6,10 +6,10 @@ use "jik/path"
 use "jik/string"
 use "jik/sys"
 
-use "../compiler"
-use "native_build"
-use "cc_flags"
-use "utils"
+use "../../compiler"
+use "../native_build"
+use "../cc_flags"
+use "../utils"
 
 
 func make_parser(r: Region) -> ap::Parser:
@@ -18,14 +18,9 @@ func make_parser(r: Region) -> ap::Parser:
     ap::add_positional(parser, "input", "Input file")
     output := ap::add_option(parser, "--out", "-o", "Output executable (default: input path without .jik, plus .exe on Windows).")
     ap::add_option_positional(output, "file", "Output path.")
-    cc := ap::add_option(parser, "--cc", "", "C compiler executable (overrides JIK_CC; otherwise discover clang, gcc or cc).")
-    ap::add_option_positional(cc, "compiler", "Executable name or path.")
-    flags := ap::add_option(parser, "--ccflags", "", "Extra C compiler arguments (quote arguments containing spaces).")
-    ap::add_option_positional(flags, "args", "C compiler arguments.")
-    ap::add_option(parser, "--release", "", "Optimize the generated program with -O3.")
+    utils::add_compiler_options(parser)
     ap::add_option(parser, "--preview", "", "Print the compiler command without compiling or copying files.")
-    ap::add_option(parser, "--dump-ast", "", "Print the parsed AST for each module.")
-    ap::add_option(parser, "--verbose", "", "Print compilation and copy stages to stderr.")
+    utils::add_diagnostic_options(parser)
     utils::add_runtime_options(parser)
     return parser
 end

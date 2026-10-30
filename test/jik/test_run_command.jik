@@ -8,7 +8,7 @@ use "jik/process"
 use "jik/string"
 use "jik/sys"
 
-use "../../src/jik/cli/run" as run_command
+use "../../src/jik/cli/commands/run" as run_command
 use "../../src/jik/cli/utils" as cli_utils
 use "language/utils"
 use "test_help_env" as helpers

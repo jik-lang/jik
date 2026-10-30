@@ -13,6 +13,7 @@ COMMANDS := [
     Command{name = "env", summary = "print resolved Jik configuration"},
     Command{name = "build", summary = "translate and build Jik source to executable"},
     Command{name = "run", summary = "translate, build and run executable"},
+    Command{name = "test", summary = "discover, build and run tests in a directory"},
     Command{name = "help", summary = "show help for command or topic"},
     Command{name = "version", summary = "show Jik version"}
 ]
