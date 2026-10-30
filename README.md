@@ -109,6 +109,24 @@ end
 
 </details>
 
+<a id="quick-start"></a>
+## Quick start
+
+To start programming in Jik:
+
+- [download the latest release](../../releases/latest) for your platform
+- extract the release archive
+- add the extracted directory to `PATH`
+- from the extracted directory, run `jik help` to confirm the executable works
+- `jik run` and `jik build` require a C compiler. Jik automatically looks for `clang`, `gcc`, then `cc` on `PATH`.
+To select a specific compiler, use the `--cc` flag or set the `JIK_CC` environment variable.
+    - Windows tip: For a simple GCC setup, download from [WinLibs](https://winlibs.com/), and add its `bin` directory to `PATH`
+- run the included hello example: `jik run examples/hello.jik`
+- generate C output: `jik tran examples/hello.jik`
+- build an executable: `jik build examples/hello.jik`
+
+Only `gcc` and `clang` host compilers were tested. MSVC was not tested.
+
 ## Explore more
 
 See the [examples](examples/) directory for [variants](examples/variants.jik), [tables](examples/tables.jik), more [error handling](examples/error_handling.jik), [word count](examples/word_count.jik), [Dijkstra](examples/dijkstra.jik), [Newton's method](examples/newton.jik), [Game of Life](examples/game_of_life.jik), [Forth](examples/forth.jik), and [C interop](examples/ffi_demo.jik).
@@ -123,23 +141,6 @@ See the [examples](examples/) directory for [variants](examples/variants.jik), [
   - [Source code](https://github.com/jik-lang/jik-packages/tree/main/packages/raylib/examples/missile_defence)
   - Note: the browser demo is a separate WebAssembly build
 
-
-<a id="quick-start"></a>
-## Quick start
-
-To start programming in Jik:
-
-- [download the latest release](../../releases/latest) for your platform
-- extract the release archive
-- from the extracted directory, run `jik help` to confirm the executable works
-- (optional) add the extracted directory to `PATH`
-- if you plan to use `jik run` or `jik build`, either pass the compiler name with `--cc` or set `JIK_CC`, for example to `gcc` or `clang`
-    - Windows: For a simple GCC setup, download from [WinLibs](https://winlibs.com/), and add its `bin` directory to `PATH`
-- run the included hello example: `jik run examples/hello.jik`
-- generate C output: `jik tran examples/hello.jik`
-- build an executable: `jik build examples/hello.jik`
-
-Only `gcc` and `clang` host compilers were tested. MSVC was not tested.
 
 <a id="build-from-src"></a>
 ## Building Jik from source
