@@ -100,7 +100,7 @@ jik_strbuf_new(JikString *from, JikRegion *a)
 {
     jik_StrBuf *sb = jik_region_alloc(a, sizeof(jik_StrBuf));
     size_t n = from->size;
-    sb->data = jik_region_alloc(a, n + 1);
+    sb->data = jik_region_alloc(a, jik_size_add(n, 1));
     memcpy(sb->data, from->data, n);
     sb->data[n] = '\0';
     sb->size = n;
@@ -128,14 +128,14 @@ jik_strbuf_append(jik_StrBuf *sb, JikString *s)
     if (n == 0) {
         return;
     }
-    size_t req = sb->size + n + 1;
-    if (req > sb->capacity + 1) {
+    size_t req = jik_size_add(jik_size_add(sb->size, n), 1);
+    if (req > jik_size_add(sb->capacity, 1)) {
         size_t new_cap = sb->capacity ? sb->capacity : 16;
-        while (new_cap + 1 < req) {
-            new_cap *= 2;
+        while (jik_size_add(new_cap, 1) < req) {
+            new_cap = jik_size_mul(new_cap, 2);
         }
 
-        char *new_data = jik_region_alloc(sb->jik_region, new_cap + 1);
+        char *new_data = jik_region_alloc(sb->jik_region, jik_size_add(new_cap, 1));
         if (sb->data && sb->size) {
             memcpy(new_data, sb->data, sb->size);
         }
@@ -150,13 +150,13 @@ jik_strbuf_append(jik_StrBuf *sb, JikString *s)
 void
 jik_strbuf_append_char(jik_StrBuf *sb, char ch)
 {
-    size_t req = sb->size + 1 + 1;
-    if (req > sb->capacity + 1) {
+    size_t req = jik_size_add(sb->size, 2);
+    if (req > jik_size_add(sb->capacity, 1)) {
         size_t new_cap = sb->capacity ? sb->capacity : 16;
-        while (new_cap + 1 < req) {
-            new_cap *= 2;
+        while (jik_size_add(new_cap, 1) < req) {
+            new_cap = jik_size_mul(new_cap, 2);
         }
-        char *new_data = jik_region_alloc(sb->jik_region, new_cap + 1);
+        char *new_data = jik_region_alloc(sb->jik_region, jik_size_add(new_cap, 1));
         if (sb->data && sb->size) {
             memcpy(new_data, sb->data, sb->size);
         }

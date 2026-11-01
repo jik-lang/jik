@@ -19,6 +19,7 @@ use "test_help_env"
 use "test_translation_options"
 use "test_translation_command"
 use "test_runtime_options"
+use "test_runtime_allocations"
 use "test_run_command"
 use "test_test_command"
 use "test_inference"
@@ -89,6 +90,7 @@ func main():
     test_translation_options::run_tests(ts)
     test_translation_command::run_tests(ts)
     test_runtime_options::run_tests(ts)
+    test_runtime_allocations::run_tests(ts)
     test_run_command::run_tests(ts)
     test_test_command::run_tests(ts)
     test_inference::run_tests(ts)

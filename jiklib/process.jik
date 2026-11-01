@@ -210,7 +210,8 @@ jik_impl_process_append_windows_arg(JikCharBuffer *b, const char *arg, JikRegion
         }
 
         if (*p == '"') {
-            for (size_t i = 0; i < backslashes * 2 + 1; i++) {
+            size_t escaped = jik_size_add(jik_size_mul(backslashes, 2), 1);
+            for (size_t i = 0; i < escaped; i++) {
                 jik_char_buffer_append_char(b, '\\', r);
             }
             jik_char_buffer_append_char(b, '"', r);
@@ -225,7 +226,8 @@ jik_impl_process_append_windows_arg(JikCharBuffer *b, const char *arg, JikRegion
         jik_char_buffer_append_char(b, *p, r);
     }
 
-    for (size_t i = 0; i < backslashes * 2; i++) {
+    size_t trailing = jik_size_mul(backslashes, 2);
+    for (size_t i = 0; i < trailing; i++) {
         jik_char_buffer_append_char(b, '\\', r);
     }
     jik_char_buffer_append_char(b, '"', r);
@@ -504,7 +506,7 @@ static char **
 jik_impl_process_build_argv(JikString *program, struct jik_vec_JikString *args)
 {
     size_t n = jik_vec_JikString_size(args, "process::run args");
-    char **argv = malloc((n + 2) * sizeof(char *));
+    char **argv = malloc(jik_size_mul(jik_size_add(n, 2), sizeof(char *)));
     if (!argv) {
         return NULL;
     }

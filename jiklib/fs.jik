@@ -262,8 +262,8 @@ jik_impl_fs_join_path(const char *base, const char *name)
     size_t base_len = strlen(base);
     size_t name_len = strlen(name);
     bool need_sep = base_len > 0 && !jik_impl_fs_is_sep(base[base_len - 1]);
-    size_t total = base_len + (need_sep ? 1 : 0) + name_len;
-    char *out = jik_malloc(total + 1);
+    size_t total = jik_size_add(jik_size_add(base_len, need_sep ? 1 : 0), name_len);
+    char *out = jik_malloc(jik_size_add(total, 1));
 
     for (size_t i = 0; i < base_len; i++) {
         out[i] = (base[i] == '/') ? '\\' : base[i];

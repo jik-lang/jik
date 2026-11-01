@@ -1,0 +1,35 @@
+use "jik/testing" as test
+use "jik/bytes"
+use "jik/path"
+use "jik/process"
+use "jik/string"
+
+use "../../src/jik/cli/utils" as cli_utils
+use "language/utils"
+
+
+func run_tests(ts: test::TestSuite):
+    println("[test] test_runtime_allocations")
+    workspace := must cli_utils::make_workspace()
+    executable := path::join([workspace, "allocations.exe"])
+    built := must process::capture(utils::compiler_command(_), ["build", "test/jik/input/runtime_allocations/main.jik", "--release", "--out", executable])
+    test::suite_assert(ts, built.code == 0, site())
+    if built.code != 0:
+        println(must bytes::to_string_ascii(built.err))
+        must cli_utils::cleanup_workspace(workspace)
+        return
+    end
+    valid := must process::capture(executable, ["0"])
+    test::suite_assert(ts, valid.code == 0 and bytes::len(valid.err) == 0, site())
+    mode := 1
+    while mode <= 22:
+        result := must process::capture(executable, [string::from_int(mode)])
+        diagnostic := must bytes::to_string_ascii(result.err)
+        test::suite_assert(ts, result.code != 0 and string::contains(diagnostic, "allocation size overflow"), site())
+        if result.code == 0 or not string::contains(diagnostic, "allocation size overflow"):
+            println("Allocation overflow probe ", mode, ": ", diagnostic)
+        end
+        mode += 1
+    end
+    must cli_utils::cleanup_workspace(workspace)
+end

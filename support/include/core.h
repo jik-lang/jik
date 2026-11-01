@@ -75,6 +75,24 @@ jik_assert(bool cond, const char *filepath, int32_t line)
 //      SECT MEMORY ALLOCATION
 // ---------------------------------------------------------------------------------------------------
 
+static inline size_t
+jik_size_add(size_t a, size_t b)
+{
+    if (b > SIZE_MAX - a) {
+        jik_die("allocation size overflow");
+    }
+    return a + b;
+}
+
+static inline size_t
+jik_size_mul(size_t a, size_t b)
+{
+    if (a != 0 && b > SIZE_MAX / a) {
+        jik_die("allocation size overflow");
+    }
+    return a * b;
+}
+
 void *
 jik_malloc(size_t n)
 {
@@ -179,7 +197,7 @@ static bool                jik_region_tree_truncated = false;
 static inline size_t
 jik_region_align_up(size_t n, size_t align)
 {
-    return (n + align - 1) & ~(align - 1);
+    return jik_size_add(n, align - 1) & ~(align - 1);
 }
 
 #ifdef JIK_REGION_STATS
@@ -245,9 +263,9 @@ jik_region_tree_enter(const char *label)
 
     if (jik_region_tree_count == jik_region_tree_capacity) {
         size_t new_capacity =
-            jik_region_tree_capacity == 0 ? 16 : jik_region_tree_capacity * 2;
+            jik_region_tree_capacity == 0 ? 16 : jik_size_mul(jik_region_tree_capacity, 2);
         jik_region_tree_entries =
-            jik_realloc(jik_region_tree_entries, new_capacity * sizeof(JikRegionTreeEntry));
+            jik_realloc(jik_region_tree_entries, jik_size_mul(new_capacity, sizeof(JikRegionTreeEntry)));
         jik_region_tree_capacity = new_capacity;
     }
 
@@ -298,7 +316,7 @@ jik_region_register_tree_printer(void)
 static JikRegionBlock *
 jik_region_new_block(size_t capacity)
 {
-    size_t         total = sizeof(JikRegionBlock) + capacity;
+    size_t         total = jik_size_add(sizeof(JikRegionBlock), capacity);
     JikRegionBlock *blk   = (JikRegionBlock *)jik_malloc(total);
     blk->next            = NULL;
     blk->capacity        = capacity;
@@ -402,15 +420,16 @@ jik_region_alloc(JikRegion *r, size_t size)
     JikRegionBlock *blk = r->current;
 
     // Need a new block?
-    if (!blk || blk->used + size > blk->capacity) {
+    if (!blk || size > blk->capacity - blk->used) {
         size_t cap = r->block_size;
         // For very large allocations, make a dedicated big block.
         if (size > cap) {
             cap = size;
         }
 
+        size_t total_mem = jik_size_add(r->total_mem, cap);
         JikRegionBlock *new_blk = jik_region_new_block(cap);
-        r->total_mem += cap;
+        r->total_mem = total_mem;
         // Push onto list head
         new_blk->next = r->blocks;
         r->blocks     = new_blk;
@@ -427,7 +446,7 @@ jik_region_alloc(JikRegion *r, size_t size)
 static inline void *
 jik_region_calloc(JikRegion *r, size_t count, size_t size)
 {
-    size_t total = count * size;
+    size_t total = jik_size_mul(count, size);
     void  *ptr   = jik_region_alloc(r, total);
     if (ptr) {
         memset(ptr, 0, total);
@@ -483,10 +502,11 @@ JikString *
 jik_string_new(char *from, JikRegion *a)
 {
     size_t     n = strlen(from);
-    JikString *s = jik_region_alloc(a, sizeof(JikString));
-    s->data      = jik_region_alloc(a, n + 1);
-    memcpy(s->data, from, n);
-    s->data[n]  = '\0';
+    size_t     bytes = jik_size_add(n, 1);
+    size_t     total = jik_size_add(sizeof(JikString), bytes);
+    JikString *s = jik_region_alloc(a, total);
+    s->data      = (char *)(s + 1);
+    memcpy(s->data, from, bytes);
     s->size     = n;
     s->capacity = n;
     s->jik_region    = a;
@@ -547,7 +567,7 @@ jik_string_slice(JikString *s,
 
     size_t     n   = upper - lower;
     JikString *out = jik_region_alloc(s->jik_region, sizeof(JikString));
-    out->data      = jik_region_alloc(s->jik_region, n + 1);
+    out->data      = jik_region_alloc(s->jik_region, jik_size_add(n, 1));
     memcpy(out->data, s->data + lower, n);
     out->data[n]  = '\0';
     out->size     = n;
@@ -670,8 +690,9 @@ jik_char_buffer_new(const char *from, JikRegion *a)
     JikCharBuffer *b = jik_region_alloc(a, sizeof(JikCharBuffer));
     b->size          = strlen(from);
     b->capacity      = b->size;
-    b->data          = jik_region_alloc(a, b->size + 1);
-    memcpy(b->data, from, b->size + 1);
+    size_t bytes     = jik_size_add(b->size, 1);
+    b->data          = jik_region_alloc(a, bytes);
+    memcpy(b->data, from, bytes);
     b->data[b->size] = '\0';
     return b;
 }
@@ -680,11 +701,11 @@ void
 jik_char_buffer_append(JikCharBuffer *b, const char *str, JikRegion *a)
 {
     size_t n       = strlen(str);
-    size_t req_cap = b->size + n + 1;
+    size_t req_cap = jik_size_add(jik_size_add(b->size, n), 1);
     if (req_cap > b->capacity) {
         size_t old_cap = b->capacity;
         while (req_cap > b->capacity) {
-            b->capacity = 2 * b->capacity + 1;
+            b->capacity = jik_size_add(jik_size_mul(2, b->capacity), 1);
         }
         b->data = jik_region_realloc(a, b->data, old_cap, b->capacity);
     }
@@ -696,11 +717,11 @@ jik_char_buffer_append(JikCharBuffer *b, const char *str, JikRegion *a)
 void
 jik_char_buffer_append_char(JikCharBuffer *b, char ch, JikRegion *a)
 {
-    size_t req_cap = b->size + 2;
+    size_t req_cap = jik_size_add(b->size, 2);
     if (req_cap > b->capacity) {
         size_t old_cap = b->capacity;
         while (req_cap > b->capacity) {
-            b->capacity = 2 * b->capacity + 1;
+            b->capacity = jik_size_add(jik_size_mul(2, b->capacity), 1);
         }
         b->data = jik_region_realloc(a, b->data, old_cap, b->capacity);
     }
@@ -768,11 +789,11 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
 {
     size_t total = 0;
     for (size_t i = 0; i < n; i++) {
-        total += strings[i]->size;
+        total = jik_size_add(total, strings[i]->size);
     }
 
     JikString *res = jik_region_alloc(a, sizeof(JikString));
-    res->data      = jik_region_alloc(a, total + 1);
+    res->data      = jik_region_alloc(a, jik_size_add(total, 1));
     res->size      = total;
     res->capacity  = total;
     res->jik_region    = a;
@@ -852,7 +873,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
     struct vec_name *vec_name##_new(JikRegion *a, size_t n)                        \
     {                                                                                              \
         struct vec_name *v = jik_region_alloc(a, sizeof(struct vec_name));                          \
-        v->data            = jik_region_alloc(a, n * sizeof(vec_elem_type));                        \
+        v->data            = jik_region_alloc(a, jik_size_mul(n, sizeof(vec_elem_type)));          \
         v->size            = n;                                                                    \
         v->capacity        = n;                                                                    \
         v->jik_region           = a;                                                                    \
@@ -863,7 +884,7 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         JikRegion *a, size_t n, vec_elem_type init_vals[])                         \
     {                                                                                              \
         struct vec_name *v = jik_region_alloc(a, sizeof(struct vec_name));                          \
-        v->data            = jik_region_alloc(a, n * sizeof(vec_elem_type));                        \
+        v->data            = jik_region_alloc(a, jik_size_mul(n, sizeof(vec_elem_type)));          \
         v->size            = n;                                                                    \
         v->capacity        = n;                                                                    \
         for (size_t i = 0; i < n; i++) {                                                           \
@@ -890,11 +911,11 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
     void vec_name##_push(struct vec_name *v, vec_elem_type item, char *dbg_info)  \
     {                                                                                              \
         if (v->size == v->capacity) {                                                              \
-            size_t new_cap = 2 * v->capacity + 1;                                                  \
+            size_t new_cap = jik_size_add(jik_size_mul(2, v->capacity), 1);                         \
             v->data        = jik_region_realloc(v->jik_region,                                           \
                                         v->data,                                            \
-                                        v->capacity * sizeof(vec_elem_type),                \
-                                        new_cap * sizeof(vec_elem_type));                   \
+                                        jik_size_mul(v->capacity, sizeof(vec_elem_type)),    \
+                                        jik_size_mul(new_cap, sizeof(vec_elem_type)));       \
             v->capacity    = new_cap;                                                              \
         }                                                                                          \
         v->data[v->size] = item;                                                                   \
@@ -907,16 +928,16 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
         if (b->size == 0) {                                                                        \
             return;                                                                                \
         }                                                                                          \
-        size_t new_size = v->size + b->size;                                                       \
+        size_t new_size = jik_size_add(v->size, b->size);                                          \
         if (new_size > v->capacity) {                                                              \
             size_t new_cap = v->capacity;                                                          \
             while (new_cap < new_size) {                                                           \
-                new_cap = 2 * new_cap + 1;                                                         \
+                new_cap = jik_size_add(jik_size_mul(2, new_cap), 1);                               \
             }                                                                                      \
             v->data     = jik_region_realloc(v->jik_region,                                              \
                                         v->data,                                               \
-                                        v->capacity * sizeof(vec_elem_type),                   \
-                                        new_cap * sizeof(vec_elem_type));                      \
+                                        jik_size_mul(v->capacity, sizeof(vec_elem_type)),       \
+                                        jik_size_mul(new_cap, sizeof(vec_elem_type)));          \
             v->capacity = new_cap;                                                                 \
         }                                                                                          \
         for (size_t i = 0; i < b->size; i++)                                                       \
@@ -1137,8 +1158,8 @@ jik_concat(JikString **strings, size_t n, JikRegion *a)
             item->val = val;                                                                      \
             return;                                                                               \
         }                                                                                         \
-        if (ht->size + 1 > ht->capacity * JIK_HTAB_LOAD_FACT) {                                    \
-            size_t new_cap = ht->capacity * 2;                                                     \
+        if (jik_size_add(ht->size, 1) > ht->capacity * JIK_HTAB_LOAD_FACT) {                        \
+            size_t new_cap = jik_size_mul(ht->capacity, 2);                                       \
             dict_name##_resize(ht, new_cap);                                                  \
             item = dict_name##_find_entry(ht->items, ht->capacity, key->data);                     \
         }                                                                                          \

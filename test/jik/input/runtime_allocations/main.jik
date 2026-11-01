@@ -1,0 +1,119 @@
+use "jik/bytes"
+use "jik/strbuf"
+use "jik/string"
+
+extern func allocation_probe as probe(mode: int) -> int
+
+func main(args) -> int:
+    if len(args) != 2:
+        return 2
+    end
+    return probe(must string::to_int(args[1]))
+end
+
+@embed{C_END}
+
+JIK_DECLARE_VEC(AllocationProbeVec, uint64_t)
+JIK_DEFINE_VEC(AllocationProbeVec, uint64_t)
+
+int32_t
+allocation_probe(int32_t mode)
+{
+    JikRegion *r = jik_region_new(128);
+    JikString huge = { .data = "", .size = SIZE_MAX, .capacity = SIZE_MAX, .jik_region = r };
+    JikCharBuffer chars = { .data = NULL, .size = SIZE_MAX, .capacity = SIZE_MAX };
+    jik_StrBuf buf = { .data = NULL, .size = SIZE_MAX, .capacity = SIZE_MAX, .jik_region = r };
+    struct AllocationProbeVec vec = { .data = NULL, .size = SIZE_MAX, .capacity = SIZE_MAX, .jik_region = r };
+    struct AllocationProbeVec one = { .data = NULL, .size = 1, .capacity = 1, .jik_region = r };
+    JikString *small = jik_string_new("aa", r);
+    switch (mode) {
+    case 0: {
+        assert(jik_size_add(SIZE_MAX, 0) == SIZE_MAX);
+        assert(jik_size_add(SIZE_MAX - 1, 1) == SIZE_MAX);
+        assert(jik_size_mul(SIZE_MAX, 1) == SIZE_MAX);
+        assert(jik_size_mul(SIZE_MAX, 0) == 0);
+        assert(jik_size_mul(0, SIZE_MAX) == 0);
+        size_t align = alignof(max_align_t);
+        size_t largest = SIZE_MAX - (align - 1);
+        assert(jik_region_align_up(largest, align) == largest);
+        assert(jik_region_alloc(r, 0) == NULL);
+        assert(jik_region_calloc(r, SIZE_MAX, 0) == NULL);
+        uint64_t *zero = jik_region_calloc(r, 4, sizeof(uint64_t));
+        for (size_t i = 0; i < 4; i++) assert(zero[i] == 0);
+        JikString *empty = jik_string_new("", r);
+        assert(empty->size == 0 && empty->capacity == 0 && empty->data[0] == '\0');
+        assert(small->size == 2 && small->capacity == 2 && small->jik_region == r);
+        assert(strcmp(small->data, "aa") == 0);
+        // Force block transitions and verify earlier strings remain valid.
+        for (size_t i = 0; i < 32; i++) jik_string_new("another string", r);
+        assert(strcmp(small->data, "aa") == 0 && empty->data[0] == '\0');
+        struct AllocationProbeVec *v = AllocationProbeVec_new(r, 0);
+        AllocationProbeVec_push(v, 42, "probe");
+        AllocationProbeVec_extend(v, v, "probe");
+        assert(v->size == 2 && v->data[0] == 42 && v->data[1] == 42);
+        JikCharBuffer *b = jik_char_buffer_new("", r);
+        jik_char_buffer_append(b, "hello", r);
+        jik_char_buffer_append_char(b, '!', r);
+        assert(strcmp(b->data, "hello!") == 0);
+        jik_StrBuf *sb = jik_strbuf_new_empty(r);
+        jik_strbuf_append(sb, small);
+        jik_strbuf_append_char(sb, '!');
+        assert(strcmp(sb->data, "aa!") == 0);
+        JikString *joined = jik_concat((JikString *[]){empty, small}, 2, r);
+        assert(strcmp(joined->data, "aa") == 0);
+        JikString *replaced = jik_impl_string_replace(small, jik_string_new("a", r), jik_string_new("xyz", r), r);
+        assert(strcmp(replaced->data, "xyzxyz") == 0);
+        replaced = jik_impl_string_replace(replaced, jik_string_new("xyz", r), empty, r);
+        assert(replaced->size == 0 && replaced->data[0] == '\0');
+        replaced = jik_impl_string_replace(small, jik_string_new("longer", r), empty, r);
+        assert(strcmp(replaced->data, "aa") == 0);
+        JikString *slice = jik_string_slice(small, 0, true, 0, true, "probe");
+        assert(strcmp(slice->data, "aa") == 0);
+        break;
+    }
+    case 1: jik_size_add(SIZE_MAX, 1); break;
+    case 2: jik_size_mul(SIZE_MAX, 2); break;
+    case 3: jik_region_alloc(r, SIZE_MAX); break;
+    case 4: jik_region_new_block(SIZE_MAX); break;
+    case 5: jik_region_calloc(r, SIZE_MAX, 2); break;
+    case 6:
+        r->total_mem = SIZE_MAX;
+        jik_region_alloc(r, 1024);
+        break;
+    case 7: AllocationProbeVec_new(r, SIZE_MAX / sizeof(uint64_t) + 1); break;
+    case 8: AllocationProbeVec_push(&vec, 1, "probe"); break;
+    case 9: AllocationProbeVec_extend(&vec, &one, "probe"); break;
+    case 10: jik_char_buffer_append(&chars, "a", r); break;
+    case 11: jik_char_buffer_append_char(&chars, 'a', r); break;
+    case 12: jik_concat((JikString *[]){&huge, small}, 2, r); break;
+    case 13: jik_string_slice(&huge, 0, true, 0, true, "probe"); break;
+    case 14: jik_strbuf_new(&huge, r); break;
+    case 15: jik_strbuf_append_char(&buf, 'a'); break;
+    case 16: jik_strbuf_append(&buf, small); break;
+    case 17: {
+        jik_impl_bytes_ByteBuf bytebuf = { .data = NULL, .size = SIZE_MAX, .capacity = SIZE_MAX, .jik_region = r };
+        jik_impl_bytes_buf_push(&bytebuf, 0);
+        break;
+    }
+    case 18: jik_impl_bytes_string_from_raw(NULL, SIZE_MAX, r); break;
+    case 19: jik_impl_string_replace(small, jik_string_new("a", r), &huge, r); break;
+    case 20: {
+        JikError error = {0};
+        jik_impl_string_slice(&huge, 0, SIZE_MAX, r, &error);
+        break;
+    }
+    case 21:
+        buf.size = buf.capacity = SIZE_MAX / 2 + 1;
+        jik_strbuf_append_char(&buf, 'a');
+        break;
+    case 22:
+        chars.size = chars.capacity = SIZE_MAX / 2 + 1;
+        jik_char_buffer_append_char(&chars, 'a', r);
+        break;
+    default: return 2;
+    }
+    jik_region_free(r);
+    return 0;
+}
+
+C_END

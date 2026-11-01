@@ -18,6 +18,4 @@ program arguments directly, without a shell.
 
 ## Memory
 
-- Very large allocations can make size calculations wrap around. These cases
-  are not fully checked.
 - Region memory may not meet the alignment needed by some C types.

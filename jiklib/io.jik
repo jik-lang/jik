@@ -234,7 +234,7 @@ jik_impl_io_read(jik_impl_io_File *fh, JikRegion *r, JikError *e)
     }
 
     size_t file_size = (size_t)end;
-    char *buffer = jik_region_alloc(r, file_size + 1);
+    char *buffer = jik_region_alloc(r, jik_size_add(file_size, 1));
     size_t bytes = fread(buffer, sizeof(char), file_size, fh->file);
     buffer[bytes] = '\0';
     if (bytes < file_size && ferror(fh->file)) {

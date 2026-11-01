@@ -234,7 +234,7 @@ static JikString *
 jik_impl_bytes_string_from_raw(uint8_t *data, size_t size, JikRegion *a)
 {
     JikString *s = jik_region_alloc(a, sizeof(JikString));
-    s->data      = jik_region_alloc(a, size + 1);
+    s->data      = jik_region_alloc(a, jik_size_add(size, 1));
     if (size > 0) {
         memcpy(s->data, data, size);
     }
@@ -401,7 +401,7 @@ jik_impl_bytes_buf_get(jik_impl_bytes_ByteBuf *buf, int32_t index)
 void
 jik_impl_bytes_buf_push(jik_impl_bytes_ByteBuf *buf, uint8_t byte)
 {
-    jik_impl_bytes_buf_reserve(buf, buf->size + 1);
+    jik_impl_bytes_buf_reserve(buf, jik_size_add(buf->size, 1));
     buf->data[buf->size++] = byte;
 }
 

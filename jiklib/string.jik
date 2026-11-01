@@ -293,7 +293,7 @@ jik_impl_string_slice(JikString *s, size_t lower, size_t upper, JikRegion *a, Ji
         return jik_string_new("", a);
     }
     size_t n = upper - lower;
-    char *from = jik_region_alloc(a, n + 1);
+    char *from = jik_region_alloc(a, jik_size_add(n, 1));
     from[n] = '\0';
     memcpy(from, s->data + lower, n);    
     JikString *res = jik_string_new(from, a);
@@ -379,7 +379,7 @@ jik_impl_string_replace(JikString *s, JikString *needle, JikString *repl, JikReg
     }
 
     size_t matches = 0;
-    for (size_t i = 0; i + needle->size <= s->size;) {
+    for (size_t i = 0; needle->size <= s->size - i;) {
         if (memcmp(s->data + i, needle->data, needle->size) == 0) {
             matches++;
             i += needle->size;
@@ -395,17 +395,17 @@ jik_impl_string_replace(JikString *s, JikString *needle, JikString *repl, JikReg
 
     size_t out_size = s->size;
     if (repl->size >= needle->size) {
-        out_size += matches * (repl->size - needle->size);
+        out_size = jik_size_add(out_size, jik_size_mul(matches, repl->size - needle->size));
     }
     else {
         out_size -= matches * (needle->size - repl->size);
     }
-    char *from = jik_region_alloc(a, out_size + 1);
+    char *from = jik_region_alloc(a, jik_size_add(out_size, 1));
 
     size_t src_i = 0;
     size_t dst_i = 0;
     while (src_i < s->size) {
-        if (src_i + needle->size <= s->size &&
+        if (needle->size <= s->size - src_i &&
             memcmp(s->data + src_i, needle->data, needle->size) == 0) {
             memcpy(from + dst_i, repl->data, repl->size);
             dst_i += repl->size;
