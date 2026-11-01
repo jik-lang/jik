@@ -55,14 +55,15 @@ compiler is built by the C seed with default optimization; the release compiler
 is built by the self-hosted stage-1 compiler with `-O3` and receives full
 self-hosting verification. Both implement the same language.
 
-`make release-archive VERSION=v0.1.0-beta.0` performs the same checks and creates
+`make release-archive VERSION=...`, with `VERSION` set to the release tag including
+its leading `v`, performs the same checks and creates
 an archive in `artifacts/`, containing the stage-2 executable named `jik`/`jik.exe`,
 `LICENSE`, `jiklib/`, `support/`, `docs/`, and `examples/`. Stage 3 verifies
 self-hosting; it is not distributed.
 
 ## Roadmap
 
-### 0.1.0-beta.0
+### Beta series
 
 - Keep the intended language syntax stable.
 - Find and fix compiler and support-library issues.

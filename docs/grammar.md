@@ -1,6 +1,6 @@
 # Jik Grammar Reference
 
-This page describes Jik `0.1.0-beta.0` syntax. It follows the
+This page describes Jik syntax. It follows the
 [lexer](../src/jik/lexer/lexer.jik) and [parser](../src/jik/parser/parser.jik),
 including [expressions](../src/jik/parser/expressions.jik) and
 [statements](../src/jik/parser/statements.jik).

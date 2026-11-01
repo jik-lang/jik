@@ -69,7 +69,7 @@ endif
 
 release-archive:
 ifndef VERSION
-	$(error VERSION is required. Use make release-archive VERSION=v0.1.0-beta.0)
+	$(error VERSION is required. Use make release-archive VERSION=... with the release tag)
 else
 release-archive: release
 ifeq ($(OS),Windows_NT)

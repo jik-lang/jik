@@ -1,6 +1,6 @@
 # Known limitations
 
-Jik `0.1.0-beta.0` is the first beta release. Bugs and changes are still expected.
+Jik is in beta. Bugs and changes are still expected.
 
 ## Platforms and tools
 
