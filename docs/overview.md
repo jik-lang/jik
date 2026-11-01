@@ -1,6 +1,6 @@
 # Jik Language Overview
 
-This guide introduces Jik `0.1.0-beta.0` and shows how to write Jik programs.
+This guide introduces Jik `0.1.0-beta.1` and shows how to write Jik programs.
 
 ## Chapters
 
