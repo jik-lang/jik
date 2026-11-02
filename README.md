@@ -137,6 +137,7 @@ See the [examples](examples/) directory for [variants](examples/variants.jik), [
 
 ## Showcase
 
+- [Jik compiler](src/jik/) — Jik's self-hosted compiler, written in Jik.
 - [Play Missile Defence](https://jik-lang.org/showcase/missile-defence/) — a Jik game built with the [Raylib wrapper](https://github.com/jik-lang/jik-packages/tree/main/packages/raylib).
   - [Source code](https://github.com/jik-lang/jik-packages/tree/main/packages/raylib/examples/missile_defence)
   - Note: the browser demo is a separate WebAssembly build
