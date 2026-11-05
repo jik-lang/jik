@@ -824,8 +824,8 @@
         "name": "input",
         "kind": "function",
         "signature": "input(region: Region) -> String",
-        "doc": "Read a line of input from standard input.",
-        "throws": false
+        "doc": "Read a line of input from standard input.\nStrip LF or CRLF; return an empty string at EOF. Throws on read errors,\nembedded NUL bytes, or lines exceeding Jik's string-length limit.",
+        "throws": true
       }
     ]
   },

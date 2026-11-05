@@ -4,9 +4,56 @@ use "jik/io"
 use "jik/path"
 use "jik/process"
 use "jik/string"
+use "jik/strbuf"
 
 use "../../../src/jik/cli/utils" as cli_utils
 use "utils"
+
+
+func check_input(ts, foreign program: String, foreign path: String, foreign contents: String, foreign expected: String):
+    must io::write_file_bytes(path, bytes::from_string(contents))
+    result := must process::capture(program, ["input", copy(path)])
+    test::suite_assert(ts, result.code == 0 and bytes::len(result.err) == 0, site())
+    test::suite_assert(ts, bytes::equals(result.out, bytes::from_string(expected)), site())
+end
+
+
+func check_input_cases(ts, foreign program: String, foreign path: String):
+    check_input(ts, program, path, "one line\n", "one line")
+    check_input(ts, program, path, "one line\r\n", "one line")
+    check_input(ts, program, path, "no newline", "no newline")
+    check_input(ts, program, path, "", "")
+    check_input(ts, program, path, "\n", "")
+    check_input(ts, program, path, "\r\n", "")
+    check_input(ts, program, path, "bare\r", "bare\r")
+    check_input(ts, program, path, "UTF-8: \xc3\xa9\n", "UTF-8: \xc3\xa9")
+
+    buffer := strbuf::new_empty()
+    for i = 0, 8200:
+        strbuf::append_char(buffer, 'x')
+    end
+    long_line := strbuf::to_string(buffer)
+    check_input(ts, program, path, concat(long_line, "\n"), long_line)
+    check_input(ts, program, path, long_line, long_line)
+
+    must io::write_file_bytes(path, bytes::from_string("first\r\n\nlast"))
+    lines := must process::capture(program, ["input-lines", copy(path)])
+    test::suite_assert(ts, lines.code == 0 and bytes::len(lines.err) == 0, site())
+    // Each read emits length:contents; the last empty result is EOF.
+    test::suite_assert(ts, bytes::equals(lines.out, bytes::from_string("5:first;0:;4:last;0:;")), site())
+
+    invalid := bytes::buf_from_string("before")
+    must bytes::buf_push_int(invalid, 0)
+    bytes::buf_append_string(invalid, "after\n")
+    must io::write_file_bytes(path, bytes::to_bytes(invalid))
+    nul := must process::capture(program, ["input-error", copy(path)])
+    test::suite_assert(ts, nul.code == 0 and bytes::len(nul.err) == 0, site())
+    test::suite_assert(ts, bytes::equals(nul.out, bytes::from_string("1:std::input: input contains a NUL byte")), site())
+
+    failed := must process::capture(program, ["input-read-error", copy(path)])
+    test::suite_assert(ts, failed.code == 0 and bytes::len(failed.err) == 0, site())
+    test::suite_assert(ts, bytes::equals(failed.out, bytes::from_string("1:std::input: could not read standard input")), site())
+end
 
 
 func run_tests(ts):
@@ -21,9 +68,7 @@ func run_tests(ts):
     test::suite_assert(ts, built.code == 0, site())
     if built.code == 0:
         input := path::join([workspace, "input.txt"])
-        must io::write_file(input, "one line\n")
-        read := must process::capture(program, ["input", input])
-        test::suite_assert(ts, read.code == 0 and string::trim(must bytes::to_string_ascii(read.out)) == "one line", site())
+        check_input_cases(ts, program, input)
         regions := must process::capture(program, ["regions"])
         test::suite_assert(ts, regions.code == 0 and bytes::len(regions.err) == 0, site())
         output := must bytes::to_string_ascii(regions.out)

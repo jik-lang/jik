@@ -11,10 +11,12 @@ extern func jik_impl_std_panic as
     panic(msg: String) -> void
 
 /// Read a line of input from standard input.
+/// Strip LF or CRLF; return an empty string at EOF. Throws on read errors,
+/// embedded NUL bytes, or lines exceeding Jik's string-length limit.
 ///
 /// @param region Allocation region for the returned string.
 /// @returns Input line as a String.
-extern func jik_impl_std_input as
+extern throws func jik_impl_std_input as
     input(region: Region) -> String
 
 
@@ -32,15 +34,42 @@ jik_impl_std_panic(JikString *msg)
 }
 
 JikString *
-jik_impl_std_input(JikRegion *a)
+jik_impl_std_input(JikRegion *a, JikError *e)
 {
-    char input[256];
-    fgets(input, sizeof(input), stdin);
-    size_t len = strlen(input);
-    input[len - 1] = '\0';
-    char *new = jik_region_alloc(a, len);
-    strcpy(new, input);
-    return jik_string_new(new, a);
+    JikRegion *scratch = jik_region_new(0);
+    JikCharBuffer *buffer = jik_char_buffer_new("", scratch);
+    char *failure = NULL;
+    int ch;
+
+    while ((ch = fgetc(stdin)) != EOF && ch != '\n') {
+        if (ch == 0) {
+            failure = "std::input: input contains a NUL byte";
+            break;
+        }
+        if (buffer->size >= (size_t)INT32_MAX) {
+            failure = "std::input: input line is too long";
+            break;
+        }
+        jik_char_buffer_append_char(buffer, (char)ch, scratch);
+    }
+
+    if (!failure && ferror(stdin)) {
+        failure = "std::input: could not read standard input";
+    }
+    if (failure) {
+        jik_region_free(scratch);
+        jik_error_set(e, 1, failure);
+        return NULL;
+    }
+
+    if (ch == '\n' && buffer->size > 0 &&
+        buffer->data[buffer->size - 1] == '\r') {
+        buffer->data[--buffer->size] = '\0';
+    }
+
+    JikString *result = jik_string_new(buffer->data, a);
+    jik_region_free(scratch);
+    return result;
 }
 
 

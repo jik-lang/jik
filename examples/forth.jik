@@ -118,7 +118,7 @@ func main():
     print("Welcome! Type quit to quit, help for help.")
     while true:
         print("\n> ")
-        code := std::input(_)
+        code := must std::input(_)
         if code == "quit":
             break
         elif code == "help":
