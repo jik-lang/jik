@@ -48,6 +48,10 @@ func resolve(modules: Vec[module::Module], mod: module::Module, id: int, diagnos
         if element is None:
             return None
         end
+        if constructor? == types::Container.VECTOR and element? == types::atom(mod.type_store, types::Atom.REGION):
+            diag::error(diagnostics, "invalid vector type", "vector elements cannot have type Region", Some{node.span})
+            return None
+        end
         if constructor? == types::Container.OPTION and (element? == types::atom(mod.type_store, types::Atom.REGION) or element? == types::atom(mod.type_store, types::Atom.VOID)):
             diag::error(diagnostics, "invalid option type", "Option payloads cannot have type Region or void", Some{node.span})
             return None
@@ -121,6 +125,10 @@ func resolve_members(modules: Vec[module::Module], mod: module::Module, id: int,
         if member.annotation is Some:
             member.resolved_type = resolve(modules, mod, member.annotation?, diagnostics)
             if member.resolved_type is Some:
+                if declaration.kind == types::NamedKind.STRUCT and member.resolved_type? == types::atom(mod.type_store, types::Atom.REGION):
+                    diag::error(diagnostics, "invalid struct field type", "struct fields cannot hold Region handles", Some{node.span})
+                    continue
+                end
                 if declaration.kind == types::NamedKind.VARIANT and (member.resolved_type? == types::atom(mod.type_store, types::Atom.VOID) or member.resolved_type? == types::atom(mod.type_store, types::Atom.REGION)):
                     diag::error(diagnostics, "invalid variant payload type", "variant members cannot hold void or Region values; omit the type annotation for a member with no value", Some{node.span})
                     continue

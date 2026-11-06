@@ -30,6 +30,14 @@ a function.
 
 We can pass the local region to another function as an argument referred to as `_`.
 
+Region handles (`_`, a `Region` parameter, or `.value`) are only allowed as
+arguments to parameters of type `Region`, or as allocation destinations using
+the supported suffix syntax such as `[r]` and `[.value]`. They are not ordinary
+data values: they cannot be stored in variables, fields or containers, returned,
+compared, or used as conditions. A Region parameter may be forwarded to another
+function's Region parameter. Default local allocation omits the suffix; `[_]`
+is not an allocation suffix.
+
 Examples:
 
 ```jik

@@ -1,0 +1,11 @@
+struct Holder:
+    handle: Region
+end
+
+func escape(r: Region) -> Holder:
+    return Holder{handle = _}[r]
+end
+
+func main():
+    holder := escape()
+end

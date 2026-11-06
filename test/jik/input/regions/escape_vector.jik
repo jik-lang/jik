@@ -1,0 +1,7 @@
+func escape(r: Region) -> Vec[Region]:
+    return [_][r]
+end
+
+func main():
+    handles := escape()
+end

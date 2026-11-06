@@ -76,7 +76,7 @@ func test_errors(ts) -> void:
     test_strings::check_error(ts, concat(prefix, "func bad(value: Label):\n    local := Label{text = value.text}\nend\n"), "region mismatch")
     test_strings::check_error(ts, concat(prefix, "func bad():\n    count := (Label{}).count\nend\n"), "composite value must be bound")
     test_strings::check_error(ts, "struct Invalid:\n    value: void\nend\nfunc bad():\n    value := Invalid{}\nend\n", "void value")
-    test_strings::check_error(ts, "struct Invalid:\n    value: Region\nend\nfunc bad():\n    value := Invalid{}\nend\n", "unsupported field default")
+    test_strings::check_error(ts, "struct Invalid:\n    value: Region\nend\nfunc bad():\n    value := Invalid{}\nend\n", "invalid struct field type")
 end
 
 

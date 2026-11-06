@@ -126,12 +126,69 @@ func test_allocated_type_classes(ts) -> void:
 end
 
 
+func test_region_handles_are_not_data(ts) -> void:
+    invalid := [
+        "func bad():\n    handles := [_]\nend\n",
+        "func bad(r: Region):\n    handles := [r]\nend\n",
+        "func bad(owner: String):\n    handles := [.owner]\nend\n",
+        "func bad():\n    handles := [[_]]\nend\n",
+        "func bad():\n    handles := [_]\n    push(handles, _)\nend\n",
+        "func bad():\n    handles := [_]\n    for handle in handles:\n    end\nend\n",
+        "func bad(values: Vec[Region]):\nend\n",
+        "func bad(values: Vec[Option[Vec[Region]]]):\nend\n",
+        "struct Holder:\n    handle: Region\nend\n",
+        "struct Holder:\n    handles: Vec[Region]\nend\n",
+        "func bad(r: Region) -> Vec[Region]:\n    return [_][r]\nend\n",
+        "struct Holder:\n    handle: Region\nend\nfunc bad(r: Region) -> Holder:\n    return Holder{handle = _}[r]\nend\n",
+        "func bad():\n    value := Some{_}\nend\n",
+        "func bad():\n    value := {\"handle\": _}\nend\n",
+        "func bad():\n    value := Some{[_]}\nend\n",
+        "variant Holder:\n    HANDLE: Region\nend\n",
+        "text := \"global\"\nhandle := .text\n",
+        "extern func native() -> Region\n",
+        "func bad(r: Region):\n    if r:\n    end\nend\n",
+        "func bad():\n    while _:\n        break\n    end\nend\n",
+        "func bad(owner: String):\n    if .owner:\n    end\nend\n",
+        "func take(r: Region):\nend\nfunc bad(r: Region):\n    take(r if true else _)\nend\n",
+        "func bad(r: Region):\n    println(r)\nend\n",
+        "func take(value: int):\nend\nfunc bad():\n    take(_)\nend\n"
+    ]
+    for text in invalid:
+        comp := support::infer_source(text, -1)
+        typecheck::run(comp)
+        regions::run(comp)
+        if comp.diagnostics.error_count == 0:
+            println("Unexpected Region storage/use accepted:\n", text)
+        end
+        test::suite_assert(ts, comp.diagnostics.error_count > 0, site())
+        if len(comp.diagnostics.messages) > 0:
+            test::suite_assert(ts, comp.diagnostics.messages[0].span is Some, site())
+        end
+    end
+end
+
+
+func test_region_argument_and_destination_contexts(ts) -> void:
+    text := "func take(r: Region):\n    first := \"first\"[r]\n    second := \"second\"[.first]\n    copied := copy(second, r)\n    joined := concat(first, copied, r)\n    file := site_file(site(), r)\nend\nfunc forward(r: Region):\n    take((r))\nend\nfunc main():\n    owner := \"owner\"\n    forward(_)\n    take(.owner)\nend\n"
+    comp := support::infer_source(text, 0)
+    typecheck::run(comp)
+    regions::run(comp)
+    test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
+    if comp.diagnostics.error_count == 0:
+        translation := must support::translate(text, "")
+        test::suite_assert(ts, len(translation) > 0, site())
+    end
+end
+
+
 func run_tests(ts) -> void:
     println("[test] test_regions")
     test_region_operands_and_sources(ts)
     test_omitted_final_region(ts)
     test_cleanup_and_unused_regions(ts)
     test_region_restrictions(ts)
+    test_region_handles_are_not_data(ts)
+    test_region_argument_and_destination_contexts(ts)
     test_allocated_type_classes(ts)
     test_foreign_parameters(ts)
     test_foreign_temporary(ts)

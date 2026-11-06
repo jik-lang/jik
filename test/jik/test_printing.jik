@@ -56,7 +56,7 @@ func test_rejections(ts) -> void:
         "func invalid(println: int):\n    return println\nend\n",
         "func main():\n    println(42, missing)\nend\n"
     ]
-    expected := ["unsupported print type", "unsupported print type", "unsupported print type", "void value", "void value", "semantic analysis", "semantic analysis", "semantic analysis"]
+    expected := ["invalid region use", "unsupported print type", "unsupported print type", "void value", "void value", "semantic analysis", "semantic analysis", "semantic analysis"]
     for index, text in inputs:
         comp := analyze(text)
         test::suite_assert(ts, comp.diagnostics.error_count == 1, site())

@@ -91,7 +91,7 @@ func check_builtin(ctx: context::ModuleContext, node: ast::Node, result: int) ->
         end
         require_equal(ctx, types::atom(store, types::Atom.STRING), result, node)
         for index, argument in call.arguments:
-            actual := check_value(ctx, argument)
+            actual := check_value(ctx, argument) if index < count else check_expression_with_region(ctx, argument, false, Handling.NONE, true)
             if actual is Some:
                 expected := types::atom(store, types::Atom.STRING) if index < count else types::atom(store, types::Atom.REGION)
                 require_equal(ctx, expected, actual?, mod.ast.nodes[argument])
@@ -140,7 +140,7 @@ func check_builtin(ctx: context::ModuleContext, node: ast::Node, result: int) ->
         expected := types::atom(store, types::Atom.INT)
         if kind == builtin::Kind.ERROR_MSG:
             expected = types::atom(store, types::Atom.STRING)
-            destination := check_value(ctx, call.arguments[0])
+            destination := check_expression_with_region(ctx, call.arguments[0], false, Handling.NONE, true)
             if destination is Some:
                 require_equal(ctx, types::atom(store, types::Atom.REGION), destination?, mod.ast.nodes[call.arguments[0]])
             end
@@ -157,7 +157,7 @@ func check_builtin(ctx: context::ModuleContext, node: ast::Node, result: int) ->
         expected := types::atom(store, types::Atom.INT)
         if builtin::is_site_text(kind):
             expected = types::atom(store, types::Atom.STRING)
-            destination := check_value(ctx, call.arguments[1])
+            destination := check_expression_with_region(ctx, call.arguments[1], false, Handling.NONE, true)
             if destination is Some:
                 require_equal(ctx, types::atom(store, types::Atom.REGION), destination?, mod.ast.nodes[call.arguments[1]])
             end
@@ -175,7 +175,7 @@ func check_builtin(ctx: context::ModuleContext, node: ast::Node, result: int) ->
             diag::error(diagnostics, "unsupported copy type", "copy requires String or a supported composite with only primitive, enum or String contents", Some{mod.ast.nodes[call.arguments[0]].span})
             return None
         end
-        destination := check_value(ctx, call.arguments[1])
+        destination := check_expression_with_region(ctx, call.arguments[1], false, Handling.NONE, true)
         if destination is Some:
             require_equal(ctx, types::atom(store, types::Atom.REGION), destination?, mod.ast.nodes[call.arguments[1]])
         end
@@ -229,7 +229,7 @@ func check_destination(ctx: context::ModuleContext, destination: Option[int]) ->
     diagnostics := ctx.program.diagnostics
     store := ctx.program.type_store
     if destination is Some:
-        actual := check_value(ctx, destination?)
+        actual := check_expression_with_region(ctx, destination?, false, Handling.NONE, true)
         if actual is Some and actual? != types::atom(store, types::Atom.REGION):
             diag::error(diagnostics, "invalid allocation destination", "named allocation targets must have type Region", Some{mod.ast.nodes[destination?].span})
         end
@@ -366,7 +366,7 @@ func check_call(ctx: context::ModuleContext, node: ast::Node, result: int, handl
         return None
     end
     for index, argument in call.arguments:
-        actual := check_value(ctx, argument)
+        actual := check_expression_with_region(ctx, argument, false, Handling.NONE, signature.parameter_types[index] == types::atom(store, types::Atom.REGION))
         if actual is Some:
             require_equal(ctx, signature.parameter_types[index], actual?, mod.ast.nodes[argument])
         end
@@ -421,6 +421,11 @@ end
 /// Return its stored type when available; callers must also check for diagnostics.
 /// Only the outer try operand is handled; arguments use ordinary expression checks.
 func check_expression(ctx: context::ModuleContext, id: int, allow_void: bool, handling: Handling) -> Option[int]:
+    return check_expression_with_region(ctx, id, allow_void, handling, false)
+end
+
+
+func check_expression_with_region(ctx: context::ModuleContext, id: int, allow_void: bool, handling: Handling, allow_region: bool) -> Option[int]:
     modules := ctx.program.modules
     mod := ctx.mod
     diagnostics := ctx.program.diagnostics
@@ -429,6 +434,24 @@ func check_expression(ctx: context::ModuleContext, id: int, allow_void: bool, ha
     result := checked_type(ctx, node)
     if result is None:
         return None
+    end
+    if result? == types::atom(store, types::Atom.REGION):
+        if not allow_region:
+            diag::error(diagnostics, "invalid region use", "Region handles are only allowed as Region arguments or allocation destinations", Some{node.span})
+            return None
+        end
+        if not (node.kind is LOCAL_REGION or node.kind is GLOBAL_REGION or node.kind is REGION_OF or node.kind is IDENTIFIER_EXPR or node.kind is GROUP):
+            diag::error(diagnostics, "invalid region operand", "use _, a Region parameter, or the region of a composite value", Some{node.span})
+            return None
+        end
+    end
+    stored_element := result?
+    while store.types[stored_element].kind is CONTAINER:
+        stored_element = store.types[stored_element].kind.CONTAINER.element_type
+        if stored_element == types::atom(store, types::Atom.REGION):
+            diag::error(diagnostics, "invalid region storage", "containers cannot hold Region handles", Some{node.span})
+            return None
+        end
     end
     if not allow_void and result? == types::atom(store, types::Atom.VOID):
         diag::error(diagnostics, "void value", "a void call cannot be used as a value", Some{node.span})
@@ -638,11 +661,12 @@ func check_expression(ctx: context::ModuleContext, id: int, allow_void: bool, ha
     case LOCAL_REGION:
         require_equal(ctx, types::atom(store, types::Atom.REGION), result?, node)
     case REGION_OF{inner}:
-        actual := check_value(ctx, inner)
+        actual := checked_type(ctx, mod.ast.nodes[inner])
         if actual is Some and not types::is_allocated(store, actual?):
             diag::error(diagnostics, "invalid region target", "region arguments require a composite value", Some{node.span})
             return None
         end
+        check_value(ctx, inner)
         require_equal(ctx, types::atom(store, types::Atom.REGION), result?, node)
     case MUST{required}:
         if not (mod.ast.nodes[required.call].kind is CALL):
@@ -654,7 +678,7 @@ func check_expression(ctx: context::ModuleContext, id: int, allow_void: bool, ha
             require_equal(ctx, actual?, result?, node)
         end
     case GROUP{inner}:
-        actual := check_value(ctx, inner)
+        actual := check_expression_with_region(ctx, inner, false, Handling.NONE, allow_region)
         if actual is Some:
             require_equal(ctx, actual?, result?, node)
         end
@@ -806,6 +830,10 @@ func check_block(ctx: context::ModuleContext, body: ast::Block, return_type: int
         match node.kind:
         case LOCAL_DECL{local}:
             expected := checked_type(ctx, node)
+            if expected is Some and expected? == types::atom(store, types::Atom.REGION):
+                diag::error(diagnostics, "invalid region declaration", "Region handles cannot be declared or aliased", Some{node.span})
+                return
+            end
             if local.annotation is Some and expected is Some:
                 annotation := mod.ast.nodes[local.annotation?].kind.TYPE_NAME
                 if annotation.resolved_type is Some:
@@ -838,6 +866,10 @@ func check_block(ctx: context::ModuleContext, body: ast::Block, return_type: int
             check_expression(ctx, id, true, Handling.NONE)
         case ASSIGN{statement}:
             target_node := mod.ast.nodes[statement.target]
+            if target_node.inferred_type is Some and target_node.inferred_type? == types::atom(store, types::Atom.REGION):
+                diag::error(diagnostics, "invalid region assignment", "Region handles cannot be assigned or stored", Some{target_node.span})
+                return
+            end
             if target_node.kind is INDEX:
                 base_type := mod.ast.nodes[target_node.kind.INDEX.value].inferred_type
                 if base_type is Some and base_type? == types::atom(store, types::Atom.STRING):
@@ -1000,6 +1032,10 @@ func run(program: program::Program) -> void:
                 continue
             end
             signature := mod.type_store.types[signature_type?].kind.FUNCTION
+            if signature.return_type == types::atom(mod.type_store, types::Atom.REGION):
+                diag::error(diagnostics, "invalid region return", "functions cannot return Region handles", Some{node.span})
+                continue
+            end
             if signature.is_throwing != function.is_throwing:
                 diag::error(diagnostics, "invalid function type", "signature throwing flag differs from its declaration", Some{node.span})
                 continue
