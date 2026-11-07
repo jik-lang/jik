@@ -21,7 +21,7 @@ end
 func test_imported_call(ts) -> void:
     translation := must support::translate("use \"helper\" as h\nfunc main():\n    return h::add(20, 22)\nend\n", "func add(left: int, right: int):\n    return left + right\nend\n", _)
     test::suite_assert(ts, string::find(translation, "int32_t jik_m1_add(int32_t jik_v_left, int32_t jik_v_right);") >= 0, site())
-    test::suite_assert(ts, string::find(translation, "return jik_m1_add(20, 22);") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "jik_return_value = jik_m1_add(20, 22);") >= 0, site())
 end
 
 
@@ -50,7 +50,7 @@ func test_codegen_uses_resolved_target(ts) -> void:
         end
     end
     translation := must codegen::generate(comp, 0, codegen::Options{}, _)
-    test::suite_assert(ts, string::find(translation, "return jik_m0_answer();") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "jik_return_value = jik_m0_answer();") >= 0, site())
     test::suite_assert(ts, string::find(translation, "unresolved_spelling") < 0, site())
 end
 

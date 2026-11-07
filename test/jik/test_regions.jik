@@ -67,8 +67,8 @@ func test_omitted_final_region(ts) -> void:
     translation := must support::translate(text, "")
     result := string::find(translation, "jik_return_value = jik_m0_answer(jik_local_region);")
     cleanup := string::find(translation, "jik_region_free(jik_local_region);")
-    returned_result := string::find(translation, "return jik_return_value;")
-    test::suite_assert(ts, result >= 0 and cleanup > result and returned_result > cleanup, site())
+    returned_result := string::find(translation, "jik_region_free(jik_local_region);\n    return jik_return_value;")
+    test::suite_assert(ts, result >= 0 and cleanup > result and returned_result == cleanup, site())
 end
 
 
@@ -76,7 +76,7 @@ func test_cleanup_and_unused_regions(ts) -> void:
     text := "func noop(r: Region):\nend\nfunc leave(flag: bool):\n    noop(_)\n    if flag:\n        return\n    end\nend\nfunc main():\n    leave(true)\n    leave(false)\n    return 42\nend\n"
     translation := must support::translate(text, "")
     test::suite_assert(ts, string::find(translation, "JikRegion * jik_v_r") >= 0, site())
-    test::suite_assert(ts, string::find(translation, "jik_region_free(jik_local_region);\n        return;") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "if (jik_v_flag) {\n        goto jik_cleanup;") >= 0, site())
     test::suite_assert(ts, string::find(translation, "jik_region_free(jik_local_region);\n    return;") >= 0, site())
     ordinary := must support::translate("func main():\n    return 42\nend\n", "")
     test::suite_assert(ts, string::find(ordinary, "jik_region_new") < 0, site())

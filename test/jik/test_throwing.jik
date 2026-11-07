@@ -98,7 +98,7 @@ func test_cleanup_emission(ts) -> void:
     test::suite_assert(ts, string::find(code, "JikError *jik_err_arg") >= 0, site())
     test::suite_assert(ts, string::find(code, "jik_error_set(jik_err_arg, jik_fail_code, jik_fail_message->data);") >= 0, site())
     test::suite_assert(ts, string::find(code, "jik_return_value = ") >= 0, site())
-    test::suite_assert(ts, string::find(code, "jik_cleanup:;\n    jik_region_free(jik_local_region);\n    return jik_return_value;") >= 0, site())
+    test::suite_assert(ts, string::find(code, "jik_cleanup:\n    jik_region_free(jik_local_region);\n    return jik_return_value;") >= 0, site())
     code_only := must support::translate("throws func bad():\n    fail(0)\nend\nfunc main():\nend\n", "")
     test::suite_assert(ts, string::find(code_only, "jik_error_set(jik_err_arg, jik_fail_code, \"\");") >= 0, site())
     test::suite_assert(ts, string::find(code_only, "jik_region_new") < 0, site())

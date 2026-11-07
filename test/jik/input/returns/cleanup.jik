@@ -1,0 +1,156 @@
+enum Route:
+    DIRECT
+    FOR
+    WHILE
+    MATCH
+end
+
+
+func choose(route: Route) -> int:
+    scratch := [10, 20, 30, 40]
+    if route == Route.DIRECT:
+        return scratch[0]
+    end
+    for index = 0, 1:
+        if route == Route.FOR:
+            return scratch[index + 1]
+        end
+    end
+    while route == Route.WHILE:
+        return scratch[2]
+    end
+    match route:
+        case MATCH:
+            return scratch[3]
+        case DIRECT:
+        case FOR:
+        case WHILE:
+    end
+end
+
+
+func integer(flag: bool) -> int:
+    if flag:
+        return 42
+    end
+end
+
+
+func decimal(flag: bool) -> double:
+    if flag:
+        return 2.5
+    end
+end
+
+
+func boolean(flag: bool) -> bool:
+    if flag:
+        return true
+    end
+end
+
+
+func character(flag: bool) -> char:
+    if flag:
+        return 'x'
+    end
+end
+
+
+func plain_site(flag: bool) -> Site:
+    if flag:
+        return site()
+    end
+end
+
+
+func local_site(flag: bool) -> Site:
+    scratch := "local"
+    if flag:
+        assert(len(scratch) == 5)
+        return site()
+    end
+end
+
+
+throws func throwing_site(mode: int) -> Site:
+    scratch := "failure"
+    if mode < 0:
+        fail(scratch, 17)
+    end
+    if mode > 0:
+        return site()
+    end
+end
+
+
+throws func relay(mode: int) -> Site:
+    scratch := [mode]
+    result := try throwing_site(scratch[0])
+    return result
+end
+
+
+func recover(mode: int) -> Site:
+    try result := relay(mode):
+        return result
+    except:
+        assert(error_code() == 17 and error_msg() == "failure")
+        return site()
+    end
+end
+
+
+func touch(values: Vec[int], early: bool) -> void:
+    scratch := "local"
+    values.push(len(scratch))
+    if early:
+        return
+    end
+    values.push(9)
+end
+
+
+// The callee reads the caller's local allocation during return evaluation.
+func length(value: String) -> int:
+    return len(value)
+end
+
+
+func return_call() -> int:
+    scratch := "still alive"
+    return length(scratch)
+end
+
+
+func text(r: Region) -> String:
+    scratch := "local"
+    assert(len(scratch) == 5)
+    return "caller owned"[r]
+end
+
+
+func main():
+    assert(choose(Route.DIRECT) == 10)
+    assert(choose(Route.FOR) == 20)
+    assert(choose(Route.WHILE) == 30)
+    assert(choose(Route.MATCH) == 40)
+    assert(integer(true) == 42 and integer(false) == 0)
+    assert(decimal(true) == 2.5 and decimal(false) == 0.0)
+    assert(boolean(true) and not boolean(false))
+    assert(character(true) == 'x' and character(false) == '\0')
+    assert(site_line(plain_site(true)) > 0)
+    assert(site_line(plain_site(false)) == 0)
+    assert(site_line(local_site(true)) > 0)
+    assert(site_line(local_site(false)) == 0)
+    assert(site_line(recover(1)) > 0)
+    assert(site_line(recover(0)) == 0)
+    assert(site_line(recover(-1)) > 0)
+    values: Vec[int]
+    touch(values, true)
+    touch(values, false)
+    assert(len(values) == 3 and values[0] == 5 and values[1] == 5 and values[2] == 9)
+    assert(return_call() == 11)
+    assert(text() == "caller owned")
+    // main's implicit result is zero, including after local-region cleanup.
+end

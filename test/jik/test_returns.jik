@@ -1,7 +1,10 @@
 use "jik/string"
 use "jik/testing" as test
+use "jik/bytes"
+use "jik/process"
 
 use "support"
+use "language/utils"
 use "../../src/jik/semantic/typing/typecheck"
 
 
@@ -29,7 +32,29 @@ func test_no_returns_and_post_return(ts) -> void:
     typecheck::run(comp)
     test::suite_assert(ts, comp.diagnostics.error_count == 0, site())
     translation := must support::translate("func main():\nend\nfunc helper(flag: bool) -> double:\n    if flag:\n        return 2.5\n    end\nend\n", "", _)
-    test::suite_assert(ts, string::find(translation, "return 0;") >= 0, site())
+    test::suite_assert(ts, string::find(translation, "double jik_return_value = {0};") >= 0, site())
+end
+
+
+func test_native_returns(ts: test::TestSuite) -> void:
+    tool := utils::compiler_command(_)
+    result := must process::capture(tool, ["run", "test/jik/input/returns/cleanup.jik", "--region-stats", "--region-tree"])
+    diagnostic := must bytes::to_string_ascii(result.err)
+    if result.code != 0:
+        println(diagnostic)
+    end
+    test::suite_assert(ts, result.code == 0 and bytes::len(result.out) == 0, site())
+    regions_clean := false
+    blocks_clean := false
+    for raw_line in string::split(diagnostic, "\n"):
+        line := string::trim(raw_line)
+        if string::starts_with(line, "regions:"):
+            regions_clean = string::contains(line, " alive=0 ")
+        elif string::starts_with(line, "blocks:"):
+            blocks_clean = string::ends_with(line, " alive=0")
+        end
+    end
+    test::suite_assert(ts, string::contains(diagnostic, "region stats") and regions_clean and blocks_clean, site())
 end
 
 
@@ -37,4 +62,5 @@ func run_tests(ts) -> void:
     println("[test] test_returns")
     test_partial_returns(ts)
     test_no_returns_and_post_return(ts)
+    test_native_returns(ts)
 end

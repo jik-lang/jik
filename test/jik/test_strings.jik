@@ -152,7 +152,7 @@ func test_emission_and_cleanup(ts) -> void:
     translation := must support::translate(text, "")
     test::suite_assert(ts, string::find(translation, "jik_string_new(\"\\305\\275\", jik_v_r)") >= 0, site())
     test::suite_assert(ts, string::find(translation, "jik_string_cmp(jik_v_value,") >= 0, site())
-    result := string::find(translation, "JikString * jik_return_value = jik_v_result;")
+    result := string::find(translation, "jik_return_value = jik_v_result;")
     cleanup := string::find(translation, "jik_region_free(jik_local_region);")
     returned := string::find(translation, "return jik_return_value;")
     test::suite_assert(ts, result >= 0 and cleanup > result and returned > cleanup, site())

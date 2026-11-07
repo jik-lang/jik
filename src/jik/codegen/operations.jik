@@ -21,8 +21,6 @@ use "../lexer/string_literal"
 struct BodyContext:
     translation: backend::Translation    // Shared writer, program views, and translation settings.
     needs_local_region: bool    // Function-local setup/cleanup; false for startup.
-    return_type: int    // Shared type ID; read only while emitting a function return.
-    is_throwing: bool    // Selects the function's error/return cleanup convention.
 end
 
 
@@ -1020,46 +1018,15 @@ throws func emit_statement(body: BodyContext, mod: module::Module, id: int) -> v
     case CONTINUE:
         g.output.line("continue;")
     case RETURN{statement}:
-        if body.is_throwing:
-            if statement.value is Some:
-                g.output.start_line()
-                g.output.write("jik_return_value = ")
-                try emit_expression(body, mod, statement.value?)
-                g.output.write(";")
-                g.output.end_line()
-            end
-            g.output.line("goto jik_cleanup;")
-            return
-        end
-        if body.needs_local_region:
-            // Evaluate a returning call while its Region arguments are alive.
-            if statement.value is Some:
-                g.output.line("{")
-                g.output.indent()
-                g.output.start_line()
-                try backend::write_type(g, mod, body.return_type, node)
-                g.output.write(" jik_return_value = ")
-                try emit_expression(body, mod, statement.value?)
-                g.output.write(";")
-                g.output.end_line()
-                backend::emit_region_free(g, "jik_local_region")
-                g.output.line("return jik_return_value;")
-                g.output.dedent()
-                g.output.line("}")
-            else:
-                backend::emit_region_free(g, "jik_local_region")
-                g.output.line("return;")
-            end
-            return
-        end
-        g.output.start_line()
-        g.output.write("return")
         if statement.value is Some:
-            g.output.write(" ")
+            // Evaluate the result before the shared cleanup frees local Regions.
+            g.output.start_line()
+            g.output.write("jik_return_value = ")
             try emit_expression(body, mod, statement.value?)
+            g.output.write(";")
+            g.output.end_line()
         end
-        g.output.write(";")
-        g.output.end_line()
+        g.output.line("goto jik_cleanup;")
     other:
         diag::error(g.diagnostics, "unsupported statement", "expected a declaration, if, or return", Some{node.span})
         fail("code generation failed")
@@ -1230,8 +1197,8 @@ throws func emit_function(g: backend::Translation, mod: module::Module, id: int)
     g.output.write(" {")
     g.output.end_line()
     g.output.indent()
-    body := BodyContext{translation = g, needs_local_region = function.needs_local_region, return_type = signature.return_type, is_throwing = function.is_throwing}[.g]
-    if function.is_throwing and signature.return_type != types::atom(mod.type_store, types::Atom.VOID):
+    body := BodyContext{translation = g, needs_local_region = function.needs_local_region}[.g]
+    if signature.return_type != types::atom(mod.type_store, types::Atom.VOID):
         g.output.start_line()
         try backend::write_type(g, mod, signature.return_type, node)
         g.output.write(" jik_return_value = {0};")
@@ -1254,24 +1221,11 @@ throws func emit_function(g: backend::Translation, mod: module::Module, id: int)
     for statement in function.body.statements:
         try emit_statement(body, mod, statement)
     end
-    last := len(function.body.statements) - 1
-    if function.is_throwing:
-        g.output.line("goto jik_cleanup;")
-        g.output.line("jik_cleanup:;")
-        if function.needs_local_region:
-            backend::emit_region_free(g, "jik_local_region")
-        end
-        g.output.line("return;" if signature.return_type == types::atom(mod.type_store, types::Atom.VOID) else "return jik_return_value;")
-    elif last < 0 or not (mod.ast.nodes[function.body.statements[last]].kind is RETURN):
-        if function.needs_local_region:
-            backend::emit_region_free(g, "jik_local_region")
-        end
-        if signature.return_type == types::atom(mod.type_store, types::Atom.VOID):
-            g.output.line("return;")
-        else:
-            g.output.line("return 0;")
-        end
+    g.output.line("jik_cleanup:")
+    if function.needs_local_region:
+        backend::emit_region_free(g, "jik_local_region")
     end
+    g.output.line("return;" if signature.return_type == types::atom(mod.type_store, types::Atom.VOID) else "return jik_return_value;")
     g.output.dedent()
     g.output.line("}")
     g.output.line("")

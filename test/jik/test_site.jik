@@ -49,6 +49,7 @@ func test_site_emission(ts) -> void:
     text := "func capture() -> Site:\n    return site(\n    ) // following line\nend\nfunc main():\n    value := capture()\n    assert(site_line(value) == 2)\nend\n"
     code := must support::translate(text, "")
     test::suite_assert(ts, string::find(code, "JikSite jik_m0_capture(") >= 0, site())
+    test::suite_assert(ts, string::find(code, "JikSite jik_return_value = {0};") >= 0, site())
     test::suite_assert(ts, string::find(code, "\", \"    return site(\", 2)") >= 0, site())
 end
 
