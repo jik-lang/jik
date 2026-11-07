@@ -89,11 +89,42 @@ func test_verbose_failures(ts: test::TestSuite):
 end
 
 
+func test_vector_checks(ts: test::TestSuite, foreign workspace: String):
+    tool := utils::compiler_command(_)
+    executable := path::join([copy(workspace), "vector-checks.exe"])
+    source := "test/jik/input/runtime_options/vector_checks.jik"
+    built := must process::capture(tool, ["build", source, "--release", "--ccflags", "-w", "--out", executable])
+    test::suite_assert(ts, built.code == 0, site())
+    if built.code != 0:
+        println(text(built.err))
+        return
+    end
+    valid := must process::capture(executable, ["0"])
+    test::suite_assert(ts, valid.code == 0 and bytes::len(valid.out) == 0 and bytes::len(valid.err) == 0, site())
+    for mode = 1, 7:
+        failed := must process::capture(executable, [string::from_int(mode)])
+        diagnostic := text(failed.err)
+        test::suite_assert(ts, failed.code != 0 and bytes::len(failed.out) == 0, site())
+        test::suite_assert(ts, string::starts_with(diagnostic, "Jik runtime error: vector index out of bounds\n  --> "), site())
+        test::suite_assert(ts, string::contains(diagnostic, "vector_checks.jik"), site())
+    end
+    for mode = 7, 9:
+        failed := must process::capture(executable, [string::from_int(mode)])
+        test::suite_assert(ts, failed.code != 0 and bytes::len(failed.out) == 0, site())
+        test::suite_assert(ts, text(failed.err) == concat("Jik runtime error: vector-check-probe ", string::from_int(mode + 35), "\n"), site())
+    end
+    // Only valid accesses are executed with checks disabled.
+    unchecked := must process::capture(tool, ["run", source, "--release", "--ccflags", "-w", "--unsafe-no-bounds-checks", "--", "0"])
+    test::suite_assert(ts, unchecked.code == 0 and bytes::len(unchecked.out) == 0 and bytes::len(unchecked.err) == 0, site())
+end
+
+
 func run_tests(ts: test::TestSuite):
     println("[test] test_runtime_options")
     test_configuration(ts)
     tool := utils::compiler_command(_)
     workspace := must cli_utils::make_workspace()
+    test_vector_checks(ts, workspace)
     source := "test/jik/input/runtime_options/main.jik"
     generated := path::join([workspace, "runtime.c"])
     // Execute instrumentation once. Other commands share its configuration and

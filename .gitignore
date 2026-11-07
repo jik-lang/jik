@@ -19,6 +19,7 @@ cookbooks/
 release/
 artifacts/
 bench/
+benchmarks/
 todo/
 site/
 /mkdocs.yml

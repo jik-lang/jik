@@ -1,0 +1,91 @@
+use "jik/string"
+
+extern func vector_check_contract as check_contract(mode: int) -> int
+
+func main(args: Vec[String]) -> int:
+    if len(args) != 2:
+        return 2
+    end
+    mode := must string::to_int(args[1])
+    values := [11, 22]
+    empty: Vec[int]
+    if mode == 0:
+        assert(values[0] == 11 and values[1] == 22)
+        values[0] = 33
+        values[1] = 44
+        assert(values[0] == 33 and values[1] == 44)
+        return check_contract(mode)
+    elif mode == 1:
+        return values[2]
+    elif mode == 2:
+        return values[-1]
+    elif mode == 3:
+        values[2] = 55
+    elif mode == 4:
+        values[-1] = 55
+    elif mode == 5:
+        return empty[0]
+    elif mode == 6:
+        empty[0] = 55
+    else:
+        return check_contract(mode)
+    end
+    return 0
+end
+
+@embed{C_END}
+
+JIK_DECLARE_VEC(VectorCheckVec, int32_t)
+JIK_DEFINE_VEC(VectorCheckVec, int32_t)
+
+static int vector_check_evaluations;
+
+static struct VectorCheckVec *vector_check_receiver(struct VectorCheckVec *v)
+{
+    vector_check_evaluations++;
+    return v;
+}
+
+static size_t vector_check_index(void)
+{
+    vector_check_evaluations++;
+    return 0;
+}
+
+static char *vector_check_location(void)
+{
+    vector_check_evaluations++;
+    return "vector-check-probe";
+}
+
+int32_t vector_check_contract(int32_t mode)
+{
+    /* Both error helpers remain real, addressable functions. */
+    void (*die_function)(char *, ...) = jik_die;
+    void (*die_if_function)(bool, char *, ...) = jik_die_if;
+    if (mode == 7) die_function("vector-check-probe %d", 42);
+    if (mode == 8) die_if_function(true, "vector-check-probe %d", 43);
+
+    JikRegion *r = jik_region_new(0);
+    struct VectorCheckVec *v = VectorCheckVec_new(r, 1);
+    v->data[0] = 42;
+    vector_check_evaluations = 0;
+    int32_t value = VectorCheckVec_get(vector_check_receiver(v), vector_check_index(), vector_check_location());
+    if (value != 42 || vector_check_evaluations != 3) return 10;
+    vector_check_evaluations = 0;
+    VectorCheckVec_set(vector_check_receiver(v), vector_check_index(), 99, vector_check_location());
+    if (v->data[0] != 99 || vector_check_evaluations != 3) return 11;
+
+    /* The existing macro remains a single statement under an unbraced if. */
+    if (v->size == 1)
+        JIK_VEC_BOUNDS_CHECK(v, 0, "vector-check-probe");
+    else
+        return 12;
+    vector_check_evaluations = 0;
+    die_if_function(false, "%s", vector_check_location());
+    if (vector_check_evaluations != 1) return 13;
+    jik_region_free(r);
+    return 0;
+}
+
+C_END

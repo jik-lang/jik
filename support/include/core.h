@@ -18,15 +18,20 @@
 
 #define JIK_ERR_PREFIX              "Jik runtime error: "
 
+// Expose the successful check to the optimizer; call the reporter only on failure.
 #ifdef JIK_UNSAFE_NO_BOUNDS_CHECKS
 #define JIK_VEC_BOUNDS_CHECK(v, idx, dbg_info) ((void)0)
 #else
 #define JIK_VEC_BOUNDS_CHECK(v, idx, dbg_info)                                                   \
-    jik_die_if((idx) >= (v)->size, "vector index out of bounds\n  --> %s", (dbg_info))
+    do {                                                                                      \
+        if ((idx) >= (v)->size) {                                                              \
+            jik_die("vector index out of bounds\n  --> %s", (dbg_info));                       \
+        }                                                                                     \
+    } while (0)
 #endif
 
 
-void
+_Noreturn void
 jik_die(char *msg, ...)
 {
     va_list args;
