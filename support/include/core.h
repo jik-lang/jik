@@ -18,7 +18,6 @@
 
 #define JIK_ERR_PREFIX              "Jik runtime error: "
 
-// Expose the successful check to the optimizer; call the reporter only on failure.
 #ifdef JIK_UNSAFE_NO_BOUNDS_CHECKS
 #define JIK_VEC_BOUNDS_CHECK(v, idx, dbg_info) ((void)0)
 #else
