@@ -323,10 +323,8 @@ func format_help(foreign parser: Parser, r: Region) -> String:
         strbuf::append(sb, positional._name)
         strbuf::append(sb, ">")
     end
-    for option in parser._options:
-        strbuf::append(sb, " [")
-        _append_option_spec(sb, option)
-        strbuf::append(sb, "]")
+    if len(parser._options) > 0:
+        strbuf::append(sb, " [options]")
     end
     if len(parser._positionals) > 0:
         width := 0

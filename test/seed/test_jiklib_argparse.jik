@@ -95,16 +95,24 @@ func test_help(ts):
 
     help := argparse::format_help(parser, _)
     _assert_contains(ts, help, "Usage:")
-    _assert_contains(ts, help, "tool <input> [-o, --output <file>] [-v, --verbose]")
+    _assert_contains(ts, help, "Usage:\n  tool <input> [options]\n")
     _assert_contains(ts, help, "Positional arguments:")
     _assert_contains(ts, help, "Options:")
+    _assert_contains(ts, help, "-o, --output <file>")
+    _assert_contains(ts, help, "-v, --verbose")
     _assert_contains(ts, help, "<file>  Output path.")
 
     long_only := argparse::new("tool", _)
     argparse::add_option(long_only, "--verbose", "", "Show extra output.")
     long_only_help := argparse::format_help(long_only, _)
-    _assert_contains(ts, long_only_help, "tool [--verbose]")
+    _assert_contains(ts, long_only_help, "Usage:\n  tool [options]\n")
     test::suite_assert(ts, string::find(long_only_help, ", --verbose") == -1, site())
+
+    no_options := argparse::new("tool", _)
+    argparse::add_positional(no_options, "input", "Input file.")
+    no_options_help := argparse::format_help(no_options, _)
+    _assert_contains(ts, no_options_help, "Usage:\n  tool <input>\n")
+    test::suite_assert(ts, string::find(no_options_help, "[options]") == -1, site())
 end
 
 func test_help_description(ts):
